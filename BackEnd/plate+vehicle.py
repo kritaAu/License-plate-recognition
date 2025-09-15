@@ -8,7 +8,7 @@ import numpy as np
 
 ratio = 0.5           
 conf_threshold = 0.3 #ปรับได้ลองปรับดูเอาไว้แก้ค่าความมั่นใจ
-imgsz = 1280           
+imgsz = 960           
 cooldown_time = 2    
 center_y = 1000         
 
@@ -17,16 +17,16 @@ print("Checking GPU...")
 print("CUDA Available:", torch.cuda.is_available())
 print("GPU Count:", torch.cuda.device_count())
 
-model = YOLO(r"best(last).pt")
+model = YOLO(r"BackEnd\model\lpr_model.pt")
 class_list = model.names
 print("Class list:", class_list)
 
-model2 = YOLO(r"yolo11n.pt")
+model2 = YOLO(r"BackEnd\model\motorcycle_model.pt")
 class_list2 = model2.names
 print("Class list:", class_list2)
 
 
-cap = cv2.VideoCapture(r"/////") ## หาคลิปมาใส่เทสดู
+cap = cv2.VideoCapture(r"BackEnd\video\IMG_4113.mov") ## หาคลิปมาใส่เทสดู
 if not cap.isOpened():
     print("Error: Cannot open video")
     raise SystemExit
