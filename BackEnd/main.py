@@ -1,7 +1,6 @@
 from ultralytics import YOLO
 import cv2
 import numpy as np
-from yolox.tracker.byte_tracker import BYTETracker
 
 
 from sort.sort import*
@@ -9,7 +8,7 @@ from util import get_car ,read_license_plate,write_csv
 
 results = {}
 
-mot_tracker = BYTETracker()
+# mot_tracker = BYTETracker()
 
 motor_model = YOLO('model/motorcycle_model.pt')
 license_plate_detector = YOLO('model/lpr_model.pt')
