@@ -8,7 +8,7 @@ from util import get_car ,read_license_plate,write_csv
 
 results = {}
 
-# mot_tracker = BYTETracker()
+mot_tracker = Sort()
 
 motor_model = YOLO('model/motorcycle_model.pt')
 license_plate_detector = YOLO('model/lpr_model.pt')
@@ -26,9 +26,9 @@ while ret:
     if ret:
         results[frame_nmr] = {}
         #detect vehicles
-        detection = motor_model(frame, imgsz=640, device="0")[0]
+        detections = motor_model(frame, imgsz=640, device="0")[0]
         detections_=[]
-        for detection in detection.boxes.data.tolist():
+        for detection in detections.boxes.data.tolist():
             x1,y1,x2,y2,score,class_id = detection
             if int(class_id) in vehicles:
                 detections_.append([x1,y1,x2,y2,score])
