@@ -40,3 +40,41 @@
 .read-the-docs {
   color: #888;
 }
+
+#root {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.stats {
+  display: flex;
+  justify-content: space-around;
+  margin: 2rem 0;
+}
+
+.card {
+  background: rgb(77, 76, 76);
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.table-container {
+  margin-top: 2rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #ddd;
+}
+
+thead {
+  background: rgb(77, 76, 76);
+}
