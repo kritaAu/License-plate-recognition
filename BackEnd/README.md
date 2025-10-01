@@ -14,6 +14,8 @@ BackEnd Api
 pip install "fastapi[standard]"
 
 $$ Run It Live Sever fastapi dev main_api.py $$
+# run api
+python -m uvicorn main_api:app --reload 
 
 pip install supabase (not test)
 
