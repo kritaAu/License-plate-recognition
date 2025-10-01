@@ -1,4 +1,5 @@
 \sort
 \video
+\detect_motor
 .env
 .csv

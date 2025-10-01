@@ -1,5 +1,7 @@
 import base64
 from openai import OpenAI
+import os
+import re
 
 client = OpenAI()
 
@@ -10,8 +12,12 @@ def encode_image(image_path):
 
 
 # Path to your image
-image_path = r"C:\Users\ktp\Desktop\Train\cropped_plates\plate_3.0_UNKNOWN_1757434292.jpg"
+image_path = r"detect_motor\Dir_IN_2025-10-02_01-02-51.jpg"
 
+filename = os.path.basename(image_path)
+match = re.search(r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}", filename)
+file_datetime = match.group(0) if match else ""
+# print(file_datetime)
 # Getting the Base64 string
 base64_image = encode_image(image_path)
 
@@ -41,7 +47,8 @@ response = client.responses.create(
                 Output JSON:
                 {
                 "plate": "<plate_top(+plate_bottomถ้ามี)>",
-                "province": "<provinceหรือเว้นว่างถ้าไม่เห็น>"
+                "province": "<provinceหรือเว้นว่างถ้าไม่เห็น>",
+                "time":"<datetime จากไฟล์>"
                 }
                 """
                 
@@ -52,7 +59,7 @@ response = client.responses.create(
             "content": [
                 {
                     "type": "input_text",
-                    "text": "อ่านป้ายทะเบียนแล้ว format json"
+                    "text": f"อ่านป้ายทะเบียนแล้วออก JSON โดยให้ time = \"{image_path}\""
                 },
                 {
                     "type": "input_image",
