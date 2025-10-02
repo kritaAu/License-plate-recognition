@@ -40,7 +40,7 @@ class EventIn(BaseModel):
     province: str        # จังหวัด
     direction: str       # "เข้า" หรือ "ออก"
     blob: dict | None = None  # เก็บผลลัพธ์ raw (เช่น bounding box)
-
+    cam_id: int | None = None 
 
 # POST: เพิ่ม Event
 # POST http://127.0.0.1:8000/events
@@ -48,12 +48,13 @@ class EventIn(BaseModel):
 def create_event(event: EventIn):
     try:
         response = supabase.table("Event").insert({
-            "status": event.status,
+            "status": event.status,#Visitor,Student,Teacher,Staff
             "datetime": event.datetime.isoformat(),
             "plate": event.plate,
             "province": event.province,
             "direction": event.direction,
-            "blob": event.blob
+            "blob": event.blob,
+            "cam_id":event.cam_id
         }).execute()
 
         if not response.data:

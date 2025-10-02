@@ -7,9 +7,10 @@ from ultralytics import YOLO
 
 ratio = 0.5
 imgsz = 960
+CONF = 0.5
 last_global_trigger_time = -1e18
 cooldown_time =1
-center_y = 1070         
+center_y = 1200         
 OUTPUT_DIR = "detect_motor"  
 PAD = 20
 
@@ -31,7 +32,7 @@ print("GPU Count:", torch.cuda.device_count())
 
 model = YOLO(r"model\motorcycle_model.pt")
 class_list = model.names
-print("Class list:", class_list)
+# print("Class list:", class_list)
 
 cap = cv2.VideoCapture(r"video\-_Clipchamp.mp4")
 if not cap.isOpened():
@@ -53,20 +54,20 @@ while True:
     height, width, _ = frame.shape
 
     
-    # cv2.line(frame, (0, center_y), (width-300, center_y-100), (255, 255, 255), 1)
+    cv2.line(frame, (0, center_y), (width, center_y), (255, 255, 255), 1)
     x1, y1 = 0, center_y
 
 
-    # YOLO11
+    # โหลดโมเดล YOLO11
     results = model.track(
         frame,
         persist=True,
         tracker="bytetrack.yaml",
-        device="0",
+        device="0", 
         verbose=False,
         imgsz=imgsz,
         classes=[3],
-        conf = 0.5
+        conf = CONF
     )
 
     if results and results[0].boxes is not None and len(results[0].boxes) > 0:
@@ -79,6 +80,7 @@ while True:
             x1, y1, x2, y2 = map(int, [x1f, y1f, x2f, y2f])
             cx = (x1 + x2) // 2
             cy = (y1 + y2) // 2
+            
             class_name = class_list.get(class_idx, str(class_idx))
             current_time = time.time()
 
@@ -86,7 +88,7 @@ while True:
             prev_val = prev_cy.get(track_id, None)
             prev_cy[track_id] = cy
 
-            if center_y - 30 <= cy <= center_y + 10:
+            if center_y - 30 <= y2 <= center_y + 10:
                 # ดีเลย์จับรถซ้ำ
                 if (current_time - last_global_trigger_time) > cooldown_time:
                     last_global_trigger_time = current_time
@@ -103,18 +105,14 @@ while True:
 
                     # 2) ครอปเฉพาะป้าย + padding
                     crop = safe_crop(frame, x1, y1, x2, y2, pad=PAD)
-
                     if crop is not None:
                         ts = int(current_time)
                         fname = f"Dir_{direction}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.jpg"
                         save_path = os.path.join(OUTPUT_DIR, fname)
                         cv2.imwrite(save_path, crop)
-
                         print(f"[TRIGGER] ID:{track_id} Class:{class_name} Dir:{direction} Time:{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
-
             
             color = (0, 255, 0) if crossed_status.get(track_id, False) else (0, 0, 255)
-
             
             cv2.circle(frame, (cx, cy), 4, (255, 255, 255), -1)
             cv2.putText(frame, f"ID:{track_id} {class_name} {conf:.2f}",
@@ -122,8 +120,8 @@ while True:
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
     # แสดงผลภาพหลัก
-    frame_display = cv2.resize(frame, (0, 0), fx=ratio, fy=ratio)
-    cv2.imshow("YOLO License Plate Tracking", frame_display)
+    frame_display = cv2.resize(frame, (0, 0), fx=ratio, fy=ratio)#ใช้จริงอาจจะคอมเม้นไว้
+    cv2.imshow("YOLO License Plate Tracking", frame_display)#ใช้จริงอาจจะคอมเม้นไว้
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         print("q pressed - exit program")
