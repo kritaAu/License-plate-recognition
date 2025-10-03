@@ -1,18 +1,18 @@
 import cv2
 import torch
 import time
-from datetime import datetime           
+from datetime import datetime, timezone, timedelta     
 import os
 from ultralytics import YOLO
 
 ratio = 0.5
 imgsz = 960
 CONF = 0.5
-last_global_trigger_time = -1e18
-cooldown_time =1
-center_y = 1200         
 OUTPUT_DIR = "detect_motor"  
 PAD = 20
+last_global_trigger_time = -1e18
+cooldown_time =1
+center_y = 1200   
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -54,7 +54,7 @@ while True:
     height, width, _ = frame.shape
 
     
-    cv2.line(frame, (0, center_y), (width, center_y), (255, 255, 255), 1)
+    # cv2.line(frame, (0, center_y), (width, center_y), (255, 255, 255), 1)
     x1, y1 = 0, center_y
 
 
@@ -110,7 +110,7 @@ while True:
                         fname = f"Dir_{direction}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.jpg"
                         save_path = os.path.join(OUTPUT_DIR, fname)
                         cv2.imwrite(save_path, crop)
-                        print(f"[TRIGGER] ID:{track_id} Class:{class_name} Dir:{direction} Time:{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
+                        print(f"[TRIGGER] ID:{track_id} Class:{class_name} Dir:{direction} Time::{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
             
             color = (0, 255, 0) if crossed_status.get(track_id, False) else (0, 0, 255)
             

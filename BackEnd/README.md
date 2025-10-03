@@ -8,6 +8,7 @@ pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu12
 pip install filterpy
 pip install dotenv
 pip install openai
+pip install watchdog
 
 
 BackEnd Api

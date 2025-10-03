@@ -82,7 +82,7 @@ def create_event(event: EventIn):
         if not response.data:
             raise HTTPException(status_code=400, detail="Insert failed")
 
-        return {"message": "✅ Event created successfully", "data": response.data}
+        return {"message": "Event created successfully", "data": response.data}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
