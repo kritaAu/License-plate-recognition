@@ -12,12 +12,14 @@ pip install openai
 
 BackEnd Api
 pip install "fastapi[standard]"
+pip install supabase
+# old run api
+fastapi dev main_api.py
 
-$$ Run It Live Sever fastapi dev main_api.py $$
-# run api
+# run api use this 
 python -m uvicorn main_api:app --reload 
 
-pip install supabase (not test)
+
 
 Docs
 https://fastapi.tiangolo.com

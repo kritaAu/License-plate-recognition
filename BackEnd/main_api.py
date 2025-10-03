@@ -1,22 +1,43 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from supabase import create_client
 import os
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from datetime import datetime
+import uuid
 
-# โหลด environment
+#  ENV 
 load_dotenv()
 url = os.getenv("SUPABASE_URL")
 key = os.getenv("SUPABASE_KEY")
 supabase = create_client(url, key)
 
-# สร้าง FastAPI app
+#  FASTAPI APP 
 app = FastAPI()
 
-# -------------------- ROUTES --------------------
+#  HELPERS 
+def upload_image_to_storage(file: UploadFile, folder="plates") -> str:
+    """
+    Upload image to Supabase Storage (bucket = image_car) and return public URL
+    """
+    try:
+        #unique filename
+        ext = file.filename.split(".")[-1]
+        filename = f"{folder}/{uuid.uuid4().hex}.{ext}"
+        #read file bytes
+        content = file.file.read()
+        #upload to bucket = image_car
+        supabase.storage.from_("image_car").upload(filename, content)
+        #return public URL
+        url = supabase.storage.from_("image_car").get_public_url(filename)
+        return url
 
-# ดึงข้อมูลสมาชิก
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
+
+
+#--ROUTES--
+
 # GET http://127.0.0.1:8000/members
 @app.get("/members")
 def get_members():
@@ -24,7 +45,6 @@ def get_members():
     return data.data
 
 
-# ดึง event ทั้งหมด
 # GET http://127.0.0.1:8000/events
 @app.get("/events")
 def get_events(limit: int = 10):
@@ -34,27 +54,29 @@ def get_events(limit: int = 10):
 
 # Model สำหรับรับข้อมูล Event
 class EventIn(BaseModel):
-    status: str          # "in" หรือ "out"
-    datetime: datetime   # เวลาที่จับได้
-    plate: str           # เลขทะเบียน
-    province: str        # จังหวัด
-    direction: str       # "เข้า" หรือ "ออก"
-    blob: dict | None = None  # เก็บผลลัพธ์ raw (เช่น bounding box)
-    cam_id: int | None = None 
+    datetime: datetime   # event timestamp
+    plate: str           # license plate
+    province: str        # province
+    cam_id: int          # 1 = IN, 2 = OUT
+    status: str | None = "Visitor"  # Visitor, Student, Teacher, Staff
+    blob: str | None = None         # image URL (from Storage)
 
-# POST: เพิ่ม Event
-# POST http://127.0.0.1:8000/events
+
+# POST: create Event
 @app.post("/events")
 def create_event(event: EventIn):
     try:
+        direction_map = {1: "IN", 2: "OUT"}
+        direction = direction_map.get(event.cam_id, "UNKNOWN")
+
         response = supabase.table("Event").insert({
-            "status": event.status,#Visitor,Student,Teacher,Staff
+            "status": event.status,
             "datetime": event.datetime.isoformat(),
             "plate": event.plate,
             "province": event.province,
-            "direction": event.direction,
-            "blob": event.blob,
-            "cam_id":event.cam_id
+            "direction": direction,
+            "blob": event.blob,   # already URL
+            "cam_id": event.cam_id
         }).execute()
 
         if not response.data:
@@ -64,3 +86,10 @@ def create_event(event: EventIn):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# POST: upload image and return URL
+@app.post("/upload")
+async def upload_image(file: UploadFile = File(...)):
+    url = upload_image_to_storage(file, folder="plates")
+    return {"url": url}
