@@ -6,10 +6,10 @@ from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from watchdog.observers import Observer
 
 WATCH_DIR=r"detect_motor"
-API_URL = "http://127.0.0.1:8000/events"
+API_URL = "http://127.0.0.1:8000"
 
 def send_event(payload: dict):
-    r = requests.post(API_URL, json=payload, timeout=10)
+    r = requests.post(f"{API_URL}/events", json=payload, timeout=10)
     r.raise_for_status()
     return r.json()
 
@@ -18,7 +18,6 @@ class ReadImage(FileSystemEventHandler):
     def on_created(self, event:FileSystemEvent):
         if event.is_directory:
             return
-        print("hello")
         result = read_plate(event.src_path)
         print(result)
 

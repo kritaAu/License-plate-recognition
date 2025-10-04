@@ -15,10 +15,8 @@ def encode_image(image_path):
 def dt_to_iso(dt_str: str) -> str:
     # จาก "2025-11-03_14-30-00"
     dt = datetime.strptime(dt_str, "%Y-%m-%d_%H-%M-%S")
-    # สมมุติเป็น UTC+7
     dt = dt.replace(tzinfo=timezone(timedelta(hours=7)))
-    # คืนเป็น ISO 8601 ที่ถูกต้อง
-    return dt.isoformat()   # 👉 "2025-11-03T14:30:00+07:00"
+    return dt.isoformat()   # "2025-11-03T14:30:00+07:00"
 
 def read_plate(image_path: str):
 
