@@ -56,11 +56,12 @@ def get_events(limit: int = 10):
 
 # Model สำหรับรับข้อมูล Event
 class EventIn(BaseModel):
-    datetime: datetime  # event timestamp
-    plate: str  # license plate
-    province: str  # province
-    cam_id: int  # 1 = IN, 2 = OUT
-    blob: str | None = None  # image URL (from Storage)
+    datetime: datetime   # event timestamp
+    plate: str           # license plate
+    province: str        # province
+    cam_id: int          # 1 = IN, 2 = OUT
+    blob: str | None = None         # image URL (from Storage)
+    vehicle_id: int | None = None
 
 
 # POST: create Event
@@ -70,20 +71,15 @@ def create_event(event: EventIn):
         direction_map = {1: "IN", 2: "OUT"}
         direction = direction_map.get(event.cam_id, "UNKNOWN")
 
-        response = (
-            supabase.table("Event")
-            .insert(
-                {
-                    "datetime": event.datetime.isoformat(),
-                    "plate": event.plate,
-                    "province": event.province,
-                    "direction": direction,
-                    "blob": event.blob,  # already URL
-                    "cam_id": event.cam_id,
-                }
-            )
-            .execute()
-        )
+        response = supabase.table("Event").insert({
+            "datetime": event.datetime.isoformat(),
+            "plate": event.plate,
+            "province": event.province,
+            "direction": direction,
+            "blob": event.blob,
+            "cam_id": event.cam_id,
+            "vehicle_id": event.vehicle_id
+        }).execute()
 
         if not response.data:
             raise HTTPException(status_code=400, detail="Insert failed")
@@ -95,26 +91,21 @@ def create_event(event: EventIn):
 
 
 # GET: Check plate in member
-
-
 @app.get("/check_plate")
 def check_plate(
-    plate: str | None = Query(None, description="ทะเบียนรถ เช่น กข 1234"),
-    province: str | None = Query(None, description="จังหวัด เช่น กรุงเทพมหานคร"),
+    plate: str | None = Query(None, description="ทะเบียนรถ"),
+    province: str | None = Query(None, description="จังหวัด")
 ):
     try:
-        query = supabase.table("Vehicle").select(
-            "vehicle_id, plate, province, member:Member!Vehicle_member_id_fkey(role)"
-        )
+        query = supabase.table("Vehicle") \
+            .select("vehicle_id, plate, province, member:Member!Vehicle_member_id_fkey(role)")
 
         if plate:
             query = query.ilike("plate", plate.strip())
-
         if province:
             query = query.ilike("province", province.strip())
 
         response = query.execute()
-
         if response.data and len(response.data) > 0:
             vehicle = response.data[0]
             role = vehicle.get("member", {}).get("role", "Visitor")
@@ -123,10 +114,9 @@ def check_plate(
                 "vehicle_id": vehicle.get("vehicle_id"),
                 "plate": vehicle.get("plate"),
                 "province": vehicle.get("province"),
-                "role": role,
+                "role": role
             }
-
-        return {"exists": False, "message": "This plate is not registered."}
+        return {"exists": False, "message": "Not registered."}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
