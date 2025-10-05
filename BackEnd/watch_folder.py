@@ -57,15 +57,10 @@ class ReadImage(FileSystemEventHandler):
             direction = match.group(2)
             dt = match.group(3)
             iso_dt = dt_to_iso(dt)   
-
-            print("Camera:", cam)
-            print("Direction:", direction)
-            print("Datetime:", dt)
-            print("DatetimeISO:", iso_dt)
         else:
             print("ไม่ตรง pattern")
         
-        if result_p and len(result_p[0].boxes) > 0:
+        if result_p and len(result_p[0].boxes) > 0:#ถ้ามีป้ายจะบันทึกอันนี้
             boxes = result_p[0].boxes.xyxy.cpu().numpy()  
             confs = result_p[0].boxes.conf.cpu().numpy()
 
@@ -87,7 +82,7 @@ class ReadImage(FileSystemEventHandler):
                 "province": result["province"],
                 "direction": result["direction"],
                 "blob": None,
-                "cam_id": 1,
+                "cam_id": result["camera"],
                 "vehicle_id": None
             }
                 try:
@@ -98,48 +93,22 @@ class ReadImage(FileSystemEventHandler):
                     print("HTTP error:", e.response.text)
                 except Exception as e:
                     print("Error:", str(e))
-            else:
-                payload = {
-                "datetime": iso_dt,
-                "plate": None,
-                "province": None,
-                "direction": direction,
-                "blob": None,
-                "cam_id": cam,
-                "vehicle_id": None
-            }
-                try:
-                    resp = send_event(payload)
-                    print("[NO-PLATE] Insert Complete:", resp)
-                except Exception as e:
-                    print("[NO-PLATE] Error:", e)
-                return
-        
-
-        # เช็คในระบบก่อน
-        # role, vehicle_id = check_plate_in_system(result["plate"], result["province"])
-        # print(f"Role: {role}, Vehicle ID: {vehicle_id}")
-
-        # # เตรียมข้อมูลส่งขึ้น Supabase
-        # event_payload = {
-        #     "status": role,
-        #     "datetime": result["time"],
-        #     "plate": result["plate"],
-        #     "province": result["province"],
-        #     "direction": result["direction"],
-        #     "blob": None,
-        #     "cam_id": 1,
-        #     "vehicle_id": vehicle_id
-        # }
-
-        # try:
-        #     resp = send_event(event_payload)
-        #     print(resp)
-        #     print("Insert Complete")
-        # except requests.HTTPError as e:
-        #     print("HTTP error:", e.response.text)
-        # except Exception as e:
-        #     print("Error:", str(e))
+        else: #ถ้าไม่มีป้ายจะบันทึกอันนี้
+            payload = {
+            "datetime": iso_dt,
+            "plate": None,
+            "province": None,
+            "direction": direction,
+            "blob": None,
+            "cam_id": cam,
+            "vehicle_id": None
+        }
+            try:
+                resp = send_event(payload)
+                print("[NO-PLATE] Insert Complete:", resp)
+            except Exception as e:
+                print("[NO-PLATE] Error:", e)
+            return
 
 
 def main():
