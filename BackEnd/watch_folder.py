@@ -1,9 +1,8 @@
-import os,time,base64,requests,cv2
+import os, time, base64, requests, cv2
 import numpy as np
 from utils import *
 from OCR_ai import *
 from ultralytics import YOLO
-
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from watchdog.observers import Observer
 
@@ -12,11 +11,13 @@ API_URL_EVENT = "http://127.0.0.1:8000/events"
 API_URL_CHECK = "http://127.0.0.1:8000/check_plate"
 model = YOLO("model/lpr_model.pt")
 
+
 def send_event(payload: dict):
     """ส่งข้อมูล Event ไปยัง API"""
     r = requests.post(API_URL_EVENT, json=payload, timeout=10)
     r.raise_for_status()
     return r.json()
+
 
 def check_plate_in_system(plate: str, province: str):
     """เรียก API เพื่อตรวจสอบว่ามีป้ายในระบบหรือไม่"""
@@ -48,20 +49,24 @@ class ReadImage(FileSystemEventHandler):
         if img is None:
             print(f"[WARN] อ่านภาพไม่ได้: {event.src_path}")
             return
-        result_p = model.predict(source=event.src_path, imgsz=960, device="0", classes=[0])
+        result_p = model.predict(
+            source=event.src_path, imgsz=960, device="0", classes=[0]
+        )
 
         filename = os.path.basename(event.src_path)
-        match = re.search(r"^Cam_(\d+)_Dir_(.*?)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})", filename)
+        match = re.search(
+            r"^Cam_(\d+)_Dir_(.*?)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})", filename
+        )
         if match:
             cam = match.group(1)
             direction = match.group(2)
             dt = match.group(3)
-            iso_dt = dt_to_iso(dt)   
+            iso_dt = dt_to_iso(dt)
         else:
             print("ไม่ตรง pattern")
-        
-        if result_p and len(result_p[0].boxes) > 0:#ถ้ามีป้ายจะบันทึกอันนี้
-            boxes = result_p[0].boxes.xyxy.cpu().numpy()  
+
+        if result_p and len(result_p[0].boxes) > 0:  # ถ้ามีป้ายจะบันทึกอันนี้
+            boxes = result_p[0].boxes.xyxy.cpu().numpy()
             confs = result_p[0].boxes.conf.cpu().numpy()
 
             best_i = int(np.argmax(confs))
@@ -71,20 +76,20 @@ class ReadImage(FileSystemEventHandler):
 
             if crop is not None and crop.size > 0:
                 # โค้ดพังเพื่อนแก้ด้วย
-                # role, vehicle_id = check_plate_in_system(result["plate"], result["province"]) 
+                # role, vehicle_id = check_plate_in_system(result["plate"], result["province"])
                 # print(f"Role: {role}, Vehicle ID: {vehicle_id}")
                 img_b64 = encode_image(crop)
                 result = read_plate(img_b64=img_b64, image_path=event.src_path)
                 print(result)
                 event_payload = {
-                "datetime": result["time"],
-                "plate": result["plate"],
-                "province": result["province"],
-                "direction": result["direction"],
-                "blob": None,
-                "cam_id": result["camera"],
-                "vehicle_id": None
-            }
+                    "datetime": result["time"],
+                    "plate": result["plate"],
+                    "province": result["province"],
+                    "direction": result["direction"],
+                    "blob": None,
+                    "cam_id": result["camera"],
+                    "vehicle_id": None,
+                }
                 try:
                     resp = send_event(event_payload)
                     print(resp)
@@ -93,16 +98,16 @@ class ReadImage(FileSystemEventHandler):
                     print("HTTP error:", e.response.text)
                 except Exception as e:
                     print("Error:", str(e))
-        else: #ถ้าไม่มีป้ายจะบันทึกอันนี้
+        else:  # ถ้าไม่มีป้ายจะบันทึกอันนี้
             payload = {
-            "datetime": iso_dt,
-            "plate": None,
-            "province": None,
-            "direction": direction,
-            "blob": None,
-            "cam_id": cam,
-            "vehicle_id": None
-        }
+                "datetime": iso_dt,
+                "plate": None,
+                "province": None,
+                "direction": direction,
+                "blob": None,
+                "cam_id": cam,
+                "vehicle_id": None,
+            }
             try:
                 resp = send_event(payload)
                 print("[NO-PLATE] Insert Complete:", resp)

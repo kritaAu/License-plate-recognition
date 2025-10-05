@@ -4,25 +4,30 @@ import os
 import re
 from datetime import datetime, timezone, timedelta
 from utils import *
+
 client = OpenAI()
 
 # Function to encode the image
+
 
 def dt_to_iso(dt_str: str) -> str:
     # จาก "2025-11-03_14-30-00"
     dt = datetime.strptime(dt_str, "%Y-%m-%d_%H-%M-%S")
     dt = dt.replace(tzinfo=timezone(timedelta(hours=7)))
-    return dt.isoformat()   # "2025-11-03T14:30:00+07:00"
+    return dt.isoformat()  # "2025-11-03T14:30:00+07:00"
+
 
 def read_plate(img_b64: str = None, image_path: str = None):
 
     filename = os.path.basename(image_path)
-    match = re.search(r"^Cam_(\d+)_Dir_(.*?)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})", filename)
+    match = re.search(
+        r"^Cam_(\d+)_Dir_(.*?)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})", filename
+    )
     if match:
         cam = match.group(1)
         direction = match.group(2)
         dt = match.group(3)
-        iso_dt = dt_to_iso(dt)   
+        iso_dt = dt_to_iso(dt)
         print("Camera:", cam)
         print("Direction:", direction)
         print("Datetime:", dt)
@@ -61,27 +66,29 @@ def read_plate(img_b64: str = None, image_path: str = None):
                     "camera":<number>
                     }
                     """
-                    
-                )
+                ),
             },
             {
                 "role": "user",
                 "content": [
                     {
                         "type": "input_text",
-                        "text": f"อ่านป้ายทะเบียนแล้วออก JSON โดยให้ datetime = \"{iso_dt}\" และ direction = \"{direction}\"และ Camera = \"{cam}\""
+                        "text": f'อ่านป้ายทะเบียนแล้วออก JSON โดยให้ datetime = "{iso_dt}" และ direction = "{direction}"และ Camera = "{cam}"',
                     },
                     {
                         "type": "input_image",
-                        "image_url": f"data:image/jpeg;base64,{img_b64}","detail": "low"
-                    }
-                ]
-            }
+                        "image_url": f"data:image/jpeg;base64,{img_b64}",
+                        "detail": "low",
+                    },
+                ],
+            },
         ],
     )
     try:
         txt = response.output_text.strip()
-        txt = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", txt, flags=re.IGNORECASE|re.DOTALL)
+        txt = re.sub(
+            r"^\s*```(?:json)?\s*|\s*```\s*$", "", txt, flags=re.IGNORECASE | re.DOTALL
+        )
         return json.loads(txt)
     except Exception:
         return {"raw_text": response.output_text}
