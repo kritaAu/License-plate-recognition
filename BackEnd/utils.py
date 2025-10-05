@@ -1,4 +1,5 @@
 import base64, cv2
+from datetime import datetime, timezone, timedelta
 
 
 def safe_crop(img, x1, y1, x2, y2, pad=0):
@@ -15,3 +16,9 @@ def safe_crop(img, x1, y1, x2, y2, pad=0):
 def encode_image(image):
     _, buffer = cv2.imencode(".jpg", image)
     return base64.b64encode(buffer).decode("utf-8")
+
+def dt_to_iso(dt_str: str) -> str:
+    # จาก "2025-11-03_14-30-00"
+    dt = datetime.strptime(dt_str, "%Y-%m-%d_%H-%M-%S")
+    dt = dt.replace(tzinfo=timezone(timedelta(hours=7)))
+    return dt.isoformat()  # "2025-11-03T14:30:00+07:00"

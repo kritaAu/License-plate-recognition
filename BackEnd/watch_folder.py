@@ -28,21 +28,23 @@ def check_plate_in_system(plate: str, province: str):
         data = r.json()
 
         if data.get("exists"):
-            role = data.get("role", "Visitor")
             vehicle_id = data.get("vehicle_id", None)
-            return role, vehicle_id
+            return vehicle_id
 
-        return "Visitor", None
+        return None
 
     except Exception as e:
         print("Error checking plate:", e)
-        return "Visitor", None
+        return None
 
 
 class ReadImage(FileSystemEventHandler):
     def on_created(self, event: FileSystemEvent):
         if event.is_directory:
             return
+        print("hello")
+        result = read_plate(event.src_path)
+        print(result)
         time.sleep(0.1)
 
         img = cv2.imread(event.src_path)
@@ -58,15 +60,10 @@ class ReadImage(FileSystemEventHandler):
             direction = match.group(2)
             dt = match.group(3)
             iso_dt = dt_to_iso(dt)   
-
-            print("Camera:", cam)
-            print("Direction:", direction)
-            print("Datetime:", dt)
-            print("DatetimeISO:", iso_dt)
         else:
             print("ไม่ตรง pattern")
         
-        if result_p and len(result_p[0].boxes) > 0:
+        if result_p and len(result_p[0].boxes) > 0: #ถ้ามีป้ายจะบันทึกอันนี้
             boxes = result_p[0].boxes.xyxy.cpu().numpy()  
             confs = result_p[0].boxes.conf.cpu().numpy()
 
@@ -75,35 +72,46 @@ class ReadImage(FileSystemEventHandler):
 
             crop = safe_crop(img, x1, y1, x2, y2, pad=10)
 
-        if crop is not None and crop.size > 0:
-            # อ่านป้ายทะเบียนจากภาพ
-            img_b64 = encode_image(crop)
-            result = read_plate(img_b64=img_b64, image_path=event.src_path)
-            print(result)
+            if crop is not None and crop.size > 0:
+                # เช็คป้ายในระบบหลังจากได้ผลลัพธ์จาก OCR แล้ว
+                img_b64 = encode_image(crop)
+                result = read_plate(img_b64=img_b64, image_path=event.src_path)
+                # vehicle_id = check_plate_in_system(result["plate"], result["province"])
 
-            # เช็คป้ายในระบบหลังจากได้ผลลัพธ์จาก OCR แล้ว
-            role, vehicle_id = check_plate_in_system(result["plate"], result["province"]) 
-            print(f"Role: {role}, Vehicle ID: {vehicle_id}")
-
-            # เตรียมข้อมูลส่งขึ้น Supabase
-            event_payload = {
+                print(result)
+                event_payload = {
                 "datetime": result["time"],
                 "plate": result["plate"],
                 "province": result["province"],
                 "direction": result["direction"],
                 "blob": None,
-                "cam_id": int(cam),
-                "vehicle_id": vehicle_id
+                "cam_id": result["camera"],
+                "vehicle_id": None
             }
-
-        try:
-            resp = send_event(event_payload)
-            print(resp)
-            print("Insert Complete")
-        except requests.HTTPError as e:
-            print("HTTP error:", e.response.text)
-        except Exception as e:
-            print("Error:", str(e))
+                try:
+                    resp = send_event(event_payload)
+                    print(resp)
+                    print("Insert Complete")
+                except requests.HTTPError as e:
+                    print("HTTP error:", e.response.text)
+                except Exception as e:
+                    print("Error:", str(e))
+            else:
+                payload = {
+                "datetime": iso_dt,
+                "plate": None,
+                "province": None,
+                "direction": direction,
+                "blob": None,
+                "cam_id": cam,
+                "vehicle_id": None
+            }
+                try:
+                    resp = send_event(payload)
+                    print("[NO-PLATE] Insert Complete:", resp)
+                except Exception as e:
+                    print("[NO-PLATE] Error:", e)
+                return
 
 def main():
     if not os.path.isdir(WATCH_DIR):
@@ -127,3 +135,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+    

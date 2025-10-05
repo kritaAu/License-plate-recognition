@@ -2,7 +2,6 @@ import json
 from openai import OpenAI
 import os
 import re
-from datetime import datetime, timezone, timedelta
 from utils import *
 
 client = OpenAI()
@@ -10,11 +9,7 @@ client = OpenAI()
 # Function to encode the image
 
 
-def dt_to_iso(dt_str: str) -> str:
-    # จาก "2025-11-03_14-30-00"
-    dt = datetime.strptime(dt_str, "%Y-%m-%d_%H-%M-%S")
-    dt = dt.replace(tzinfo=timezone(timedelta(hours=7)))
-    return dt.isoformat()  # "2025-11-03T14:30:00+07:00"
+
 
 
 def read_plate(img_b64: str = None, image_path: str = None):
@@ -28,10 +23,6 @@ def read_plate(img_b64: str = None, image_path: str = None):
         direction = match.group(2)
         dt = match.group(3)
         iso_dt = dt_to_iso(dt)
-        print("Camera:", cam)
-        print("Direction:", direction)
-        print("Datetime:", dt)
-        print("DatetimeISO:", iso_dt)
     else:
         print("ไม่ตรง pattern")
 
