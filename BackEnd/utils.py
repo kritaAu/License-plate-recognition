@@ -17,6 +17,7 @@ def encode_image(image):
     _, buffer = cv2.imencode(".jpg", image)
     return base64.b64encode(buffer).decode("utf-8")
 
+
 def dt_to_iso(dt_str: str) -> str:
     # จาก "2025-11-03_14-30-00"
     dt = datetime.strptime(dt_str, "%Y-%m-%d_%H-%M-%S")

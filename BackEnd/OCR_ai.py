@@ -6,11 +6,6 @@ from utils import *
 
 client = OpenAI()
 
-# Function to encode the image
-
-
-
-
 
 def read_plate(img_b64: str = None, image_path: str = None):
 
