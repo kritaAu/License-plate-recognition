@@ -1,6 +1,7 @@
 import cv2
 import torch
 import time
+from utils import *
 from datetime import datetime, timezone, timedelta     
 import os
 from ultralytics import YOLO
@@ -13,18 +14,9 @@ PAD = 20
 last_global_trigger_time = -1e18
 cooldown_time =1
 center_y = 1200   
+camera = 1
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-def safe_crop(img, x1, y1, x2, y2, pad=0):
-    h, w = img.shape[:2]
-    x1 = max(0, x1 - pad)
-    y1 = max(0, y1 - pad)
-    x2 = min(w, x2 + pad)
-    y2 = min(h, y2 + pad)
-    if x2 <= x1 or y2 <= y1:
-        return None
-    return img[y1:y2, x1:x2]
 
 print("Checking GPU...")
 print("CUDA Available:", torch.cuda.is_available())
@@ -107,10 +99,10 @@ while True:
                     crop = safe_crop(frame, x1, y1, x2, y2, pad=PAD)
                     if crop is not None:
                         ts = int(current_time)
-                        fname = f"Dir_{direction}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.jpg"
+                        fname = f"Cam_{camera}_Dir_{direction}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.jpg"
                         save_path = os.path.join(OUTPUT_DIR, fname)
                         cv2.imwrite(save_path, crop)
-                        print(f"[TRIGGER] ID:{track_id} Class:{class_name} Dir:{direction} Time::{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
+                        print(f"[TRIGGER] ID:{track_id} Class:{class_name} Dir:{direction} Time::{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_Cam_{camera}")
             
             color = (0, 255, 0) if crossed_status.get(track_id, False) else (0, 0, 255)
             

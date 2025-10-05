@@ -1,0 +1,15 @@
+import base64,cv2
+
+def safe_crop(img, x1, y1, x2, y2, pad=0):
+    h, w = img.shape[:2]
+    x1 = max(0, x1 - pad)
+    y1 = max(0, y1 - pad)
+    x2 = min(w, x2 + pad)
+    y2 = min(h, y2 + pad)
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return img[y1:y2, x1:x2]
+    
+def encode_image(image):
+    _, buffer = cv2.imencode('.jpg', image)
+    return base64.b64encode(buffer).decode('utf-8')

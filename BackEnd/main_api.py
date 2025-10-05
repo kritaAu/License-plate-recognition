@@ -58,7 +58,6 @@ class EventIn(BaseModel):
     plate: str           # license plate
     province: str        # province
     cam_id: int          # 1 = IN, 2 = OUT
-    status: str | None = "Visitor"  # Visitor, Student, Teacher, Staff
     blob: str | None = None         # image URL (from Storage)
 
 
@@ -70,7 +69,6 @@ def create_event(event: EventIn):
         direction = direction_map.get(event.cam_id, "UNKNOWN")
 
         response = supabase.table("Event").insert({
-            "status": event.status,
             "datetime": event.datetime.isoformat(),
             "plate": event.plate,
             "province": event.province,

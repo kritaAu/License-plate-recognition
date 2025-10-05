@@ -1,16 +1,12 @@
-import base64
 import json
 from openai import OpenAI
 import os
 import re
 from datetime import datetime, timezone, timedelta
-
+from utils import *
 client = OpenAI()
 
 # Function to encode the image
-def encode_image(image_path):
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode("utf-8")
 
 def dt_to_iso(dt_str: str) -> str:
     # จาก "2025-11-03_14-30-00"
@@ -18,20 +14,21 @@ def dt_to_iso(dt_str: str) -> str:
     dt = dt.replace(tzinfo=timezone(timedelta(hours=7)))
     return dt.isoformat()   # "2025-11-03T14:30:00+07:00"
 
-def read_plate(image_path: str):
+def read_plate(img_b64: str = None, image_path: str = None):
 
     filename = os.path.basename(image_path)
-    match = re.search(r"^Dir_(.*?)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})", filename)
+    match = re.search(r"^Cam_(\d+)_Dir_(.*?)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})", filename)
     if match:
-        dir = match.group(1)   # IN
-        dt   = match.group(2)   # 2025-10-04_01-19-55
-        iso_dt = dt_to_iso(dt)
-        print("Code:", dir)
+        cam = match.group(1)
+        direction = match.group(2)
+        dt = match.group(3)
+        iso_dt = dt_to_iso(dt)   
+        print("Camera:", cam)
+        print("Direction:", direction)
         print("Datetime:", dt)
-        print("DatetimeISO:",iso_dt)
+        print("DatetimeISO:", iso_dt)
     else:
         print("ไม่ตรง pattern")
-    base64_image = encode_image(image_path)
 
     response = client.responses.create(
         model="gpt-4o",
@@ -54,13 +51,14 @@ def read_plate(image_path: str):
                     - ห้ามเดาหรือเติมจังหวัดถ้าไม่เห็นชัด
                     - ออกผลเป็น JSON เท่านั้น
                     - ค่า plate = plate_top ต่อด้วย plate_bottom (ถ้าไม่มีบรรทัดล่าง ให้ใช้เฉพาะ plate_top)
-                    -ถ้าไม่มีป้ายทะเบียนหรือภาพอะไรไม่รู้ให้ทุกค่าเป็น None แล้วใส่ตรง plate เป็น ไม่มีป้ายทะเบียน
+                    -ถ้าไม่มีป้ายทะเบียนหรือภาพอะไรไม่รู้ให้plate เป็น "ไม่มีป้ายทะเบียน" province เป็น Null ยกเว้น time,direction,camera จะต้องมีเสมอ
                     Output JSON:
                     {
-                    "plate": "<plate_top(+plate_bottomถ้ามี)>",
+                    "plate": "<plate_top(+plate_bottom)>",
                     "province": "<provinceหรือเว้นว่างถ้าไม่เห็น>",
                     "time":"<datetime จากไฟล์>"
                     "direction":"<IN or OUT>"
+                    "camera":<number>
                     }
                     """
                     
@@ -71,11 +69,11 @@ def read_plate(image_path: str):
                 "content": [
                     {
                         "type": "input_text",
-                        "text": f"อ่านป้ายทะเบียนแล้วออก JSON โดยให้ datetime = \"{iso_dt}\" และ direction = \"{dir}\""
+                        "text": f"อ่านป้ายทะเบียนแล้วออก JSON โดยให้ datetime = \"{iso_dt}\" และ direction = \"{direction}\"และ Camera = \"{cam}\""
                     },
                     {
                         "type": "input_image",
-                        "image_url": f"data:image/jpeg;base64,{base64_image}","detail": "low"
+                        "image_url": f"data:image/jpeg;base64,{img_b64}","detail": "low"
                     }
                 ]
             }
