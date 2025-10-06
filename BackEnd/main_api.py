@@ -106,7 +106,6 @@ def check_plate(
         query = supabase.table("Vehicle").select(
             "vehicle_id, plate, province, member:Member!Vehicle_member_id_fkey(role)"
         )
-
         if plate:
             query = query.ilike("plate", plate.strip())
         if province:
