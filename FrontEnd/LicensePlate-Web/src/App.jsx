@@ -6,7 +6,12 @@ import Navbar from "./navbar";
 
 function App() {
   const [count, setCount] = useState(0)
-
+const [filters, setFilters] = useState({
+  start: "",
+  end: "",
+  direction: "all",
+  query: "",
+});
   // mock data
   const stats = {
     total: 156,
@@ -23,27 +28,58 @@ function App() {
   ];
 
   return (
-    <>
-     <Navbar />  
-    <div className="header">
-      <a href="https://vite.dev" target="_blank">
-        <img src={viteLogo} className="logo" alt="Vite logo" />
-      </a>
-      <a href="https://react.dev" target="_blank">
-        <img src={reactLogo} className="logo react" alt="React logo" />
-      </a>
-    </div>
+  <>
+    <Navbar />
 
-      <div className="header">
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    {/* แถบตัวกรอง */}
+    <section className="filter-bar">
+      <div className="filter-grid">
+        <div className="field">
+          <label>วันที่เริ่ม</label>
+          <input
+            type="date"
+            name="start"
+            value={filters.start}
+            
+          />
+        </div>
+
+        <div className="field">
+          <label>วันสิ้นสุด</label>
+          <input
+            type="date"
+            name="end"
+            value={filters.end}
+            
+          />
+        </div>
+
+        <div className="field">
+          <label>ทิศทาง</label>
+          <select
+            name="direction"
+            value={filters.direction}
+            
+          >
+            <option value="all">ทั้งหมด</option>
+            <option value="in">เข้า</option>
+            <option value="out">ออก</option>
+          </select>
+        </div>
+
+        <div className="field">
+          <label>ค้นหาทะเบียน</label>
+          <input
+            type="text"
+            name="query"
+            placeholder="เช่น กก1234"
+            value={filters.query}
+            
+          />
+        </div>
       </div>
-
-      <h1>ระบบตรวจจับรถจักรยานยนต์</h1>
+    </section>
+      <h1 className='detect'>ระบบตรวจจับรถจักรยานยนต์</h1>
 
       {/* Stats */}
       <div className="stats">

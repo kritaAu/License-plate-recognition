@@ -1,80 +1,155 @@
+/* ---------- Global: ให้เต็มจอจริง ---------- */
+html, body, #root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: #d7cfcf;   /* โทนเข้มเหมือนที่ใช้อยู่ */
+  color: #eee;
+  line-height: 1.5;
+}
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  width: 100%;
+  max-width: none;       /* ยกเลิกการบีบความกว้าง */
+  padding: 0;            /* เอา padding กลางออก */
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
-
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
-}
-
-#root {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
-
-.stats {
+/* ---------- Wrapper ของหน้า ---------- */
+.page {
+  min-height: 100vh;     /* ให้หน้าอย่างน้อยสูงเท่าจอ */
   display: flex;
-  justify-content: space-around;
-  margin: 2rem 0;
+  flex-direction: column;
+  gap: 24px;
+  padding: 16px 24px;    /* ขอบด้านข้างเล็กน้อย */
+}
+
+/* ---------- แถบเลือกวันที่ (หัว) ---------- */
+.mroehead {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(200px, 1fr));
+  gap: 16px;
+}
+.mroehead p {
+  width: 10%;
+  font-weight: 600;
+}
+.mroehead input[type="date"] {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #1a1a1a;
+  color: #eee;
+}
+
+.detect{
+  color: #111;
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin: 0;            
 }
 
 .card {
   background: rgb(77, 76, 76);
-  padding: 1rem 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }
 
+/* ---------- ตาราง ---------- */
 .table-container {
-  margin-top: 2rem;
+  margin-top: 0;
+  background: #151515;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  overflow: hidden;            /* โค้งขอบส่วนหัว */
+}
+
+/* ให้ตารางเลื่อนแนวนอนได้ถ้าจอแคบ */
+.table-container > .table-scroll {
+  overflow-x: auto;
 }
 
 table {
   width: 100%;
+  min-width: 720px;            /* ป้องกันคอลัมน์อัดกันบนจอเล็ก */
   border-collapse: collapse;
 }
 
 th, td {
-  padding: 0.75rem;
-  border-bottom: 1px solid #ddd;
+  padding: 12px 14px;
+  border-bottom: 1px solid #2a2a2a;
+  text-align: left;
 }
 
 thead {
   background: rgb(77, 76, 76);
+  position: sticky;           
+  top: 0;
+  z-index: 1;
+}
+
+
+.read-the-docs { color: #888; }
+.filter-bar {
+  background: #524e4e;              /* เทาอ่อนของแถบ */
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin: 16px 16px 24px;
+}
+
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 20px;
+  padding: 0px 10px;
+}
+
+/* ฟิลด์ + ป้ายกำกับ */
+.field label {
+  display: block;
+  font-weight: 600;
+  color: #111;                 
+  margin-bottom: 8px;
+}
+
+/* อินพุต/เซเล็กต์สไตล์เทาโค้งมน */
+.field input[type="date"],
+.field input[type="text"],
+.field select {
+  width: 100px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: #3b2d2d;             
+  color: #111;
+  padding: 0 14px;
+  outline: none;
+}
+
+/* โฟกัสให้เห็นชัด */
+.field input:focus,
+.field select:focus {
+  box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.35);
+}
+
+/* ตัวอักษร placeholder ให้อ่อนลง */
+.field input::placeholder {
+  color: #9a9a9a;
+}
+
+/* รองรับจอเล็ก: ซ้อนเป็นคอลัมน์ */
+@media (max-width: 992px) {
+  .filter-grid {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
 }
