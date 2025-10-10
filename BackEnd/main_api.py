@@ -1,9 +1,11 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query
+from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client
 import os
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+
 import uuid
 
 #  ENV
@@ -15,7 +17,16 @@ supabase = create_client(url, key)
 #  FASTAPI APP
 app = FastAPI()
 
-
+origins = [
+    "http://localhost:5173"
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 #  HELPERS
 def upload_image_to_storage(file: UploadFile, folder="plates") -> str:
     """
