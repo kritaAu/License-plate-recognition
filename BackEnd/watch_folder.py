@@ -30,9 +30,9 @@ def check_plate_in_system(plate: str, province: str):
         if data.get("exists"):
             vehicle_id = data.get("vehicle_id", None)
             return vehicle_id
-        
+
         return None
-    
+
     except Exception as e:
         print("Error checking plate:", e)
         return None
@@ -63,7 +63,7 @@ class ReadImage(FileSystemEventHandler):
         else:
             print("ไม่ตรง pattern")
 
-        if result_p and len(result_p[0].boxes) > 0:  
+        if result_p and len(result_p[0].boxes) > 0:
             boxes = result_p[0].boxes.xyxy.cpu().numpy()
             confs = result_p[0].boxes.conf.cpu().numpy()
             best_i = int(np.argmax(confs))
@@ -74,6 +74,7 @@ class ReadImage(FileSystemEventHandler):
                 # เช็คป้ายในระบบหลังจากได้ผลลัพธ์จาก OCR แล้ว
                 img_b64 = encode_image(crop)
                 result = read_plate(img_b64=img_b64, image_path=event.src_path)
+                vehicle_id = check_plate_in_system(result["plate"], result["province"])
 
                 # ถ้ามีป้ายจะบันทึกอันนี้
                 event_payload = {
@@ -83,7 +84,7 @@ class ReadImage(FileSystemEventHandler):
                     "direction": result["direction"],
                     "blob": None,
                     "cam_id": result["camera"],
-                    "vehicle_id": None,
+                    "vehicle_id": vehicle_id,
                 }
                 try:
                     resp = send_event(event_payload)
@@ -116,7 +117,7 @@ def main():
     if not os.path.isdir(WATCH_DIR):
         print(f"[ERROR] Folder not found: {WATCH_DIR}")
         return
-    
+
     print(f"[WATCH] Watching: {WATCH_DIR}")
     observer = Observer()
     observer.schedule(ReadImage(), WATCH_DIR, recursive=False)

@@ -12,6 +12,7 @@
   background: none;
   border: none;
   cursor: pointer;
+  color: black;
 }
 
 .navbar-title {
@@ -44,6 +45,7 @@
   padding: 15px;
   border-bottom: 1px solid #bbb;
   cursor: pointer;
+  color: black;
 }
 
 .sidebar li:hover {
@@ -64,4 +66,7 @@
   padding: 2px 6px;
   margin-left: 8px;
   border-radius: 12px;
+}
+.navbar-title{
+  color: black;
 }
