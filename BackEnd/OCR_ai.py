@@ -4,9 +4,8 @@ import os
 import re
 from utils import *
 
-
-
 client = OpenAI()
+
 def read_plate(img_b64: str = None, image_path: str = None):
 
     filename = os.path.basename(image_path)
@@ -33,8 +32,8 @@ def read_plate(img_b64: str = None, image_path: str = None):
                         คุณคือ OCR สำหรับภาพ “ป้ายทะเบียนมอเตอร์ไซค์ของไทย” (ครอปเฉพาะป้าย)
                         รูปแบบบรรทัด:
                         1) plate_top:มีได้ 3 ตัวเท่านั้น 
-                        — ถ้ามีเลข เลขอยู่หน้าสุด 
-                        — สองตัวขวาต้องเป็นอักษรไทย
+                        - ถ้ามีเลข เลขอยู่หน้าสุด 
+                        - สองตัวขวาต้องเป็นอักษรไทย
                         -มีเลขซ้ายสุด → 1กก, 2ขข, 3พร, 9ธน
                         -ไม่มีเลข → กข, กทม, พร, นค
                         - อักขระสับสนที่พบบ่อย: ฐ↔ร, 0↔O↔อ, 1↔I↔l

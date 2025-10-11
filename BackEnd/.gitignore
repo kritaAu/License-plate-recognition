@@ -3,3 +3,4 @@
 \detect_motor
 .env
 .csv
+\__pycache__
