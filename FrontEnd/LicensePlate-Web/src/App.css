@@ -1,1 +1,155 @@
-@import "tailwindcss";
+/* ---------- Global: ให้เต็มจอจริง ---------- */
+html, body, #root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: #d7cfcf;   /* โทนเข้มเหมือนที่ใช้อยู่ */
+  color: #eee;
+  line-height: 1.5;
+}
+#root {
+  width: 100%;
+  max-width: none;       /* ยกเลิกการบีบความกว้าง */
+  padding: 0;            /* เอา padding กลางออก */
+}
+
+/* ---------- Wrapper ของหน้า ---------- */
+.page {
+  min-height: 100vh;     /* ให้หน้าอย่างน้อยสูงเท่าจอ */
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 16px 24px;    /* ขอบด้านข้างเล็กน้อย */
+}
+
+/* ---------- แถบเลือกวันที่ (หัว) ---------- */
+.mroehead {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(200px, 1fr));
+  gap: 16px;
+}
+.mroehead p {
+  width: 10%;
+  font-weight: 600;
+}
+.mroehead input[type="date"] {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #1a1a1a;
+  color: #eee;
+}
+
+.detect{
+  color: #111;
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin: 0;            
+}
+
+.card {
+  background: rgb(77, 76, 76);
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+/* ---------- ตาราง ---------- */
+.table-container {
+  margin-top: 0;
+  background: #151515;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  overflow: hidden;            /* โค้งขอบส่วนหัว */
+}
+
+/* ให้ตารางเลื่อนแนวนอนได้ถ้าจอแคบ */
+.table-container > .table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  min-width: 720px;            /* ป้องกันคอลัมน์อัดกันบนจอเล็ก */
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #2a2a2a;
+  text-align: left;
+}
+
+thead {
+  background: rgb(77, 76, 76);
+  position: sticky;           
+  top: 0;
+  z-index: 1;
+}
+
+
+.read-the-docs { color: #888; }
+.filter-bar {
+  background: #524e4e;              /* เทาอ่อนของแถบ */
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin: 16px 16px 24px;
+}
+
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 20px;
+  padding: 0px 10px;
+}
+
+/* ฟิลด์ + ป้ายกำกับ */
+.field label {
+  display: block;
+  font-weight: 600;
+  color: #111;                 
+  margin-bottom: 8px;
+}
+
+/* อินพุต/เซเล็กต์สไตล์เทาโค้งมน */
+.field input[type="date"],
+.field input[type="text"],
+.field select {
+  width: 100px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: #3b2d2d;             
+  color: #111;
+  padding: 0 14px;
+  outline: none;
+}
+
+/* โฟกัสให้เห็นชัด */
+.field input:focus,
+.field select:focus {
+  box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.35);
+}
+
+/* ตัวอักษร placeholder ให้อ่อนลง */
+.field input::placeholder {
+  color: #9a9a9a;
+}
+
+/* รองรับจอเล็ก: ซ้อนเป็นคอลัมน์ */
+@media (max-width: 992px) {
+  .filter-grid {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
+}
