@@ -26,7 +26,7 @@ model = YOLO(r"model\motorcycle_model.pt")
 class_list = model.names
 # print("Class list:", class_list)
 
-cap = cv2.VideoCapture(r"video\-_Clipchamp.mp4")
+cap = cv2.VideoCapture(r"video\ _Clipchamp.mp4")
 if not cap.isOpened():
     raise RuntimeError("Failed to open video source")
 

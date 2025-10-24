@@ -5,7 +5,6 @@ import os
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-
 import uuid
 
 #  ENV
@@ -17,9 +16,7 @@ supabase = create_client(url, key)
 #  FASTAPI APP
 app = FastAPI()
 
-origins = [
-    "http://localhost:5173"
-]
+origins = ["http://localhost:5173"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -27,26 +24,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-#  HELPERS
-def upload_image_to_storage(file: UploadFile, folder="plates") -> str:
-    """
-    Upload image to Supabase Storage (bucket = image_car) and return public URL
-    """
-    try:
-        # unique filename
-        ext = file.filename.split(".")[-1]
-        filename = f"{folder}/{uuid.uuid4().hex}.{ext}"
-        # read file bytes
-        content = file.file.read()
-        # upload to bucket = image_car
-        supabase.storage.from_("image_car").upload(filename, content)
-        # return public URL
-        url = supabase.storage.from_("image_car").get_public_url(filename)
-        return url
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
-
 
 # --ROUTES--
 

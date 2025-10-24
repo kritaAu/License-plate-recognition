@@ -5,11 +5,50 @@ from OCR_ai import *
 from ultralytics import YOLO
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from watchdog.observers import Observer
+from supabase import create_client
+from dotenv import load_dotenv
+import uuid
+
+load_dotenv()
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 WATCH_DIR = r"detect_motor"
 API_URL_EVENT = "http://127.0.0.1:8000/events"
 API_URL_CHECK = "http://127.0.0.1:8000/check_plate"
 model = YOLO("model/lpr_model.pt")
+
+
+##
+from datetime import datetime
+
+
+def upload_image_to_storage(image_bytes: bytes, folder="plates") -> str:
+    """
+    Upload image bytes to Supabase Storage (bucket = image_car) and save with filename = current datetime (YYYY-MM-DD_HH-MM-SS.jpg)
+    """
+    try:
+        # สร้างชื่อไฟล์จากวันเวลา ณ ตอนนั้น
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"{folder}/{timestamp}.jpg"
+
+        # อัปโหลดไฟล์ไปยัง Supabase Storage
+        supabase.storage.from_("image_car").upload(
+            filename,
+            image_bytes,
+            {"content-type": "image/jpeg"},
+            upsert=True,  # อนุญาตให้เขียนทับได้
+        )
+
+        # คืน URL ของไฟล์
+        url = supabase.storage.from_("image_car").get_public_url(filename)
+        print(f"[UPLOAD] ✅ Uploaded: {url}")
+        return url
+
+    except Exception as e:
+        print("❌ Upload error:", e)
+        return None
 
 
 def send_event(payload: dict):
@@ -72,17 +111,25 @@ class ReadImage(FileSystemEventHandler):
 
             if crop is not None and crop.size > 0:
                 # เช็คป้ายในระบบหลังจากได้ผลลัพธ์จาก OCR แล้ว
+                success, encoded_img = cv2.imencode(".jpg", crop)
+                if success:
+                    image_bytes = encoded_img.tobytes()
+                    image_url = upload_image_to_storage(
+                        image_bytes, ext="jpg", folder="plates"
+                    )
+                else:
+                    image_url = None
+
                 img_b64 = encode_image(crop)
                 result = read_plate(img_b64=img_b64, image_path=event.src_path)
                 vehicle_id = check_plate_in_system(result["plate"], result["province"])
 
-                # ถ้ามีป้ายจะบันทึกอันนี้
                 event_payload = {
                     "datetime": result["time"],
                     "plate": result["plate"],
                     "province": result["province"],
                     "direction": result["direction"],
-                    "blob": None,
+                    "blob": image_url,
                     "cam_id": result["camera"],
                     "vehicle_id": vehicle_id,
                 }
