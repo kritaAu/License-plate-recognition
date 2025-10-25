@@ -1,5 +1,7 @@
 import base64, cv2
+import time as systime
 from datetime import datetime, timezone, timedelta
+
 
 
 def safe_crop(img, x1, y1, x2, y2, pad=0):
@@ -23,3 +25,13 @@ def dt_to_iso(dt_str: str) -> str:
     dt = datetime.strptime(dt_str, "%Y-%m-%d_%H-%M-%S")
     dt = dt.replace(tzinfo=timezone(timedelta(hours=7)))
     return dt.isoformat()  # "2025-11-03T14:30:00+07:00"
+
+
+def open_camera(rtsp_url):
+    cap = None
+    while cap is None or not cap.isOpened():
+        print("ไม่สามารถเชื่อมต่อกล้องได้... กำลังลองใหม่ใน 3 วินาที")
+        systime.sleep(3)
+        cap = cv2.VideoCapture(rtsp_url)
+    print("กล้องเชื่อมต่อสำเร็จ")
+    return cap

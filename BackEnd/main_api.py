@@ -249,7 +249,7 @@ def generate_frames():
 
         if not ret:
             print("End of video — restarting...")
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # 👈 กลับไปต้นไฟล์
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             continue
 
         _, buffer = cv2.imencode(".jpg", frame)

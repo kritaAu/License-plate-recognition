@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 import os
 from ultralytics import YOLO
 
+RTSP_URL = "rtsp://192.168.1.58:1935/"
 ratio = 0.5
 imgsz = 960
 CONF = 0.5
@@ -25,7 +26,7 @@ model = YOLO(r"model\motorcycle_model.pt")
 class_list = model.names
 # print("Class list:", class_list)
 
-cap = cv2.VideoCapture("rtsp://192.168.1.58:1935/")
+cap = open_camera(RTSP_URL)
 if not cap.isOpened():
     raise RuntimeError("Failed to open video source")
 
@@ -36,11 +37,14 @@ prev_cy = {}
 print("Start processing video...")
 
 
+
 while True:
     ret, frame = cap.read()
     if not ret:
-        print("End of video or read failure")
-        break
+        print("[WARN] ดึงภาพไม่ได้... จะลองเปิดกล้องใหม่")
+        cap.release()
+        cap = open_camera(RTSP_URL)
+        continue
 
     height, width, _ = frame.shape
     center_y = int(height * (1 - 0.3))
