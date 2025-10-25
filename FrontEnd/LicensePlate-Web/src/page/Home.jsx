@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import Filters from "./components/Filters";
-import StatsCards from "./components/StatsCards";
-import LineChart from "./components/LineChart";
-import BarChart from "./components/BarChart";
-import RecordsTable from "./components/RecordsTable";
-import { getRecentEvents } from "./services/dashboardApi";
-import { formatThaiDateTime } from "./utils/date";
+import Filters from "../components/Filters";
+import StatsCards from "../components/StatsCards";
+import LineChart from "../components/LineChart";
+import BarChart from "../components/BarChart";
+import RecordsTable from "../components/RecordsTable";
+import { getRecentEvents } from "../services/dashboardApi";
+import { formatThaiDateTime } from "../utils/date";
 
 export default function Home() {
     const [filters, setFilters] = useState({
@@ -77,6 +77,7 @@ export default function Home() {
 
     return (
         <div className="min-h-screen bg-gray-100">
+            
             <div className="max-w-7xl mx-auto px-6 py-6">
                 <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
                     <Filters
