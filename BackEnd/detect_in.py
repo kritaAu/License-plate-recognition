@@ -25,11 +25,7 @@ model = YOLO(r"model\motorcycle_model.pt")
 class_list = model.names
 # print("Class list:", class_list)
 
-<<<<<<< Updated upstream
-cap = cv2.VideoCapture(r"video\ _Clipchamp.mp4")
-=======
 cap = cv2.VideoCapture("rtsp://192.168.1.58:1935/")
->>>>>>> Stashed changes
 if not cap.isOpened():
     raise RuntimeError("Failed to open video source")
 

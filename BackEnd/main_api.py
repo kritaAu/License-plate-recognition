@@ -1,11 +1,15 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse
 from supabase import create_client
 import os
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import uuid
+import cv2
 
 #  ENV
 load_dotenv()
@@ -230,3 +234,29 @@ def dashboard_recent(limit: int = 10):
 async def upload_image(file: UploadFile = File(...)):
     url = upload_image_to_storage(file, folder="plates")
     return {"url": url}
+
+
+
+RTSP_URL = "video\\-_Clipchamp.mp4"
+cap = cv2.VideoCapture(RTSP_URL)
+
+if not cap.isOpened():
+    raise RuntimeError("Failed to open video source")
+
+def generate_frames():
+    while True:
+        ret, frame = cap.read()
+
+        if not ret:
+            print("End of video — restarting...")
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # 👈 กลับไปต้นไฟล์
+            continue
+
+        _, buffer = cv2.imencode(".jpg", frame)
+        frame_bytes = buffer.tobytes()
+        yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
+
+@app.get("/video")
+def video_feed():
+    return StreamingResponse(generate_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
+
