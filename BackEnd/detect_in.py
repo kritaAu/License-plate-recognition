@@ -13,7 +13,6 @@ OUTPUT_DIR = "detect_motor"
 PAD = 20
 last_global_trigger_time = -1e18
 cooldown_time = 1
-center_y = 1200
 camera = 1
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -26,7 +25,11 @@ model = YOLO(r"model\motorcycle_model.pt")
 class_list = model.names
 # print("Class list:", class_list)
 
+<<<<<<< Updated upstream
 cap = cv2.VideoCapture(r"video\ _Clipchamp.mp4")
+=======
+cap = cv2.VideoCapture("rtsp://192.168.1.58:1935/")
+>>>>>>> Stashed changes
 if not cap.isOpened():
     raise RuntimeError("Failed to open video source")
 
@@ -44,10 +47,10 @@ while True:
         break
 
     height, width, _ = frame.shape
-
-    # cv2.line(frame, (0, center_y), (width, center_y), (255, 255, 255), 1)
+    center_y = int(height * (1 - 0.3))
+    cv2.line(frame, (0, center_y), (width, center_y), (0, 255, 255), 1)
     x1, y1 = 0, center_y
-
+    
     # โหลดโมเดล YOLO11
     results = model.track(
         frame,
@@ -124,8 +127,9 @@ while True:
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
     # แสดงผลภาพหลัก
-    frame_display = cv2.resize(frame, (0, 0), fx=ratio, fy=ratio)  # ใช้จริงอาจจะคอมเม้นไว้
-    cv2.imshow("YOLO License Plate Tracking", frame_display)  # ใช้จริงอาจจะคอมเม้นไว้
+    ratio = 0.3
+    frame_display = cv2.resize(frame, (0, 0), fx=ratio, fy=ratio)
+    cv2.imshow("YOLO License Plate Tracking", frame_display)
 
     if cv2.waitKey(1) & 0xFF == ord("q"):
         print("q pressed - exit program")
