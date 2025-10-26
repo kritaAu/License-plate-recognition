@@ -24,10 +24,8 @@ model = YOLO("model/lpr_model.pt")
 from datetime import datetime
 
 
+# upload รูปไปเก็บไว้ใน Buckets
 def upload_image_to_storage(image_bytes: bytes, folder="plates") -> str:
-    """
-    Upload image bytes to Supabase Storage (bucket = image_car) and save with filename = current datetime (YYYY-MM-DD_HH-MM-SS.jpg)
-    """
     try:
         # สร้างชื่อไฟล์จากวันเวลา ณ ตอนนั้น
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

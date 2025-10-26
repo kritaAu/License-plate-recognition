@@ -123,12 +123,6 @@ def check_plate(
 # Dashboard เอาไว้ดึง summary ไว้ใช้สรุปของนะวันนั้น
 @app.get("/dashboard/summary")
 def dashboard_summary(date: str | None = None):
-    """
-    1. รถเข้า/ออกทั้งหมดในวัน
-    2. รถที่เข้าอย่างเดียว
-    3. รถที่ออกอย่างเดียว
-    4. รถที่ไม่มีทะเบียน หรือ ไม่อยู่ในระบบ Member
-    """
     try:
         # ถ้าไม่ระบุวันที่ -> ใช้วันปัจจุบัน
         if not date:
@@ -172,11 +166,6 @@ def dashboard_summary(date: str | None = None):
 # Dashboard เอาไว้ดึง recent event เป็น list 10 อันล่าสุด มี datetime, plate, province, direction, role, image ให้ใช้
 @app.get("/dashboard/recent")
 def dashboard_recent(limit: int = 10):
-    """
-    ดึงรายการล่าสุด สำหรับแสดงใน Dashboard
-    - แสดงเวลา, ป้ายทะเบียน, จังหวัด, ทิศทาง, role (Staff / Visitor)
-    - ถ้ามี blob ภาพ ก็ส่งลิงก์หรือ base64 ไป
-    """
     try:
         response = (
             supabase.table("Event")
@@ -229,6 +218,119 @@ def dashboard_recent(limit: int = 10):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Model สำหรับสร้างข้อมูล
+class MemberCreate(BaseModel):
+    firstname: str
+    lastname: str
+    std_id: int
+    faculty: str
+    major: str
+    role: str
+
+
+# Model สำหรับข้อมูลที่จะอัปเดต
+class MemberUpdate(BaseModel):
+    firstname: str | None = None
+    lastname: str | None = None
+    std_id: int | None = None
+    faculty: str | None = None
+    major: str | None = None
+    role: str | None = None
+
+
+# POST: เพิ่มข้อมูลสมาชิกใหม่
+@app.post("/members")
+def create_member(member: MemberCreate):
+    try:
+        # เตรียมข้อมูลใหม่
+        new_data = {
+            "firstname": member.firstname,
+            "lastname": member.lastname,
+            "std_id": member.std_id,
+            "faculty": member.faculty,
+            "major": member.major,
+            "role": member.role,
+        }
+
+        # เพิ่มข้อมูลใน Supabase
+        response = supabase.table("Member").insert(new_data).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=400, detail="เพิ่มข้อมูลไม่สำเร็จ")
+
+        return {"message": "เพิ่มข้อมูลสมาชิกเรียบร้อยแล้ว", "data": response.data}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# PUT: แก้ไขข้อมูลสมาชิก
+@app.put("/members/{member_id}")
+def update_member(member_id: int, data: MemberUpdate):
+    try:
+        # ดึงข้อมูลเก่าก่อน
+        old_data_resp = (
+            supabase.table("Member").select("*").eq("member_id", member_id).execute()
+        )
+
+        if not old_data_resp.data:
+            raise HTTPException(status_code=404, detail="ไม่พบสมาชิกในระบบ")
+
+        old_data = old_data_resp.data[0]
+
+        # เตรียมข้อมูลใหม่
+        update_fields = {k: v for k, v in data.dict().items() if v is not None}
+        if not update_fields:
+            raise HTTPException(status_code=400, detail="ไม่พบข้อมูลที่ต้องการอัปเดต")
+
+        # ทำการอัปเดตข้อมูล
+        response = (
+            supabase.table("Member")
+            .update(update_fields)
+            .eq("member_id", member_id)
+            .execute()
+        )
+
+        new_data = response.data[0] if response.data else None
+
+        return {
+            "message": "แก้ไขข้อมูลสมาชิกเรียบร้อยแล้ว",
+            "old_data": old_data,
+            "new_data": new_data,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# DELETE: ลบสมาชิก
+@app.delete("/members/{member_id}")
+def delete_member(member_id: int):
+    try:
+        # ดึงข้อมูลเก่าก่อน
+        old_data_resp = (
+            supabase.table("Member").select("*").eq("member_id", member_id).execute()
+        )
+
+        if not old_data_resp.data:
+            raise HTTPException(status_code=404, detail="ไม่พบสมาชิกในระบบ")
+
+        old_data = old_data_resp.data[0]
+
+        # ลบข้อมูล
+        response = (
+            supabase.table("Member").delete().eq("member_id", member_id).execute()
+        )
+
+        return {
+            "message": "ลบสมาชิกเรียบร้อยแล้ว",
+            "deleted_data": old_data,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # POST: upload image and return URL
 @app.post("/upload")
 async def upload_image(file: UploadFile = File(...)):
@@ -236,12 +338,12 @@ async def upload_image(file: UploadFile = File(...)):
     return {"url": url}
 
 
-
-RTSP_URL = "video\\-_Clipchamp.mp4"
+""" RTSP_URL = "video\\-_Clipchamp.mp4"
 cap = cv2.VideoCapture(RTSP_URL)
 
 if not cap.isOpened():
-    raise RuntimeError("Failed to open video source")
+    raise RuntimeError("Failed to open video source") """
+
 
 def generate_frames():
     while True:
@@ -256,7 +358,9 @@ def generate_frames():
         frame_bytes = buffer.tobytes()
         yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
 
+
 @app.get("/video")
 def video_feed():
-    return StreamingResponse(generate_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
-
+    return StreamingResponse(
+        generate_frames(), media_type="multipart/x-mixed-replace; boundary=frame"
+    )
