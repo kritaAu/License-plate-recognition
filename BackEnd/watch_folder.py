@@ -5,48 +5,13 @@ from OCR_ai import *
 from ultralytics import YOLO
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from watchdog.observers import Observer
-from supabase import create_client
-from dotenv import load_dotenv
 import uuid
 
-load_dotenv()
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 WATCH_DIR = r"detect_motor"
 API_URL_EVENT = "http://127.0.0.1:8000/events"
 API_URL_CHECK = "http://127.0.0.1:8000/check_plate"
 model = YOLO("model/lpr_model.pt")
-
-
-##
-from datetime import datetime
-
-
-# upload รูปไปเก็บไว้ใน Buckets
-def upload_image_to_storage(image_bytes: bytes, folder="plates") -> str:
-    try:
-        # สร้างชื่อไฟล์จากวันเวลา ณ ตอนนั้น
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = f"{folder}/{timestamp}.jpg"
-
-        # อัปโหลดไฟล์ไปยัง Supabase Storage
-        supabase.storage.from_("image_car").upload(
-            filename,
-            image_bytes,
-            {"content-type": "image/jpeg"},
-            upsert=True,  # อนุญาตให้เขียนทับได้
-        )
-
-        # คืน URL ของไฟล์
-        url = supabase.storage.from_("image_car").get_public_url(filename)
-        print(f"[UPLOAD] ✅ Uploaded: {url}")
-        return url
-
-    except Exception as e:
-        print("❌ Upload error:", e)
-        return None
 
 
 def send_event(payload: dict):

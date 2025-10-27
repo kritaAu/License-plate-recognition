@@ -1,7 +1,15 @@
-import base64, cv2
+import base64
+import cv2
 import time as systime
 from datetime import datetime, timezone, timedelta
+from supabase import create_client
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
 def safe_crop(img, x1, y1, x2, y2, pad=0):
@@ -35,3 +43,28 @@ def open_camera(rtsp_url):
         cap = cv2.VideoCapture(rtsp_url)
     print("กล้องเชื่อมต่อสำเร็จ")
     return cap
+
+
+# Upload image bytes to Supabase Storage (bucket = image_car) Returns the public URL of the uploaded image
+def upload_image_to_storage(image_bytes: bytes, ext="jpg", folder="plates") -> str:
+    try:
+        # ตั้งชื่อไฟล์จากวันเวลา
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"{folder}/{timestamp}.{ext}"
+
+        # อัปโหลดไปยัง bucket image_car
+        supabase.storage.from_("image_car").upload(
+            filename,
+            image_bytes,
+            {"content-type": f"image/{ext}"},
+            upsert=True,
+        )
+
+        # ดึง public URL ของไฟล์
+        url = supabase.storage.from_("image_car").get_public_url(filename)
+        print(f"[UPLOAD] Uploaded: {url}")
+        return url
+
+    except Exception as e:
+        print("Upload error:", e)
+        return None
