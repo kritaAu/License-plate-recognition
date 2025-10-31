@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 import os
 from ultralytics import YOLO
 
-RTSP_URL = "rtsp://192.168.1.58:1935/"
+RTSP_URL = "rtsp://100.96.126.164:1935/"
 ratio = 0.5
 imgsz = 960
 CONF = 0.5
@@ -24,11 +24,8 @@ print("GPU Count:", torch.cuda.device_count())
 
 model = YOLO(r"model\motorcycle_model.pt")
 class_list = model.names
-# print("Class list:", class_list)
 
-cap = open_camera(RTSP_URL)
-if not cap.isOpened():
-    raise RuntimeError("Failed to open video source")
+cap = cv2.VideoCapture(RTSP_URL)
 
 last_trigger_time = {}
 crossed_status = {}
@@ -47,8 +44,10 @@ while True:
         continue
 
     height, width, _ = frame.shape
-    center_y = int(height * (1 - 0.3))
-    cv2.line(frame, (0, center_y), (width, center_y), (0, 255, 255), 1)
+    center_y = int(height * 0.7)
+    print("frame.shape =", frame.shape)
+
+    cv2.line(frame, (0, center_y), (width, center_y), (0, 255, 255), 2)
     x1, y1 = 0, center_y
     
     # โหลดโมเดล YOLO11
