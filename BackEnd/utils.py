@@ -45,24 +45,32 @@ def open_camera(rtsp_url):
     return cap
 
 
-# Upload image bytes to Supabase Storage (bucket = image_car) Returns the public URL of the uploaded image
-def upload_image_to_storage(image_bytes: bytes, ext="jpg", folder="plates") -> str:
+# Upload image bytes to Supabase Storage (bucket = image_car)
+# Returns the public URL of the uploaded image
+def upload_image_to_storage(
+    image_bytes: bytes, ext="jpg", folder="plates"
+) -> str | None:
     try:
-        # ตั้งชื่อไฟล์จากวันเวลา
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = f"{folder}/{timestamp}.{ext}"
+        # ตั้งชื่อไฟล์ไม่ให้ชน โดยใส่ microsecond + UUID
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
+        filename = f"{folder}/{timestamp}_{uuid.uuid4().hex[:6]}.{ext}"
 
-        # อัปโหลดไปยัง bucket image_car
-        supabase.storage.from_("image_car").upload(
-            filename,
-            image_bytes,
-            {"content-type": f"image/{ext}"},
-            upsert=True,
-        )
+        # เลือก bucket
+        bucket = supabase.storage.from_("image_car")
 
-        # ดึง public URL ของไฟล์
-        url = supabase.storage.from_("image_car").get_public_url(filename)
-        print(f"[UPLOAD] Uploaded: {url}")
+        # อัปโหลดไฟล์ไปยัง bucket
+        res = bucket.upload(filename, image_bytes, {"content-type": f"image/{ext}"})
+
+        # ตรวจสอบผลลัพธ์จาก upload
+        if res is None or (
+            hasattr(res, "status_code") and res.status_code not in (200, 201)
+        ):
+            print(f"Upload failed: {res}")
+            return None
+
+        # ดึง URL ที่เข้าถึงได้สาธารณะ
+        url = bucket.get_public_url(filename)
+        print(f"[UPLOAD SUCCESS] {url}")
         return url
 
     except Exception as e:

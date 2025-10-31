@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from supabase import create_client
 from dotenv import load_dotenv
 from datetime import datetime
@@ -56,6 +56,16 @@ class MemberCreate(BaseModel):
     role: str
 
 
+class VehicleCreate(BaseModel):
+    plate: str
+    province: str
+
+
+class RegisterRequest(BaseModel):
+    member: MemberCreate
+    vehicle: VehicleCreate
+
+
 class MemberUpdate(BaseModel):
     firstname: str | None = None
     lastname: str | None = None
@@ -78,16 +88,32 @@ def get_members():
 
 
 # เพิ่มข้อมูลสมาชิกใหม่
-@app.post("/members")
-def create_member(member: MemberCreate):
+@app.post("/register")
+def register_member_with_vehicle(payload: RegisterRequest):
     try:
-        new_data = member.dict()
-        response = supabase.table("Member").insert(new_data).execute()
+        # เพิ่มข้อมูล Member
+        member_data = payload.member.model_dump()
+        member_resp = supabase.table("Member").insert(member_data).execute()
 
-        if not response.data:
-            raise HTTPException(status_code=400, detail="เพิ่มข้อมูลไม่สำเร็จ")
+        if not member_resp.data:
+            raise HTTPException(status_code=400, detail="เพิ่มข้อมูลสมาชิกไม่สำเร็จ")
 
-        return {"message": "เพิ่มข้อมูลสมาชิกเรียบร้อยแล้ว", "data": response.data}
+        member_id = member_resp.data[0]["member_id"]
+
+        # เพิ่มข้อมูล Vehicle (เชื่อม foreign key member_id)
+        vehicle_data = payload.vehicle.model_dump()
+        vehicle_data["member_id"] = member_id
+
+        vehicle_resp = supabase.table("Vehicle").insert(vehicle_data).execute()
+
+        if not vehicle_resp.data:
+            raise HTTPException(status_code=400, detail="เพิ่มข้อมูลรถไม่สำเร็จ")
+
+        return {
+            "message": "เพิ่มข้อมูลสมาชิกและรถเรียบร้อยแล้ว",
+            "member": member_resp.data[0],
+            "vehicle": vehicle_resp.data[0],
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -159,13 +185,49 @@ def get_events(limit: int = 10):
     return data.data
 
 
-# เพิ่ม Event ใหม่
+# -------------------------------------------------------------
+# 📦 เพิ่ม Event ใหม่ (พร้อมเชื่อมโยง Vehicle)
+# -------------------------------------------------------------
 @app.post("/events")
 def create_event(event: EventIn):
     try:
+        vehicle_data = None
+
+        # ตรวจสอบว่ามี vehicle_id หรือ plate ที่ส่งมาหรือไม่
+        if event.vehicle_id or event.plate:
+            query = supabase.table("Vehicle").select(
+                "vehicle_id, plate, province, member_id"
+            )
+
+            if event.vehicle_id:
+                query = query.eq("vehicle_id", event.vehicle_id)
+            elif event.plate:
+                query = query.eq("plate", event.plate)
+
+            vehicle_check = query.execute()
+
+            if vehicle_check.data:
+                vehicle_data = vehicle_check.data[0]
+
+                # ตรวจสอบว่าข้อมูลจังหวัดตรงไหม
+                if (
+                    event.province
+                    and vehicle_data.get("province")
+                    and vehicle_data["province"] != event.province
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="จังหวัดของป้ายทะเบียนไม่ตรงกับข้อมูลในระบบ",
+                    )
+            else:
+                # ถ้าไม่มีในระบบ จะไม่ raise error — บันทึก Event ได้ตามปกติ
+                vehicle_data = None
+
+        # ตรวจสอบ direction จาก cam_id
         direction_map = {1: "IN", 2: "OUT"}
         direction = direction_map.get(event.cam_id, "UNKNOWN")
 
+        # เตรียมข้อมูลสำหรับบันทึก Event
         payload = {
             "datetime": event.datetime.isoformat(),
             "plate": event.plate,
@@ -173,17 +235,25 @@ def create_event(event: EventIn):
             "direction": direction,
             "blob": event.blob,
             "cam_id": event.cam_id,
-            "vehicle_id": event.vehicle_id,
+            "vehicle_id": vehicle_data["vehicle_id"] if vehicle_data else None,
         }
 
+        # บันทึกลง Supabase
         response = supabase.table("Event").insert(payload).execute()
+
         if not response.data:
-            raise HTTPException(status_code=400, detail="Insert failed")
+            raise HTTPException(status_code=400, detail="เพิ่มข้อมูล Event ไม่สำเร็จ")
 
-        return {"message": "Event created successfully", "data": response.data}
+        return {
+            "message": "เพิ่มข้อมูล Event เรียบร้อยแล้ว",
+            "data": response.data[0],
+            "vehicle_info": vehicle_data or "ไม่พบข้อมูลรถในระบบ (บันทึกเป็น visitor)",
+        }
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาด: {str(e)}")
 
 
 # ====

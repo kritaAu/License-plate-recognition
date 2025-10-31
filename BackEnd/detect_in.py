@@ -34,7 +34,6 @@ prev_cy = {}
 print("Start processing video...")
 
 
-
 while True:
     ret, frame = cap.read()
     if not ret:
@@ -49,7 +48,7 @@ while True:
 
     cv2.line(frame, (0, center_y), (width, center_y), (0, 255, 255), 2)
     x1, y1 = 0, center_y
-    
+
     # โหลดโมเดล YOLO11
     results = model.track(
         frame,

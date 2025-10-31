@@ -6,12 +6,18 @@ from ultralytics import YOLO
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from watchdog.observers import Observer
 import uuid
+from dotenv import load_dotenv
+import os
 
 
 WATCH_DIR = r"detect_motor"
 API_URL_EVENT = "http://127.0.0.1:8000/events"
 API_URL_CHECK = "http://127.0.0.1:8000/check_plate"
 model = YOLO("model/lpr_model.pt")
+load_dotenv()
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 
 def send_event(payload: dict):
@@ -74,7 +80,7 @@ class ReadImage(FileSystemEventHandler):
 
             if crop is not None and crop.size > 0:
                 # เช็คป้ายในระบบหลังจากได้ผลลัพธ์จาก OCR แล้ว
-                success, encoded_img = cv2.imencode(".jpg", crop)
+                success, encoded_img = cv2.imencode(".jpg", img)
                 if success:
                     image_bytes = encoded_img.tobytes()
                     image_url = upload_image_to_storage(

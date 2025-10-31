@@ -15,10 +15,6 @@ BackEnd Api
 pip install "fastapi[standard]"
 pip install supabase
 
-# old run api
-
-fastapi dev main_api.py
-
 # run api use this
 
 python -m uvicorn main_api:app --reload
