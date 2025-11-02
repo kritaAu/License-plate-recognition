@@ -1,13 +1,13 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import Navbar from "./navbar";
-import Camera from "./Camera";
 import Home from "./Home";
+import Camera from "./Camera";
 
-function App() {
+export default function App() {
   return (
-    <Router>
+    <>
       <Navbar />
-      <div style={{ padding: "20px" }}>
+      <div style={{ padding: 20 }}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/search" element={<h2>หน้าค้นหา</h2>} />
@@ -15,8 +15,6 @@ function App() {
           <Route path="/camera" element={<Camera />} />
         </Routes>
       </div>
-    </Router>
+    </>
   );
 }
-
-export default App;

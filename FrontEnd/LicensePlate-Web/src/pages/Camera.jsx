@@ -1,8 +1,10 @@
 import "bootstrap/dist/css/bootstrap.min.css";
+import Navbar from "./navbar";
 function Camera() {
     return (
         <div>
             <div >
+                <Navbar/>
                 <h2>กล้องตรวจจับ</h2>
                 <div class="col-md-12 themed-grid-col">
                 <div class = "pb-3"><p>สตรีมภาพจากกล้อง FastAPI:</p></div>

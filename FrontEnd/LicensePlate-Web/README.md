@@ -7,3 +7,6 @@ npm run dev
 
 # Tailwind/vite
 npm install tailwindcss @tailwindcss/vite
+
+# react-router
+npm i react-router-dom

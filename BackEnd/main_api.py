@@ -338,45 +338,62 @@ def dashboard_summary(date: str | None = None):
 @app.get("/dashboard/recent")
 def dashboard_recent(limit: int = 10):
     try:
+        # ดึงเฉพาะ field ที่ใช้ และใน Vehicle ขอแค่ member_id พอ
         response = (
             supabase.table("Event")
-            .select(
-                "datetime, plate, province, direction, vehicle_id, blob, Vehicle:vehicle_id(*)"
-            )
+            .select("datetime, plate, province, direction, vehicle_id, blob, Vehicle(member_id)")
             .order("datetime", desc=True)
             .limit(limit)
             .execute()
         )
 
         results = []
-        for e in response.data:
+        for e in response.data or []:
+            # Vehicle อาจเป็น None/{} หรือ object/list ตามคอนสตรินต์ FK
+            vehicle = e.get("Vehicle") or {}
+            # ถ้าเป็น list ให้หยิบตัวแรก
+            if isinstance(vehicle, list):
+                vehicle = vehicle[0] if vehicle else {}
+
             role = "Visitor"
-            if e.get("Vehicle", {}).get("member_id"):
-                member_id = e["Vehicle"]["member_id"]
+            member_id = vehicle.get("member_id")
+            if member_id:
                 member_res = (
                     supabase.table("Member")
                     .select("role")
                     .eq("member_id", member_id)
+                    .limit(1)
                     .execute()
                 )
                 if member_res.data:
-                    role = member_res.data[0].get("role", "Visitor")
+                    role = member_res.data[0].get("role") or "Visitor"
 
-            results.append(
-                {
-                    "datetime": e["datetime"],
-                    "plate": e.get("plate") or "-",
-                    "province": e.get("province") or "-",
-                    "direction": e.get("direction") or "-",
-                    "role": role,
-                    "image": e.get("blob"),
-                }
-            )
+            # แปลง blob → data URL base64 (ถ้าเป็น bytes)
+            img = e.get("blob")
+            if isinstance(img, (bytes, bytearray)):
+                try:
+                    b64 = base64.b64encode(img).decode("ascii")
+                    image_url = f"data:image/jpeg;base64,{b64}"
+                except Exception:
+                    image_url = None
+            else:
+                # ถ้าใน DB เก็บเป็น text (เช่น path/URL) ก็ส่งต่อได้
+                image_url = img or None
+
+            results.append({
+                "datetime": e.get("datetime"),
+                "plate": e.get("plate") or "-",
+                "province": e.get("province") or "-",
+                "direction": e.get("direction") or "-",
+                "role": role,
+                "image": image_url,
+            })
 
         return {"count": len(results), "data": results}
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as ex:
+        # log ex ไว้ใน server console จะเห็น stacktrace ต้นตอ
+        raise HTTPException(status_code=500, detail=str(ex))
 
 
 # ====

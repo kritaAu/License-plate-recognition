@@ -1,0 +1,93 @@
+/* ========== Sidebar ========== */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: -264px;          /* ซ่อนอยู่ */
+  width: 264px;
+  height: 100%;
+  background: #d9d9d9;
+  transition: left 0.3s ease;
+  padding-top: 60px;     /* เผื่อ header */
+  z-index: 1000;
+  box-shadow: 0 0 0 rgba(0,0,0,0);
+}
+.sidebar.open {
+  left: 0;               /* เลื่อนเข้ามา */
+  box-shadow: 2px 0 12px rgba(0,0,0,0.15);
+}
+
+/* โครงรายการ */
+.menu-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.menu-separator {
+  height: 1px;
+  background: #bdbdbd;
+  margin: 10px 0;
+}
+
+/* ไอเท็มและลิงก์ */
+.menu-link,
+.menu-link:visited,
+.menu-link:active,
+.menu-link:link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-decoration: none;
+  color: #111;
+  padding: 14px 16px;
+  border-bottom: 1px solid #bbb;
+  background: transparent;
+  cursor: pointer;
+}
+
+.menu-item-with-badge .menu-link {
+  padding-right: 12px; /* เผื่อ badge อยู่ขวา */
+}
+
+.menu-link:hover {
+  background: #c9c9c9;
+}
+
+.menu-link:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px; /* ให้เห็นภายใน */
+}
+
+/* ปุ่มสไตล์ลิงก์ */
+.menu-link.danger {
+  color: #b11a1a;
+}
+.menu-link.danger:hover {
+  background: #f3c6c6;
+}
+
+/* Badge (กล้อง ON/OFF ด้านรายการ) */
+.badge {
+  background: #ffdddd;
+  color: #b11a1a;
+  font-size: 12px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  border-radius: 12px;
+  border: 1px solid #f0bcbc;
+  white-space: nowrap;
+}
+.badge.on {
+  background: #e6ffed;
+  color: #0f7b33;
+  border-color: #b6f2c8;
+}
+
+/* Responsive: จอเล็กให้ sidebar กว้างขึ้นนิด */
+@media (max-width: 420px) {
+  .sidebar {
+    width: 86%;
+  }
+}
