@@ -3,18 +3,17 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "./navbar";
 
 const ROLE_OPTIONS = [
-  { value: "student", label: "นักศึกษา" },
-  { value: "teacher", label: "อาจารย์" },
-  { value: "staff",   label: "บุคลากรในมหาลัย" },
+  { value: "นักศึกษา", label: "นักศึกษา" },
+  { value: "อาจารย์", label: "อาจารย์" },
+  { value: "บุคลากรในมหาลัย", label: "บุคลากรในมหาลัย" },
 ];
 
-// กรองช่องหน้า: อนุญาตอักษรไทย + ตัวเลข ยาวสุด 3
+// กรองช่องหน้า: อนุญาตอักษรไทย + ตัวเลข ยาวสุด 6
 const normalizePlatePrefix = (s) =>
-  (s || "").replace(/[^\u0E00-\u0E7F0-9]/g, "").slice(0, 3);
+  (s || "").replace(/[^\u0E00-\u0E7F0-9]/g, "").slice(0, 6);
 
 // กรองช่องหลัง: อนุญาตเฉพาะตัวเลข ยาวสุด 4
-const normalizeDigits = (s) =>
-  (s || "").replace(/\D/g, "").slice(0, 4);
+const normalizeDigits = (s) => (s || "").replace(/\D/g, "").slice(0, 4);
 
 export default function Register() {
   const nav = useNavigate();
@@ -29,9 +28,9 @@ export default function Register() {
     role: ROLE_OPTIONS[0].value,
 
     // ⚠️ เปลี่ยนจาก plate เดิม → แยกเป็น 2 ช่อง + province
-    platePrefix: "",   // อักษร/ตัวเลขหน้า (เช่น กท หรือ 12)
-    plateNumber: "",   // ตัวเลขหลัง (เช่น 2058)
-    province: "",      // จังหวัด
+    platePrefix: "", // อักษร/ตัวเลขหน้า (เช่น กท หรือ 12)
+    plateNumber: "", // ตัวเลขหลัง (เช่น 2058)
+    province: "", // จังหวัด
     plate_note: "",
   });
 
@@ -62,20 +61,39 @@ export default function Register() {
     try {
       setBusy(true);
 
-      // ประกอบป้ายจาก 2 ช่อง
       const plate = `${form.platePrefix} ${form.plateNumber}`.trim();
 
-      const newRow = {
-        plate, // เช่น "กท 2058" หรือ "12 3456"
-        studentId: form.student_id || "-",
-        fullName: `${form.first_name || ""} ${form.last_name || ""}`.trim(),
-      };
+      // ส่งข้อมูลไป backend
+      const res = await fetch("http://localhost:8000/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          member: {
+            firstname: form.first_name,
+            lastname: form.last_name,
+            std_id: form.student_id,
+            faculty: form.faculty,
+            major: form.major,
+            role: form.role,
+          },
+          vehicle: {
+            plate,
+            province: form.province,
+          },
+        }),
+      });
 
-      // เก็บแคช + ส่งต่อไปหน้า Search
-      const cache = JSON.parse(localStorage.getItem("search_cache") || "[]");
-      localStorage.setItem("search_cache", JSON.stringify([newRow, ...cache]));
+      if (!res.ok) throw new Error("บันทึกข้อมูลไม่สำเร็จ");
+      const data = await res.json();
 
-      nav("/search", { state: { newRow } });
+      alert("บันทึกข้อมูลเรียบร้อยแล้ว");
+      console.log("Inserted:", data);
+
+      // ไปหน้า Search หลังบันทึกสำเร็จ
+      nav("/search");
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
     } finally {
       setBusy(false);
     }
@@ -98,7 +116,10 @@ export default function Register() {
           <h1 className="text-2xl font-semibold text-gray-800">ลงทะเบียน</h1>
         </div>
 
-        <form onSubmit={onSubmit} className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
+        <form
+          onSubmit={onSubmit}
+          className="bg-white rounded-lg shadow-sm p-4 sm:p-6"
+        >
           {/* แถวที่ 1 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
@@ -207,7 +228,7 @@ export default function Register() {
               </label>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* ช่องหน้า: อักษรไทย/ตัวเลข ได้สูงสุด 3 */}
+                {/* ช่องหน้า: อักษรไทย/ตัวเลข ได้สูงสุด 6 */}
                 <input
                   name="platePrefix"
                   value={form.platePrefix}
@@ -223,6 +244,7 @@ export default function Register() {
                   placeholder="เช่น กท หรือ 12"
                   inputMode="text"
                   aria-label="ตัวอักษร/ตัวเลขหน้า"
+                  maxLength={10}
                 />
 
                 {/* ช่องหลัง: ตัวเลข สูงสุด 4 */}
@@ -256,7 +278,9 @@ export default function Register() {
                 />
               </div>
 
-              {(errors.platePrefix || errors.plateNumber || errors.province) && (
+              {(errors.platePrefix ||
+                errors.plateNumber ||
+                errors.province) && (
                 <p className="text-xs text-red-600 mt-1">
                   {errors.platePrefix || errors.plateNumber || errors.province}
                 </p>
@@ -267,7 +291,9 @@ export default function Register() {
             <div className="hidden md:flex items-center justify-center">
               <div className="w-48 h-44 rounded-xl bg-gray-100 text-gray-600 flex flex-col items-center justify-center text-lg">
                 <div className="font-semibold tracking-wide">
-                  {(form.platePrefix || "xx") + " " + (form.plateNumber || "xxxx")}
+                  {(form.platePrefix || "xx") +
+                    " " +
+                    (form.plateNumber || "xxxx")}
                 </div>
                 <div className="text-sm mt-1 text-gray-500">จังหวัด</div>
                 <div className="mt-1">{form.province || "xxxx"}</div>

@@ -80,11 +80,44 @@ class MemberUpdate(BaseModel):
 # ====
 
 
-# ดึงข้อมูลสมาชิกทั้งหมด
+# ดึงข้อมูลสมาชิกทั้งหมด (พร้อมทะเบียนรถ)
 @app.get("/members")
 def get_members():
-    data = supabase.table("Member").select("*").execute()
-    return data.data
+    try:
+        response = (
+            supabase.table("Member")
+            .select(
+                "member_id, firstname, lastname, std_id, faculty, major, role, Vehicle(plate, province)"
+            )
+            .execute()
+        )
+
+        members = []
+        for row in response.data or []:
+            vehicle = row.get("Vehicle") or {}
+            if isinstance(vehicle, list) and vehicle:
+                vehicle = vehicle[0]
+            elif isinstance(vehicle, list):
+                vehicle = {}
+
+            members.append(
+                {
+                    "member_id": row.get("member_id"),
+                    "firstname": row.get("firstname"),
+                    "lastname": row.get("lastname"),
+                    "std_id": row.get("std_id"),
+                    "faculty": row.get("faculty"),
+                    "major": row.get("major"),
+                    "role": row.get("role"),
+                    "plate": vehicle.get("plate"),
+                    "province": vehicle.get("province"),
+                }
+            )
+
+        return members
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # เพิ่มข้อมูลสมาชิกใหม่
@@ -341,7 +374,9 @@ def dashboard_recent(limit: int = 10):
         # ดึงเฉพาะ field ที่ใช้ และใน Vehicle ขอแค่ member_id พอ
         response = (
             supabase.table("Event")
-            .select("datetime, plate, province, direction, vehicle_id, blob, Vehicle(member_id)")
+            .select(
+                "datetime, plate, province, direction, vehicle_id, blob, Vehicle(member_id)"
+            )
             .order("datetime", desc=True)
             .limit(limit)
             .execute()
@@ -380,14 +415,16 @@ def dashboard_recent(limit: int = 10):
                 # ถ้าใน DB เก็บเป็น text (เช่น path/URL) ก็ส่งต่อได้
                 image_url = img or None
 
-            results.append({
-                "datetime": e.get("datetime"),
-                "plate": e.get("plate") or "-",
-                "province": e.get("province") or "-",
-                "direction": e.get("direction") or "-",
-                "role": role,
-                "image": image_url,
-            })
+            results.append(
+                {
+                    "datetime": e.get("datetime"),
+                    "plate": e.get("plate") or "-",
+                    "province": e.get("province") or "-",
+                    "direction": e.get("direction") or "-",
+                    "role": role,
+                    "image": image_url,
+                }
+            )
 
         return {"count": len(results), "data": results}
 

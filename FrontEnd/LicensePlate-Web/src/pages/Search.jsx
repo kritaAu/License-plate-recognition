@@ -37,9 +37,8 @@ export default function Search() {
       // map ฟิลด์เป็นชื่อคอลัมน์ในตาราง
       const mapped = list.map((x) => ({
         plate: x.plate || "-",
-        studentId: x.student_id || x.studentId || "-",
-        fullName:
-          x.full_name || `${x.first_name || ""} ${x.last_name || ""}`.trim(),
+        studentId: x.std_id || "-",
+        fullName: `${x.firstname || ""} ${x.lastname || ""}`.trim(),
         _raw: x,
       }));
 
@@ -85,11 +84,17 @@ export default function Search() {
 
   // ค้นหาอัตโนมัติแบบ debounce เมื่อพิมพ์ >= 3 ตัวอักษรในอย่างน้อย 1 ช่อง
   useEffect(() => {
-    const ok = [filters.plate, filters.firstName, filters.lastName, filters.studentId]
-      .some((v) => (v || "").trim().length >= 3);
+    const ok = [
+      filters.plate,
+      filters.firstName,
+      filters.lastName,
+      filters.studentId,
+    ].some((v) => (v || "").trim().length >= 3);
 
     if (!ok) return;
-    const t = setTimeout(() => { applyFilters(); }, 350);
+    const t = setTimeout(() => {
+      applyFilters();
+    }, 350);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debounceKey]);
@@ -174,7 +179,10 @@ export default function Search() {
               </thead>
               <tbody>
                 {rows.map((r, i) => (
-                  <tr key={`${r.plate}-${r.studentId}-${i}`} className="hover:bg-gray-50">
+                  <tr
+                    key={`${r.plate}-${r.studentId}-${i}`}
+                    className="hover:bg-gray-50"
+                  >
                     <td className="px-4 py-3 border">{r.plate}</td>
                     <td className="px-4 py-3 border">{r.studentId}</td>
                     <td className="px-4 py-3 border">{r.fullName}</td>
@@ -201,7 +209,10 @@ export default function Search() {
 
                 {!rows.length && (
                   <tr>
-                    <td colSpan="5" className="px-4 py-8 text-center text-gray-500">
+                    <td
+                      colSpan="5"
+                      className="px-4 py-8 text-center text-gray-500"
+                    >
                       ไม่มีผลลัพธ์
                     </td>
                   </tr>

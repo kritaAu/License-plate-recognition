@@ -6,16 +6,21 @@ const BASE = 'http://127.0.0.1:8000';
  * filters: { plate, firstName, lastName, studentId }
  * page, pageSize: ถ้าจะทำ pagination
  */
-export async function searchMembers(filters = {}, page = 1, pageSize = 20) {
-  const params = new URLSearchParams();
+export async function searchMembers(filters = {}, page = 1, limit = 20) {
+  try {
+    const queryParams = new URLSearchParams();
 
-  if (filters.plate) params.set('plate', filters.plate.trim());
-  if (filters.firstName) params.set('first_name', filters.firstName.trim());
-  if (filters.lastName) params.set('last_name', filters.lastName.trim());
-  if (filters.studentId) params.set('student_id', filters.studentId.trim());
-  params.set('page', page);
-  params.set('page_size', pageSize);
+    // (option) ถ้าอยากเพิ่ม filter ทีหลัง ก็ทำตรงนี้ได้ เช่น
+    // if (filters.plate) queryParams.append("plate", filters.plate);
 
-  // เปลี่ยนเป็นพาธจริงของคุณ
-  return await getData(`${BASE}/search/members?${params.toString()}`);
+    const res = await fetch(`http://localhost:8000/members`);
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error("❌ searchMembers error:", err);
+    return [];
+  }
 }
+
