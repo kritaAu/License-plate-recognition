@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI,HTTPException,UploadFile,File,Query,WebSocket,WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -82,27 +82,30 @@ class MemberUpdate(BaseModel):
 
 class ConnectionManager:
     def __init__(self):
-        # เก็บรายชื่อ Clients ที่เชื่อมต่ออยู่
         self.active_connections: list[WebSocket] = []
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
+        print(
+            f"WebSocket connected: {len(self.active_connections)} active client(s)"
+        )
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+            print(
+                f"WebSocket disconnected: {len(self.active_connections)} active client(s)"
+            )
 
-    # ส่งข้อมูลไปยัง Clients ที่เชื่อมต่ออยู่ทั้งหมด
     async def broadcast(self, message: str):
+        """ส่งข้อความไปยังทุก client ที่เชื่อมต่ออยู่"""
+        print(f"📡 Broadcast to {len(self.active_connections)} clients: {message}")
         for connection in self.active_connections:
-            # ใช้ try/except เพื่อจัดการถ้า Client คนใดคนหนึ่งหลุดไป
             try:
                 await connection.send_text(message)
-            except WebSocketDisconnect:
-                self.disconnect(connection)
             except Exception as e:
-                print(f"Error broadcasting: {e}")
-                self.disconnect(connection)
+                print(f"Broadcast error: {e}")
 
 
 manager = ConnectionManager()
@@ -154,7 +157,7 @@ def get_members():
 
 
 # เพิ่มข้อมูลสมาชิกใหม่
-@app.post("member/register")
+@app.post("/members/register")
 def register_member_with_vehicle(payload: RegisterRequest):
     try:
         # เพิ่มข้อมูล Member
@@ -263,44 +266,51 @@ def get_events(limit: int = 10):
 
 
 # -------------------------------------------------------------
-# เพิ่ม Event ใหม่
+# เพิ่ม Event ใหม่ (บันทึกได้แม้ไม่พบรถในระบบ)
 # -------------------------------------------------------------
-@app.post("/events/new_events")
-def create_event(event: EventIn):
+@app.post("/events")
+async def create_event(event: EventIn):
     try:
         vehicle_data = None
 
-        # 1. ตรวจสอบ Vehicle ในระบบ (ใช้ vehicle_id หรือ plate/province ที่อ่านได้)
-        # ตรวจสอบเฉพาะถ้ามี plate และ province ส่งมาเท่านั้น
+        # 1. ตรวจสอบ Vehicle ในระบบ (ถ้ามี plate และ province)
         if event.plate and event.province:
-            # ค้นหาจากป้ายและจังหวัดที่แน่นอน
-            query = supabase.table("Vehicle").select(
-                "vehicle_id, plate, province, member_id"
+            vehicle_check = (
+                supabase.table("Vehicle")
+                .select("vehicle_id, plate, province, member_id")
+                .eq("plate", event.plate)
+                .eq("province", event.province)
+                .execute()
             )
-            query = query.eq("plate", event.plate).eq("province", event.province)
-
-            vehicle_check = query.execute()
 
             if vehicle_check.data:
                 vehicle_data = vehicle_check.data[0]
-            # ถ้าไม่พบ จะบันทึกเป็น Visitor/Unknown โดยไม่มี vehicle_id
 
-        # 2. เตรียมข้อมูลสำหรับบันทึก Event (ใช้ direction ที่ส่งมาจาก ML pipeline)
+        # 2. ตรวจสอบ direction (ใช้ค่า cam_id แทนถ้าไม่ได้ส่งมา)
+        direction = event.direction or (
+            "IN" if event.cam_id == 1 else "OUT" if event.cam_id == 2 else "UNKNOWN"
+        )
+
+        # 3. เตรียมข้อมูลสำหรับบันทึก Event
         payload = {
             "datetime": event.datetime.isoformat(),
-            "plate": event.plate,
-            "province": event.province,
-            "direction": event.direction or "UNKNOWN",  # 🌟 ใช้ direction ที่ส่งมา
+            "plate": event.plate or None,
+            "province": event.province or None,
+            "direction": direction,
             "blob": event.blob,
             "cam_id": event.cam_id,
             "vehicle_id": vehicle_data["vehicle_id"] if vehicle_data else None,
         }
 
-        # 3. บันทึกลง Supabase
+        # 4. บันทึกลง Supabase
         response = supabase.table("Event").insert(payload).execute()
 
         if not response.data:
             raise HTTPException(status_code=400, detail="เพิ่มข้อมูล Event ไม่สำเร็จ")
+
+        # 5. Broadcast event ใหม่ให้ทุก client ที่เชื่อมต่ออยู่
+        message = f"Event ใหม่: {event.plate or 'ไม่ทราบทะเบียน'} ({direction})"
+        await manager.broadcast(message)
 
         return {
             "message": "เพิ่มข้อมูล Event เรียบร้อยแล้ว",
@@ -316,20 +326,15 @@ def create_event(event: EventIn):
 
 @app.websocket("/ws/events")
 async def websocket_endpoint(websocket: WebSocket):
+    """เชื่อมต่อ WebSocket เพื่อรับ Event แบบเรียลไทม์"""
     await manager.connect(websocket)
     try:
         while True:
-            # WebSocket จะคอยรับข้อมูลจาก Client (ถึงแม้ว่าเราจะไม่ได้คาดหวังข้อมูลใดๆ)
-            # ถ้าไม่มีการรับส่งข้อมูล FastAPI จะปิดการเชื่อมต่ออัตโนมัติ
+            # ถ้ามีข้อความจาก client (optional)
             data = await websocket.receive_text()
-            # อาจใช้ data ในอนาคต (เช่น สั่ง Filter Log จาก Client)
-            print(f"Received from client: {data}")
+            print(f"[WS] Received from client: {data}")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        print("Client disconnected")
-    except Exception as e:
-        manager.disconnect(websocket)
-        print(f"Error in websocket: {e}")
 
 
 # 📢 Endpoint สำหรับ Worker (watch_folder.py) ใช้แจ้งเตือน Broadcast
