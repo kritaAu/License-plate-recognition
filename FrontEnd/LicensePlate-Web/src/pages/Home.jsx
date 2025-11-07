@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Filters from "../components/Filters";
 import StatsCards from "../components/StatsCards";
-import LineChart from "../components/LineChart";              // ไม่แตะ
+import LineChart from "../components/LineChart";              
 import DailyLineChart from "../components/DailyLineChart";    // กราฟรายวัน 2 เส้น
 import RecordsTable from "../components/RecordsTable";
 import { getRecentEvents } from "../services/dashboardApi";

@@ -1,122 +1,69 @@
-import { useEffect, useRef, useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { NavLink } from "react-router-dom";
 import "../css/navbar.css";
-import "../css/sidebar.css";
 
 
-function Navbar({
+export default function Navbar({
   title = "ระบบตรวจจับรถจักรยานยนต์",
   cameraOn = true,
-  onLogout,                // optional callback
-  items = [
-    { label: "Home", href: "#" },
-    { label: "Search", href: "#" },
-    { label: "อนุมัติการลงทะเบียน", href: "#" },
-    { label: "กล้อง", href: "#", badge: true },
-  ],
+  onLogout,
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const sidebarRef = useRef(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // ปิดเมื่อกด ESC
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === "Escape") setIsOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
-
-  // ปิดเมื่อคลิกนอก sidebar
-  useEffect(() => {
-    const onClick = (e) => {
-      if (!isOpen) return;
-      if (sidebarRef.current && !sidebarRef.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [isOpen]);
-
-  // ล็อกสกอลล์เมื่อเมนูเปิด (มือถือใช้งานง่ายขึ้น)
-  useEffect(() => {
-    if (isOpen) {
-      const prev = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      return () => (document.body.style.overflow = prev);
-    }
-  }, [isOpen]);
+  const closeMenu = () => setMenuOpen(false);
 
   return (
     <>
-      {/* Header Bar */}
-      <header className="navbar-header">
-        <button
-          className="menu-btn"
-          aria-label={isOpen ? "ปิดเมนูนำทาง" : "เปิดเมนูนำทาง"}
-          aria-expanded={isOpen}
-          aria-controls="sidebar-nav"
-          onClick={() => setIsOpen((v) => !v)}
-        >
-          ☰
-        </button>
+      {/* Top Header */}
+      <header className="topnav">
+        <div className="topnav-inner">
+          {/* left: brand + mobile toggle */}
+          <div className="brand-wrap">
+            <button
+              className="mobile-toggle"
+              aria-label={menuOpen ? "ปิดเมนู" : "เปิดเมนู"}
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              ☰
+            </button>
+            <span className="brand">{title}</span>
+          </div>
 
-        <span className="navbar-title">{title}</span>
+          {/* center: links (desktop) */}
+          <nav className="nav-links" aria-label="เมนูนำทางหลัก">
+            <NavLink to="/" className="nav-link" end>Home</NavLink>
+            <NavLink to="/search" className="nav-link">Search</NavLink>
+            <NavLink to="/register" className="nav-link">ลงทะเบียน</NavLink>
+            <NavLink to="/camera" className="nav-link">กล้อง</NavLink>
+          </nav>
 
-        {/* กลุ่มปุ่มฝั่งขวา (ถ้ามี) */}
-        <div className="navbar-actions">
-          <span className={`camera-chip ${cameraOn ? "on" : "off"}`}>
-            {cameraOn ? "ON" : "OFF"}
-          </span>
-          <button
-            className="logout-btn"
-            onClick={onLogout}
-            type="button"
-            title="Log out"
-          >
-            Log out
-          </button>
+          {/* right: chips + logout */}
+          <div className="top-actions">
+            <span className={`camera-chip ${cameraOn ? "on" : "off"}`}>
+              {cameraOn ? "ON" : "OFF"}
+            </span>
+            <button className="logout-btn" onClick={onLogout}>Log out</button>
+          </div>
         </div>
       </header>
 
+      {/* Mobile panel */}
+      <div className={`mobile-panel ${menuOpen ? "open" : ""}`} role="dialog" aria-modal="true">
+        <nav className="mobile-menu" onClick={closeMenu}>
+          <NavLink to="/" className="mobile-link" end>Home</NavLink>
+          <NavLink to="/search" className="mobile-link">Search</NavLink>
+          <NavLink to="/register" className="mobile-link">ลงทะเบียน</NavLink>
+          <NavLink to="/camera" className="mobile-link">กล้อง</NavLink>
+        </nav>
+      </div>
+
       {/* Backdrop */}
       <div
-        className={`backdrop ${isOpen ? "show" : ""}`}
-        onClick={() => setIsOpen(false)}
+        className={`backdrop ${menuOpen ? "show" : ""}`}
+        onClick={closeMenu}
         aria-hidden="true"
       />
-
-      {/* Sidebar */}
-      <nav id="sidebar-nav" className={`sidebar ${isOpen ? "open" : ""}`} aria-label="เมนูนำทางหลัก">
-  <ul className="menu-list">
-    {/* วาง 2 อันนี้แทนรายการเก่า */}
-    <li>
-      <NavLink to="/" className="menu-link" onClick={() => setIsOpen(false)}>
-        Home
-      </NavLink>
-    </li>
-    <li>
-      <NavLink to="/search" className="menu-link" onClick={() => setIsOpen(false)}>
-        Search
-      </NavLink>
-    </li>
-    <li>
-  <NavLink to="/register" className="menu-link" onClick={() => setIsOpen(false)}>
-    ลงทะเบียน
-  </NavLink>
-</li>
-<li className="menu-item-with-badge">
-  <NavLink to="/camera" className="menu-link" onClick={() => setIsOpen(false)}>
-    กล้อง
-  </NavLink>
-  <span className="badge on">ON</span> {/* ถ้าจะผูกกับสถานะจริงค่อยเปลี่ยนภายหลังก็ได้ */}
-</li>
-  </ul>
-</nav>
-
     </>
   );
 }
-
-export default Navbar;

@@ -1,101 +1,131 @@
-/* ========== Header Bar ========== */
-.navbar-header {
+/* ======= Top Navbar (Header) ======= */
+.topnav {
   position: sticky;
   top: 0;
   z-index: 1100;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   background: #d9d9d9;
-  padding: 10px 12px;
   border-bottom: 1px solid #c5c5c5;
 }
 
-.menu-btn {
-  font-size: 22px;
+.topnav-inner {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 16px;
+}
+
+/* left area */
+.brand-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.mobile-toggle {
+  display: none;
+  font-size: 20px;
   line-height: 1;
-  background: none;
+  background: transparent;
   border: 0;
-  cursor: pointer;
-  color: #111;
   padding: 8px 10px;
   border-radius: 8px;
+  cursor: pointer;
 }
+.mobile-toggle:hover { background: rgba(0,0,0,0.06); }
 
-.menu-btn:hover {
-  background: rgba(0,0,0,0.06);
-}
-
-.menu-btn:focus-visible {
-  outline: 2px solid #2563eb; /* blue-600 */
-  outline-offset: 2px;
-}
-
-.navbar-title {
+.brand {
   font-weight: 700;
   color: #111;
-  margin-left: 8px;
-  flex: 1;
+  white-space: nowrap;
 }
 
-/* กลุ่มปุ่มฝั่งขวา */
-.navbar-actions {
+/* center nav (desktop) */
+.nav-links {
   display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+}
+.nav-link {
+  text-decoration: none;
+  color: #222;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+.nav-link:hover { background: rgba(0,0,0,0.06); }
+.nav-link.active { color: #0f7b33; background: #e6ffed; }
+
+/* right actions (reuse camera-chip & logout-btn fromเดิม) */
+.top-actions {
+  display: inline-flex;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
 }
 
-/* ชิปสถานะกล้อง */
-.camera-chip {
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  user-select: none;
-}
-.camera-chip.on {
-  background: #e6ffed;
-  color: #0f7b33;
-  border-color: #b6f2c8;
-}
-.camera-chip.off {
-  background: #ffeded;
-  color: #b11a1a;
-  border-color: #f8bcbc;
-}
-
-/* ปุ่มออกจากระบบ */
-.logout-btn {
-  background: transparent;
-  border: 1px solid #bdbdbd;
-  color: #222;
-  padding: 6px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.logout-btn:hover {
-  background: #f5f5f5;
-}
-.logout-btn:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
-}
-
-/* ========== Backdrop ตอนเมนูเปิด ========== */
-.backdrop {
+/* ======= Mobile menu ======= */
+.mobile-panel {
   position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0);
-  transition: background 0.25s ease;
+  top: 56px;
+  left: 0;
+  right: 0;
+  transform: translateY(-12px);
+  opacity: 0;
   pointer-events: none;
-  z-index: 900;
+  transition: all .2s ease;
+  z-index: 1099;
 }
-.backdrop.show {
-  background: rgba(0,0,0,0.35);
+.mobile-panel.open {
+  transform: translateY(0);
+  opacity: 1;
   pointer-events: auto;
 }
+
+.mobile-menu {
+  margin: 8px;
+  background: #ffffff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+  display: grid;
+}
+.mobile-link {
+  padding: 12px 14px;
+  text-decoration: none;
+  color: #111;
+  border-bottom: 1px solid #eee;
+}
+.mobile-link:last-child { border-bottom: 0; }
+.mobile-link:hover { background: #f5f5f5; }
+.mobile-link.active { background: #e6ffed; color: #0f7b33; }
+
+/* ======= Responsive ======= */
+@media (max-width: 900px) {
+  .nav-links { display: none; }
+  .mobile-toggle { display: inline-flex; }
+}
+
+/* ===== reuse fromเดิม (ถ้ายังไม่มีให้แนบไว้) ===== */
+.camera-chip {
+  display: inline-flex; align-items: center;
+  height: 26px; padding: 0 10px;
+  font-size: 12px; font-weight: 600;
+  border-radius: 999px; border: 1px solid transparent;
+}
+.camera-chip.on { background: #e6ffed; color: #0f7b33; border-color: #b6f2c8; }
+.camera-chip.off{ background: #ffeded; color: #b11a1a; border-color: #f8bcbc; }
+
+.logout-btn{
+  background: transparent; border: 1px solid #bdbdbd; color: #222;
+  padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 13px;
+}
+.logout-btn:hover{ background: #f5f5f5; }
+
+.backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0);
+  transition: background .2s ease;
+  pointer-events: none; z-index: 900;
+}
+.backdrop.show { background: rgba(0,0,0,0.35); pointer-events: auto; }

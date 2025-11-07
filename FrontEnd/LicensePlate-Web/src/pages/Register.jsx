@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Navbar from "./navbar";
+
+const BASE = "http://127.0.0.1:8000"; // ใช้ให้ตรงกับ services ทั้งหมด
 
 const ROLE_OPTIONS = [
   { value: "นักศึกษา", label: "นักศึกษา" },
@@ -8,11 +9,11 @@ const ROLE_OPTIONS = [
   { value: "บุคลากรในมหาลัย", label: "บุคลากรในมหาลัย" },
 ];
 
-// กรองช่องหน้า: อนุญาตอักษรไทย + ตัวเลข ยาวสุด 6
+// ไทย + ตัวเลข สูงสุด 6 ตัว
 const normalizePlatePrefix = (s) =>
   (s || "").replace(/[^\u0E00-\u0E7F0-9]/g, "").slice(0, 6);
 
-// กรองช่องหลัง: อนุญาตเฉพาะตัวเลข ยาวสุด 4
+// เลขล้วน สูงสุด 4 ตัว
 const normalizeDigits = (s) => (s || "").replace(/\D/g, "").slice(0, 4);
 
 export default function Register() {
@@ -26,11 +27,9 @@ export default function Register() {
     faculty: "",
     major: "",
     role: ROLE_OPTIONS[0].value,
-
-    // ⚠️ เปลี่ยนจาก plate เดิม → แยกเป็น 2 ช่อง + province
-    platePrefix: "", // อักษร/ตัวเลขหน้า (เช่น กท หรือ 12)
-    plateNumber: "", // ตัวเลขหลัง (เช่น 2058)
-    province: "", // จังหวัด
+    platePrefix: "",
+    plateNumber: "",
+    province: "",
     plate_note: "",
   });
 
@@ -46,11 +45,9 @@ export default function Register() {
     if (!form.first_name.trim()) err.first_name = "กรอกชื่อ";
     if (!form.last_name.trim()) err.last_name = "กรอกนามสกุล";
     if (!form.student_id.trim()) err.student_id = "กรอกรหัสนักศึกษา/พนักงาน";
-
     if (!form.platePrefix.trim()) err.platePrefix = "กรอกตัวอักษร/ตัวเลขหน้า";
     if (!form.plateNumber.trim()) err.plateNumber = "กรอกตัวเลขหลัง";
     if (!form.province.trim()) err.province = "กรอกจังหวัด";
-
     setErrors(err);
     return Object.keys(err).length === 0;
   };
@@ -58,42 +55,41 @@ export default function Register() {
   async function onSubmit(e) {
     e.preventDefault();
     if (!validate()) return;
+
     try {
       setBusy(true);
 
       const plate = `${form.platePrefix} ${form.plateNumber}`.trim();
 
-      // ส่งข้อมูลไป backend
-      const res = await fetch("http://localhost:8000/register", {
+      const res = await fetch(`${BASE}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           member: {
-            firstname: form.first_name,
-            lastname: form.last_name,
-            std_id: form.student_id,
-            faculty: form.faculty,
-            major: form.major,
+            firstname: form.first_name.trim(),
+            lastname: form.last_name.trim(),
+            std_id: form.student_id.trim(),
+            faculty: form.faculty.trim(),
+            major: form.major.trim(),
             role: form.role,
           },
           vehicle: {
             plate,
-            province: form.province,
+            province: form.province.trim(),
           },
         }),
       });
 
-      if (!res.ok) throw new Error("บันทึกข้อมูลไม่สำเร็จ");
-      const data = await res.json();
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error(t || "บันทึกข้อมูลไม่สำเร็จ");
+      }
 
-      alert("บันทึกข้อมูลเรียบร้อยแล้ว");
-      console.log("Inserted:", data);
-
-      // ไปหน้า Search หลังบันทึกสำเร็จ
-      nav("/search");
+      // ไปหน้า Search พร้อม query ให้โหลดรายการใหม่ทันที
+      nav(`/search?plate=${encodeURIComponent(plate)}&studentId=${encodeURIComponent(form.student_id)}`);
     } catch (err) {
       console.error(err);
-      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+      alert(err.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
     } finally {
       setBusy(false);
     }
@@ -101,7 +97,6 @@ export default function Register() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <Navbar />
       <div className="max-w-6xl mx-auto p-4 sm:p-6">
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
@@ -116,11 +111,8 @@ export default function Register() {
           <h1 className="text-2xl font-semibold text-gray-800">ลงทะเบียน</h1>
         </div>
 
-        <form
-          onSubmit={onSubmit}
-          className="bg-white rounded-lg shadow-sm p-4 sm:p-6"
-        >
-          {/* แถวที่ 1 */}
+        <form onSubmit={onSubmit} className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
+          {/* Row 1 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -175,7 +167,7 @@ export default function Register() {
             </div>
           </div>
 
-          {/* แถวที่ 2 */}
+          {/* Row 2 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -220,7 +212,7 @@ export default function Register() {
             </div>
           </div>
 
-          {/* แถวที่ 3 — ป้ายทะเบียน */}
+          {/* Row 3 — Plate */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -228,8 +220,10 @@ export default function Register() {
               </label>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* ช่องหน้า: อักษรไทย/ตัวเลข ได้สูงสุด 6 */}
+                {/* หน้า: ไทย/เลข สูงสุด 6 */}
                 <input
+                  type="text"
+                  lang="th"
                   name="platePrefix"
                   value={form.platePrefix}
                   onChange={(e) =>
@@ -241,14 +235,15 @@ export default function Register() {
                   className={`w-full px-3 py-2 border rounded-lg ${
                     errors.platePrefix ? "border-red-400" : "border-gray-300"
                   }`}
-                  placeholder="เช่น กท หรือ 12"
+                  placeholder="เช่น กท หรือ 12 (ไทย/ตัวเลข)"
                   inputMode="text"
                   aria-label="ตัวอักษร/ตัวเลขหน้า"
-                  maxLength={10}
+                  maxLength={6}
                 />
 
-                {/* ช่องหลัง: ตัวเลข สูงสุด 4 */}
+                {/* หลัง: เลข สูงสุด 4 */}
                 <input
+                  type="text"
                   name="plateNumber"
                   value={form.plateNumber}
                   onChange={(e) =>
@@ -260,8 +255,10 @@ export default function Register() {
                   className={`w-full px-3 py-2 border rounded-lg ${
                     errors.plateNumber ? "border-red-400" : "border-gray-300"
                   }`}
-                  placeholder="เช่น 2058"
+                  placeholder="เช่น 2058 (ตัวเลข)"
                   inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={4}
                   aria-label="ตัวเลขหลัง"
                 />
 
@@ -278,22 +275,18 @@ export default function Register() {
                 />
               </div>
 
-              {(errors.platePrefix ||
-                errors.plateNumber ||
-                errors.province) && (
+              {(errors.platePrefix || errors.plateNumber || errors.province) && (
                 <p className="text-xs text-red-600 mt-1">
                   {errors.platePrefix || errors.plateNumber || errors.province}
                 </p>
               )}
             </div>
 
-            {/* กล่องตัวอย่างฟอร์แมต */}
+            {/* Preview */}
             <div className="hidden md:flex items-center justify-center">
               <div className="w-48 h-44 rounded-xl bg-gray-100 text-gray-600 flex flex-col items-center justify-center text-lg">
                 <div className="font-semibold tracking-wide">
-                  {(form.platePrefix || "xx") +
-                    " " +
-                    (form.plateNumber || "xxxx")}
+                  {(form.platePrefix || "xx") + " " + (form.plateNumber || "xxxx")}
                 </div>
                 <div className="text-sm mt-1 text-gray-500">จังหวัด</div>
                 <div className="mt-1">{form.province || "xxxx"}</div>
@@ -301,14 +294,14 @@ export default function Register() {
             </div>
           </div>
 
-          {/* ปุ่มบันทึก */}
+          {/* Submit */}
           <div className="mt-8 flex justify-end">
             <button
               type="submit"
               disabled={busy}
               className="px-6 py-2 rounded-lg bg-green-200 text-gray-800 hover:bg-green-300 disabled:opacity-60"
             >
-              บันทึก
+              {busy ? "กำลังบันทึก..." : "บันทึก"}
             </button>
           </div>
         </form>

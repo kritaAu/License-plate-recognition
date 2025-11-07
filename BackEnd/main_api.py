@@ -191,17 +191,31 @@ def update_member(member_id: int, data: MemberUpdate):
 @app.delete("/members/{member_id}")
 def delete_member(member_id: int):
     try:
+        # อ่านข้อมูลสมาชิกเดิม
         old_resp = (
-            supabase.table("Member").select("*").eq("member_id", member_id).execute()
+            supabase.table("Member")
+            .select("*")
+            .eq("member_id", member_id)
+            .execute()
         )
         if not old_resp.data:
             raise HTTPException(status_code=404, detail="ไม่พบสมาชิกในระบบ")
 
         old_data = old_resp.data[0]
+
+        # 1) ลบรถที่ผูกกับสมาชิกก่อน (แก้ปัญหา FK constraint)
+        supabase.table("Vehicle").delete().eq("member_id", member_id).execute()
+
+        # 2) ลบสมาชิก
         supabase.table("Member").delete().eq("member_id", member_id).execute()
 
-        return {"message": "ลบสมาชิกเรียบร้อยแล้ว", "deleted_data": old_data}
+        return {
+            "message": "ลบสมาชิกและรถที่ผูกอยู่เรียบร้อยแล้ว",
+            "deleted_data": old_data,
+        }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
