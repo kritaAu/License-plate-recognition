@@ -27,7 +27,7 @@ export default function Navbar({
             >
               ☰
             </button>
-            <span className="brand">{title}</span>
+            <span className="brand ">{title}</span>
           </div>
 
           {/* center: links (desktop) */}
@@ -43,7 +43,7 @@ export default function Navbar({
             <span className={`camera-chip ${cameraOn ? "on" : "off"}`}>
               {cameraOn ? "ON" : "OFF"}
             </span>
-            <button className="logout-btn" onClick={onLogout}>Log out</button>
+            <button className="logout-btn bg-white" onClick={onLogout}>Log out</button>
           </div>
         </div>
       </header>

@@ -96,14 +96,18 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="relative min-h-screen">
+  <div className="absolute inset-0 -z-10 bg-gradient-to-b from-indigo-600 via-sky-300 to-sky-100" />
+  <div className="pointer-events-none absolute -top-24 -left-16 h-96 w-96 rounded-full bg-sky-400/30 blur-3xl" />
+  <div className="pointer-events-none absolute -bottom-16 -right-8 h-[28rem] w-[28rem] rounded-full bg-indigo-500/25 blur-3xl" />
+  <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8"/>
       <div className="max-w-6xl mx-auto p-4 sm:p-6">
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">
           <button
             type="button"
             onClick={() => nav(-1)}
-            className="px-3 py-2 rounded bg-rose-100 text-rose-700 hover:bg-rose-200"
+            className="px-3 py-2 rounded bg-rose-400 text-rose-700 hover:bg-rose-200"
             title="ย้อนกลับ"
           >
             ←
@@ -177,7 +181,7 @@ export default function Register() {
                 name="faculty"
                 value={form.faculty}
                 onChange={onChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-3 py-2 border border-red-300 rounded-lg"
               />
             </div>
 

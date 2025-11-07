@@ -5,7 +5,7 @@ export default function App() {
   return (
     <>
       <Navbar />
-      <div style={{ padding: 20, marginTop: 56 }}>
+      <div style={{ padding: 0, marginTop: 0 }}>
         <Outlet />
       </div>
     </>
