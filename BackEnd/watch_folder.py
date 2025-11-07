@@ -13,6 +13,7 @@ import os
 WATCH_DIR = r"detect_motor"
 API_URL_EVENT = "http://127.0.0.1:8000/events"
 API_URL_CHECK = "http://127.0.0.1:8000/check_plate"
+API_URL_NOTIFY = "http://127.0.0.1:8000/notify-event"
 model = YOLO("model/lpr_model.pt")
 load_dotenv()
 
@@ -44,6 +45,15 @@ def check_plate_in_system(plate: str, province: str):
     except Exception as e:
         print("Error checking plate:", e)
         return None
+
+
+def notify_frontend(plate: str):
+    """ส่งข้อมูลแจ้งเตือนไปยัง FastAPI เพื่อ Broadcast ผ่าน WebSocket"""
+    try:
+        r = requests.post(API_URL_NOTIFY, json={"plate": plate}, timeout=5)
+        r.raise_for_status()
+    except Exception as e:
+        print(f"[WARN] Failed to send notification to API: {e}")
 
 
 class ReadImage(FileSystemEventHandler):
@@ -106,6 +116,7 @@ class ReadImage(FileSystemEventHandler):
                     resp = send_event(event_payload)
                     print(resp)
                     print("Insert Complete")
+                    notify_frontend(event_payload.get("plate", "No Plate"))
                 except requests.HTTPError as e:
                     print("HTTP error:", e.response.text)
                 except Exception as e:
@@ -124,6 +135,7 @@ class ReadImage(FileSystemEventHandler):
             try:
                 resp = send_event(event_payload)
                 print("[NO-PLATE] Insert Complete:", resp)
+                notify_frontend(event_payload.get("plate", "No Plate"))
             except Exception as e:
                 print("[NO-PLATE] Error:", e)
             return

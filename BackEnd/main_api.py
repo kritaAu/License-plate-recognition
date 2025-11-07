@@ -1,15 +1,14 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Query
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 from supabase import create_client
 from dotenv import load_dotenv
 from datetime import datetime
-import cv2
 import os
 import uuid
+import cv2
 from utils import upload_image_to_storage
-
 
 # ====
 #  ENVIRONMENT
@@ -45,6 +44,7 @@ class EventIn(BaseModel):
     cam_id: int | None = None
     blob: str | None = None
     vehicle_id: int | None = None
+    direction: str | None = None
 
 
 class MemberCreate(BaseModel):
@@ -76,6 +76,38 @@ class MemberUpdate(BaseModel):
 
 
 # ====
+#  WEBSOCKET MANAGER
+# ====
+
+
+class ConnectionManager:
+    def __init__(self):
+        # เก็บรายชื่อ Clients ที่เชื่อมต่ออยู่
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    # ส่งข้อมูลไปยัง Clients ที่เชื่อมต่ออยู่ทั้งหมด
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            # ใช้ try/except เพื่อจัดการถ้า Client คนใดคนหนึ่งหลุดไป
+            try:
+                await connection.send_text(message)
+            except WebSocketDisconnect:
+                self.disconnect(connection)
+            except Exception as e:
+                print(f"Error broadcasting: {e}")
+                self.disconnect(connection)
+
+
+manager = ConnectionManager()
+
+# ====
 #  ROUTES: MEMBERS
 # ====
 
@@ -95,6 +127,7 @@ def get_members():
         members = []
         for row in response.data or []:
             vehicle = row.get("Vehicle") or {}
+            # จัดการ Vehicle ที่อาจมาเป็น list
             if isinstance(vehicle, list) and vehicle:
                 vehicle = vehicle[0]
             elif isinstance(vehicle, list):
@@ -121,7 +154,7 @@ def get_members():
 
 
 # เพิ่มข้อมูลสมาชิกใหม่
-@app.post("/register")
+@app.post("member/register")
 def register_member_with_vehicle(payload: RegisterRequest):
     try:
         # เพิ่มข้อมูล Member
@@ -163,7 +196,7 @@ def update_member(member_id: int, data: MemberUpdate):
             raise HTTPException(status_code=404, detail="ไม่พบสมาชิกในระบบ")
 
         old_data = old_resp.data[0]
-        update_fields = {k: v for k, v in data.dict().items() if v is not None}
+        update_fields = data.model_dump(exclude_none=True)
 
         if not update_fields:
             raise HTTPException(status_code=400, detail="ไม่พบข้อมูลที่ต้องการอัปเดต")
@@ -193,17 +226,14 @@ def delete_member(member_id: int):
     try:
         # อ่านข้อมูลสมาชิกเดิม
         old_resp = (
-            supabase.table("Member")
-            .select("*")
-            .eq("member_id", member_id)
-            .execute()
+            supabase.table("Member").select("*").eq("member_id", member_id).execute()
         )
         if not old_resp.data:
             raise HTTPException(status_code=404, detail="ไม่พบสมาชิกในระบบ")
 
         old_data = old_resp.data[0]
 
-        # 1) ลบรถที่ผูกกับสมาชิกก่อน (แก้ปัญหา FK constraint)
+        # 1) ลบรถที่ผูกกับสมาชิกก่อน
         supabase.table("Vehicle").delete().eq("member_id", member_id).execute()
 
         # 2) ลบสมาชิก
@@ -233,59 +263,40 @@ def get_events(limit: int = 10):
 
 
 # -------------------------------------------------------------
-# 📦 เพิ่ม Event ใหม่ (พร้อมเชื่อมโยง Vehicle)
+# เพิ่ม Event ใหม่
 # -------------------------------------------------------------
-@app.post("/events")
+@app.post("/events/new_events")
 def create_event(event: EventIn):
     try:
         vehicle_data = None
 
-        # ตรวจสอบว่ามี vehicle_id หรือ plate ที่ส่งมาหรือไม่
-        if event.vehicle_id or event.plate:
+        # 1. ตรวจสอบ Vehicle ในระบบ (ใช้ vehicle_id หรือ plate/province ที่อ่านได้)
+        # ตรวจสอบเฉพาะถ้ามี plate และ province ส่งมาเท่านั้น
+        if event.plate and event.province:
+            # ค้นหาจากป้ายและจังหวัดที่แน่นอน
             query = supabase.table("Vehicle").select(
                 "vehicle_id, plate, province, member_id"
             )
-
-            if event.vehicle_id:
-                query = query.eq("vehicle_id", event.vehicle_id)
-            elif event.plate:
-                query = query.eq("plate", event.plate)
+            query = query.eq("plate", event.plate).eq("province", event.province)
 
             vehicle_check = query.execute()
 
             if vehicle_check.data:
                 vehicle_data = vehicle_check.data[0]
+            # ถ้าไม่พบ จะบันทึกเป็น Visitor/Unknown โดยไม่มี vehicle_id
 
-                # ตรวจสอบว่าข้อมูลจังหวัดตรงไหม
-                if (
-                    event.province
-                    and vehicle_data.get("province")
-                    and vehicle_data["province"] != event.province
-                ):
-                    raise HTTPException(
-                        status_code=400,
-                        detail="จังหวัดของป้ายทะเบียนไม่ตรงกับข้อมูลในระบบ",
-                    )
-            else:
-                # ถ้าไม่มีในระบบ จะไม่ raise error — บันทึก Event ได้ตามปกติ
-                vehicle_data = None
-
-        # ตรวจสอบ direction จาก cam_id
-        direction_map = {1: "IN", 2: "OUT"}
-        direction = direction_map.get(event.cam_id, "UNKNOWN")
-
-        # เตรียมข้อมูลสำหรับบันทึก Event
+        # 2. เตรียมข้อมูลสำหรับบันทึก Event (ใช้ direction ที่ส่งมาจาก ML pipeline)
         payload = {
             "datetime": event.datetime.isoformat(),
             "plate": event.plate,
             "province": event.province,
-            "direction": direction,
+            "direction": event.direction or "UNKNOWN",  # 🌟 ใช้ direction ที่ส่งมา
             "blob": event.blob,
             "cam_id": event.cam_id,
             "vehicle_id": vehicle_data["vehicle_id"] if vehicle_data else None,
         }
 
-        # บันทึกลง Supabase
+        # 3. บันทึกลง Supabase
         response = supabase.table("Event").insert(payload).execute()
 
         if not response.data:
@@ -303,6 +314,36 @@ def create_event(event: EventIn):
         raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาด: {str(e)}")
 
 
+@app.websocket("/ws/events")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # WebSocket จะคอยรับข้อมูลจาก Client (ถึงแม้ว่าเราจะไม่ได้คาดหวังข้อมูลใดๆ)
+            # ถ้าไม่มีการรับส่งข้อมูล FastAPI จะปิดการเชื่อมต่ออัตโนมัติ
+            data = await websocket.receive_text()
+            # อาจใช้ data ในอนาคต (เช่น สั่ง Filter Log จาก Client)
+            print(f"Received from client: {data}")
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        print("Client disconnected")
+    except Exception as e:
+        manager.disconnect(websocket)
+        print(f"Error in websocket: {e}")
+
+
+# 📢 Endpoint สำหรับ Worker (watch_folder.py) ใช้แจ้งเตือน Broadcast
+@app.post("/notify-event")
+async def notify_event(payload: dict):
+    """Worker จะเรียก Endpoint นี้เพื่อบอกให้ API ทำการ Broadcast"""
+    # NOTE: เราจะส่งแค่ message ว่ามี event ใหม่เกิดขึ้น
+    # Frontend จะไปเรียก /dashboard/recent อีกครั้งเพื่อดึงข้อมูลใหม่
+    await manager.broadcast(
+        message="New Event Recorded: " + payload.get("plate", "No Plate")
+    )
+    return {"status": "ok", "message": "Notification broadcasted"}
+
+
 # ====
 #  ROUTES: CHECK PLATE
 # ====
@@ -315,6 +356,7 @@ def check_plate(
     province: str | None = Query(None, description="จังหวัด"),
 ):
     try:
+        # ใช้ Embeded Query เพื่อดึง Role พร้อมกัน
         query = supabase.table("Vehicle").select(
             "vehicle_id, plate, province, member:Member!Vehicle_member_id_fkey(role)"
         )
@@ -326,6 +368,7 @@ def check_plate(
         response = query.execute()
         if response.data:
             vehicle = response.data[0]
+            # Role จะอยู่ใน vehicle['member']['role']
             role = vehicle.get("member", {}).get("role", "Visitor")
 
             return {
@@ -347,7 +390,7 @@ def check_plate(
 # ====
 
 
-# สรุปจำนวนรถเข้าออกต่อวัน
+# สรุปจำนวนรถเข้าออกต่อวัน (ไม่มีการเปลี่ยนแปลง)
 @app.get("/dashboard/summary")
 def dashboard_summary(date: str | None = None):
     try:
@@ -366,7 +409,10 @@ def dashboard_summary(date: str | None = None):
         ins = [e for e in events if e["direction"] == "IN"]
         outs = [e for e in events if e["direction"] == "OUT"]
         unknown = [
-            e for e in events if not e.get("plate") or e.get("vehicle_id") is None
+            # นับรวม Visitor และรถที่อ่านป้ายไม่ได้
+            e
+            for e in events
+            if not e.get("plate") or e.get("vehicle_id") is None
         ]
 
         return {
@@ -385,11 +431,12 @@ def dashboard_summary(date: str | None = None):
 @app.get("/dashboard/recent")
 def dashboard_recent(limit: int = 10):
     try:
-        # ดึงเฉพาะ field ที่ใช้ และใน Vehicle ขอแค่ member_id พอ
         response = (
             supabase.table("Event")
             .select(
-                "datetime, plate, province, direction, vehicle_id, blob, Vehicle(member_id)"
+                "datetime, plate, province, direction, blob,"
+                # Event -> Vehicle -> Member -> Role
+                "Vehicle!Event_vehicle_id_fkey(member:Member!Vehicle_member_id_fkey(role))"
             )
             .order("datetime", desc=True)
             .limit(limit)
@@ -398,36 +445,16 @@ def dashboard_recent(limit: int = 10):
 
         results = []
         for e in response.data or []:
-            # Vehicle อาจเป็น None/{} หรือ object/list ตามคอนสตรินต์ FK
             vehicle = e.get("Vehicle") or {}
-            # ถ้าเป็น list ให้หยิบตัวแรก
+            # จัดการกรณี Vehicle เป็น list/object
             if isinstance(vehicle, list):
                 vehicle = vehicle[0] if vehicle else {}
 
-            role = "Visitor"
-            member_id = vehicle.get("member_id")
-            if member_id:
-                member_res = (
-                    supabase.table("Member")
-                    .select("role")
-                    .eq("member_id", member_id)
-                    .limit(1)
-                    .execute()
-                )
-                if member_res.data:
-                    role = member_res.data[0].get("role") or "Visitor"
+            # ดึง Role: Event -> Vehicle -> Member -> Role
+            role = vehicle.get("member", {}).get("role") or "Visitor"
 
-            # แปลง blob → data URL base64 (ถ้าเป็น bytes)
-            img = e.get("blob")
-            if isinstance(img, (bytes, bytearray)):
-                try:
-                    b64 = base64.b64encode(img).decode("ascii")
-                    image_url = f"data:image/jpeg;base64,{b64}"
-                except Exception:
-                    image_url = None
-            else:
-                # ถ้าใน DB เก็บเป็น text (เช่น path/URL) ก็ส่งต่อได้
-                image_url = img or None
+            # blob ถูกเก็บเป็น URL string อยู่แล้ว
+            image_url = e.get("blob") or None
 
             results.append(
                 {
@@ -444,14 +471,14 @@ def dashboard_recent(limit: int = 10):
 
     except Exception as ex:
         # log ex ไว้ใน server console จะเห็น stacktrace ต้นตอ
-        raise HTTPException(status_code=500, detail=str(ex))
+        raise HTTPException(
+            status_code=500, detail=f"Error in dashboard_recent: {str(ex)}"
+        )
 
 
 # ====
 #  ROUTES: UPLOAD IMAGE
 # ====
-
-
 # อัปโหลดรูปภาพไป Supabase Storage
 @app.post("/upload")
 async def upload_image(file: UploadFile = File(...)):
@@ -472,7 +499,6 @@ cap = cv2.VideoCapture(RTSP_URL)
 
 if not cap.isOpened():
     raise RuntimeError("Failed to open video source")
-"""
 
 
 def generate_frames():
@@ -486,12 +512,12 @@ def generate_frames():
         frame_bytes = buffer.tobytes()
         yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
 
-
 @app.get("/video")
 def video_feed():
     return StreamingResponse(
         generate_frames(), media_type="multipart/x-mixed-replace; boundary=frame"
     )
+"""
 
 
 # ====
