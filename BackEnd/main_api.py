@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from supabase import create_client
 from dotenv import load_dotenv
 from datetime import datetime
+from datetime import date
 import os
 import uuid
 import cv2
@@ -160,33 +161,51 @@ def get_members():
 
 # เพิ่มข้อมูลสมาชิกใหม่
 @app.post("/members/register")
+@app.post("/register")
 def register_member_with_vehicle(payload: RegisterRequest):
     try:
-        # เพิ่มข้อมูล Member
-        member_data = payload.member.model_dump()
-        member_resp = supabase.table("Member").insert(member_data).execute()
+        m_in = payload.member.model_dump()
 
-        if not member_resp.data:
+        sid = m_in.get("std_id")
+        if isinstance(sid, str) and sid.isdigit():
+            m_in["std_id"] = int(sid)
+
+        m_res = supabase.table("Member").insert(m_in).execute()
+        if not m_res.data:
             raise HTTPException(status_code=400, detail="เพิ่มข้อมูลสมาชิกไม่สำเร็จ")
+        member = m_res.data[0]
+        member_id = member["member_id"]
 
-        member_id = member_resp.data[0]["member_id"]
+        v_in = payload.vehicle.model_dump()
+        v_in["member_id"] = member_id
 
-        # เพิ่มข้อมูล Vehicle (เชื่อม foreign key member_id)
-        vehicle_data = payload.vehicle.model_dump()
-        vehicle_data["member_id"] = member_id
+        v_res = supabase.table("Vehicle").insert(v_in).execute()
+        if not v_res.data:
 
-        vehicle_resp = supabase.table("Vehicle").insert(vehicle_data).execute()
-
-        if not vehicle_resp.data:
+            supabase.table("Member").delete().eq("member_id", member_id).execute()
             raise HTTPException(status_code=400, detail="เพิ่มข้อมูลรถไม่สำเร็จ")
+        vehicle = v_res.data[0]
+
+        row = {
+            "member_id": member_id,
+            "std_id": member.get("std_id"),
+            "firstname": member.get("firstname"),
+            "lastname": member.get("lastname"),
+            "plate": vehicle.get("plate"),
+            "province": vehicle.get("province"),
+        }
 
         return {
             "message": "เพิ่มข้อมูลสมาชิกและรถเรียบร้อยแล้ว",
-            "member": member_resp.data[0],
-            "vehicle": vehicle_resp.data[0],
+            "row": row,             
+            "member": member,
+            "vehicle": vehicle,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+  
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -502,15 +521,21 @@ def export_events():
     response = supabase.table("Event").select("*").execute()
     data = response.data or []
 
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=data[0].keys())
+    # ให้ Excel (โดยเฉพาะบน Windows) อ่านภาษาไทยถูก: ใส่ BOM
+    output = io.StringIO(newline="")
+    output.write("\ufeff")  # UTF-8 BOM
+
+    # ถ้าไม่มีข้อมูลเลย ให้ header ว่าง ๆ (หรือกำหนดคอลัมน์เอง)
+    fieldnames = list(data[0].keys()) if data else ["datetime","plate","province","direction","role","image"]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
-    writer.writerows(data)
+    if data:
+        writer.writerows(data)
     output.seek(0)
 
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=events.csv"}
     )
 
@@ -550,3 +575,4 @@ def video_feed():
 @app.get("/")
 def root():
     return {"status": "ok", "message": "API is running"}
+

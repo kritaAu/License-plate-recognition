@@ -139,11 +139,8 @@ export default function Home() {
   };
 
   return (
-   <div className="relative min-h-screen overflow-hidden">
-      <div className="absolute inset-0 -z-10 bg-gradient-to-b from-indigo-600 via-sky-200 to-white" />
-      <div className="pointer-events-none absolute -top-24 -left-24 h-96 w-96 rounded-full bg-sky-300/30 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-16 -right-10 h-[28rem] w-[28rem] rounded-full bg-indigo-400/30 blur-3xl" />
-
+   <div className="min-h-screen">
+  <div className="mx-auto max-w-7xl px-6 py-6"/>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* ฟิลเตอร์  */}
