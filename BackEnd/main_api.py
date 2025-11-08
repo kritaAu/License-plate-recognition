@@ -8,6 +8,8 @@ from datetime import datetime
 import os
 import uuid
 import cv2
+import io
+import csv
 from utils import upload_image_to_storage
 
 # ====
@@ -494,6 +496,23 @@ async def upload_image(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ทำเป็นไฟล์ csv
+@app.get("/export/events")
+def export_events():
+    response = supabase.table("Event").select("*").execute()
+    data = response.data or []
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=data[0].keys())
+    writer.writeheader()
+    writer.writerows(data)
+    output.seek(0)
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=events.csv"}
+    )
 
 # ====
 #  VIDEO STREAM

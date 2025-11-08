@@ -3,24 +3,29 @@
   position: sticky;
   top: 0;
   z-index: 1100;
-  background: #056db2;
-  border-bottom: 1px solid #c5c5c5;
+  background: #011f4b; 
+  border-bottom: 1px solid #1a3a60; 
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2); 
 }
 
 .topnav-inner {
+  /* <<< แก้ Grid ให้มี 2 คอลัมน์ (ซ้าย 1fr, ขวา auto) เท่านั้น >>> */
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr auto; 
   align-items: center;
   gap: 12px;
   height: 56px;
   padding: 0 16px;
 }
 
-/* left area */
+/* left area (ตอนนี้รวมชื่อระบบและลิงก์แล้ว) */
 .brand-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
+  /* ใช้ Flexbox จัดเรียงชื่อแบรนด์และลิงก์ในแนวนอน */
+  display: flex;
+  /* ปรับ align-items ให้เป็น center เพื่อให้เนื้อหาจัดเรียงตรงกลางตามแนวตั้ง */
+  align-items: center; 
+  /* <<< เพิ่มระยะห่างระหว่าง Brand/Toggle กับ Links >>> */
+  gap: 15px; 
 }
 .mobile-toggle {
   display: none;
@@ -31,80 +36,58 @@
   padding: 8px 10px;
   border-radius: 8px;
   cursor: pointer;
+  color: white; 
 }
-.mobile-toggle:hover { background: rgba(0,0,0,0.06); }
+.mobile-toggle:hover { background: rgba(255,255,255,0.15); }
 
 .brand {
   font-weight: 700;
   white-space: nowrap;
-  color: white;
+  color: white; 
 }
 
-/* center nav (desktop) */
+/* center nav (desktop) - ถูกย้ายมาอยู่ซ้ายแล้ว */
 .nav-links {
+  /* <<< ลบ justify-content: center; ออก >>> */
   display: inline-flex;
-  justify-content: center;
   align-items: center;
-  gap: 12px;
+  /* <<< ปรับ gap ระหว่างลิงก์ให้กระชับและสวยงาม >>> */
+  gap: 10px; 
   color: white;
 }
 .nav-link {
   text-decoration: none;
-  color: #222;
-  padding: 8px 10px;
+  color: white; 
+  padding: 8px 12px; 
   border-radius: 8px;
-  font-weight: 600;
+  font-weight: 500; 
+  transition: background .2s ease;
 }
-.nav-link:hover { background: rgba(0,0,0,0.06); }
-.nav-link.active { color: #0f7b33; background: #b3cde0; }
+.nav-link:hover { 
+  background: #005b96; 
+  color: white;
+}
+.nav-link.active { 
+  color: #011f4b; 
+  background: #b3cde0; 
+  font-weight: 600; 
+}
 
-/* right actions (reuse camera-chip & logout-btn fromเดิม) */
+/* right actions */
 .top-actions {
+  /* ... (คงเดิม) ... */
   display: inline-flex;
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
 }
 
-/* ======= Mobile menu ======= */
-.mobile-panel {
-  position: fixed;
-  top: 56px;
-  left: 0;
-  right: 0;
-  transform: translateY(-12px);
-  opacity: 0;
-  pointer-events: none;
-  transition: all .2s ease;
-  z-index: 1099;
-}
-.mobile-panel.open {
-  transform: translateY(0);
-  opacity: 1;
-  pointer-events: auto;
-}
+/* ======= Mobile menu & Responsive ======= */
 
-.mobile-menu {
-  margin: 8px;
-  background: #ffffff;
-  border: 1px solid #ddd;
-  border-radius: 12px;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.12);
-  display: grid;
-}
-.mobile-link {
-  padding: 12px 14px;
-  text-decoration: none;
-  color: #111;
-  border-bottom: 1px solid #eee;
-}
-.mobile-link:last-child { border-bottom: 0; }
-.mobile-link:hover { background: #f5f5f5; }
-.mobile-link.active { background: #e6ffed; color: #0f7b33; }
-
-/* ======= Responsive ======= */
 @media (max-width: 900px) {
-  .nav-links { display: none; }
+  /* <<< เมื่อจอเล็ก: ซ่อน nav-links (ลิงก์หลัก) ที่อยู่ด้านใน brand-wrap >>> */
+  .brand-wrap .nav-links { display: none; }
+  /* แสดง Mobile Toggle แทน */
   .mobile-toggle { display: inline-flex; }
 }
 
@@ -115,14 +98,25 @@
   font-size: 12px; font-weight: 600;
   border-radius: 999px; border: 1px solid transparent;
 }
-.camera-chip.on { background: #e6ffed; color: #0f7b33; border-color: #b6f2c8; }
+/* ปรับสี Camera Chip ให้เข้ากับโทนสี */
+.camera-chip.on { background: #e6f0f7; color: #005b96; border-color: #b3cde0; }
 .camera-chip.off{ background: #ffeded; color: #b11a1a; border-color: #f8bcbc; }
 
 .logout-btn{
-  background: transparent; border: 1px solid #bdbdbd; color: #222;
-  padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 13px;
+  /* ปรับปุ่ม Logout ให้ดูเป็นมิตรมากขึ้น */
+  background: #b3cde0; /* ใช้สีฟ้าอ่อน */
+  border: 1px solid #b3cde0; 
+  color: #011f4b; /* สีข้อความน้ำเงินเข้ม */
+  padding: 6px 12px; /* เพิ่ม padding */
+  border-radius: 8px; cursor: pointer; font-size: 13px;
+  font-weight: 600;
+  transition: all .2s ease;
 }
-.logout-btn:hover{ background: #f5f5f5; }
+.logout-btn:hover{ 
+  background: #b11a1a; /* Hover สีเข้มขึ้น */
+  border-color: #111;
+  color: white;
+}
 
 .backdrop {
   position: fixed; inset: 0; background: rgba(0,0,0,0);
