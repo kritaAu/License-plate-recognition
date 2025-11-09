@@ -75,7 +75,7 @@ export default function DailyLineChart({ series = [] }) {
       </svg>
 
       {/* legend */}
-      <div className="flex items-center gap-4 mt-2">
+      <div className="flex items-center gap-4 mt-1">
         <span className="inline-flex items-center gap-2 text-sm text-gray-600">
           <span className="w-3 h-3 rounded-sm" style={{ background: "#6366F1" }} /> บุคคลภายใน
         </span>

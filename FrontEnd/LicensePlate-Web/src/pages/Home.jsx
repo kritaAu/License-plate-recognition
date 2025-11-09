@@ -140,7 +140,7 @@ export default function Home() {
 
   return (
    <div className="min-h-screen">
-  <div className="mx-auto max-w-7xl px-0 py-0"/>
+  <div className="mx-auto max-w-5xl px-3"/>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* ฟิลเตอร์  */}
@@ -178,7 +178,7 @@ export default function Home() {
             <header className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <h3 className="text-lg font-semibold tracking-tight text-indigo-900">
                 สถิติรายวัน (แยกภายใน/ภายนอก)
-                <span className="ml-2 align-middle inline-flex items-center rounded-full bg-indigo-100 text-indigo-700 px-2 py-0.5 text-xs font-medium">
+                <span className="ml-2 align-middle inline-flex items-center rounded-full bg-indigo-100 text-indigo-700 px-1 py-0.7 text-xs font-medium">
                   {dailyDate}
                 </span>
               </h3>
@@ -188,7 +188,7 @@ export default function Home() {
                   type="date"
                   value={dailyDate}
                   onChange={(e) => setDailyDate(e.target.value)}
-                  className="px-3 py-2 rounded-lg border border-sky-200 text-sm bg-white text-slate-700
+                  className="px-2 py-2 rounded-lg border border-sky-200 text-sm bg-white text-slate-700
                              focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                 />
               </label>
