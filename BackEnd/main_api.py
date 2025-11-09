@@ -601,35 +601,6 @@ def export_events(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error exporting events: {str(e)}")
 
-# ====
-#  VIDEO STREAM
-# ====
-"""
-RTSP_URL = "video-_Clipchamp.mp4"
-cap = cv2.VideoCapture(RTSP_URL)
-
-if not cap.isOpened():
-    raise RuntimeError("Failed to open video source")
-
-
-def generate_frames():
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            continue
-
-        _, buffer = cv2.imencode(".jpg", frame)
-        frame_bytes = buffer.tobytes()
-        yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
-
-@app.get("/video")
-def video_feed():
-    return StreamingResponse(
-        generate_frames(), media_type="multipart/x-mixed-replace; boundary=frame"
-    )
-"""
-
 
 # ====
 #  HEALTH CHECK

@@ -18,6 +18,8 @@ pip install supabase
 # run api use this
 
 python -m uvicorn main_api:app --reload
+python -m uvicorn batch_process:app --reload
+
 
 Docs
 https://fastapi.tiangolo.com
