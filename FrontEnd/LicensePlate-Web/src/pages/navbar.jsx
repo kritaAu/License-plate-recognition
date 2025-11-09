@@ -1,11 +1,11 @@
-// src/pages/navbar.jsx  (หรือที่ไฟล์ Navbar ของคุณอยู่)
+// src/pages/navbar.jsx (ฉบับแก้ไข)
 import { NavLink, useLocation } from "react-router-dom";
 
 const TABS = [
   { to: "/",        label: "Home"   },
   { to: "/search",  label: "Search" },
   { to: "/member",  label: "Member" },
-  { to: "/camera",  label: "Camera" },
+  // { to: "/camera",  label: "Camera" },
 ];
 
 export default function Navbar({ onLogout }) {
@@ -13,50 +13,57 @@ export default function Navbar({ onLogout }) {
 
   const handleLogout = () => {
     try {
-      onLogout?.(); // ถ้ามีฟังก์ชันจากข้างนอก
-    } finally {
-      // เคลียร์ session แบบง่าย ๆ
       localStorage.clear();
       sessionStorage.clear();
-      // กลับหน้าแรก
       window.location.href = "/";
+    } catch (error) {
+      console.error("Logout failed:", error);
     }
   };
 
   return (
-    <header className="w-full bg-[#12305a] text-white shadow-sm">
-      <div className="mx-auto max-w-7xl px-3 sm:px-4 lg:px-6">
+    <header className="w-full bg-[#12305a] text-white shadow-sm sticky top-0 z-50">
+      
+      {/* 1. Desktop Navbar (Layout 2 ส่วน: ซ้าย และ ขวา) */}
+      <div className="mx-auto max-w-1xl px-3 sm:px-4 lg:px-6">
+        {/* 🌟 ใช้ justify-between เพื่อดัน 2 ส่วนหลักออกจากกัน */}
         <div className="flex h-16 items-stretch justify-between">
-          {/* Brand */}
-          <div className="flex items-center px-2 sm:px-3">
-            <span className="text-lg sm:text-xl font-semibold tracking-wide">
-              ระบบตรวจจับรถจักรยานยนต์
-            </span>
+          
+          {/* 🌟 ส่วนซ้าย (รวม Brand และ Links) 🌟 */}
+          <div className="flex items-stretch"> 
+            {/* Brand */}
+            <div className="flex items-center px-2 sm:px-3">
+              <span className="text-lg sm:text-xl font-semibold tracking-wide">
+                ระบบตรวจจับรถจักรยานยนต์
+              </span>
+            </div>
+
+            {/* Tabs (ย้ายมาไว้ข้าง Brand) */}
+            <nav className="hidden md:flex items-stretch ml-4"> {/* 🌟 เพิ่ม ml-4 (margin-left) เพื่อเว้นวรรค */}
+              {TABS.map((t, i) => (
+                <NavLink
+                  key={t.to}
+                  to={t.to}
+                  className={({ isActive }) =>
+                    [
+                      "px-5 flex items-center text-lg font-medium", // 🌟 ลด Padding (px-5)
+                      "border-r border-black/30",
+                      i === 0 ? "border-l border-black/30" : "",
+                      isActive
+                        ? "bg-[#c9d9e8] text-[#0b1b36]"
+                        : "hover:bg-white/10",
+                    ].join(" ")
+                  }
+                >
+                  {t.label}
+                </NavLink>
+              ))}
+            </nav>
           </div>
+          {/* 🌟 สิ้นสุดส่วนซ้าย 🌟 */}
 
-          {/* Tabs */}
-          <nav className="hidden md:flex items-stretch">
-            {TABS.map((t, i) => (
-              <NavLink
-                key={t.to}
-                to={t.to}
-                className={({ isActive }) =>
-                  [
-                    "px-8 flex items-center text-lg font-medium",
-                    "border-r border-black/30",
-                    i === 0 ? "border-l border-black/30" : "",
-                    isActive
-                      ? "bg-[#c9d9e8] text-[#0b1b36]" // แท็บ active พื้นฟ้าอ่อน ตัวอักษรน้ำเงินเข้ม
-                      : "hover:bg-white/10",
-                  ].join(" ")
-                }
-              >
-                {t.label}
-              </NavLink>
-            ))}
-          </nav>
 
-          {/* Log Out */}
+          {/* ส่วนขวา: ปุ่ม Log Out (เหมือนเดิม) */}
           <div className="flex items-center">
             <button
               onClick={handleLogout}
@@ -69,8 +76,9 @@ export default function Navbar({ onLogout }) {
         </div>
       </div>
 
-      {/* แถบเมนูในจอเล็ก (ถ้าต้องการให้แสดงเรียงต่อกัน) */}
-      <nav className="md:hidden flex divide-x divide-black/30">
+      {/* 2. Mobile Navbar (เหมือนเดิม) */}
+      <nav className="md:hidden flex divide-x divide-black/30 border-t border-black/30">
+        {/* ... (โค้ดส่วน Mobile ไม่เปลี่ยนแปลง) ... */}
         {TABS.map((t, i) => (
           <NavLink
             key={t.to}
@@ -78,8 +86,8 @@ export default function Navbar({ onLogout }) {
             className={({ isActive }) =>
               [
                 "flex-1 text-center py-2 text-sm font-medium",
-                i === 0 ? "border-l border-black/30" : "",
                 "border-r border-black/30",
+                i === 0 ? "border-l border-black/30" : "",
                 isActive
                   ? "bg-[#c9d9e8] text-[#0b1b36]"
                   : "text-white hover:bg-white/10",
