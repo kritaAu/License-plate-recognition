@@ -410,18 +410,6 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
-# Endpoint สำหรับ Worker (watch_folder.py) ใช้แจ้งเตือน Broadcast
-@app.post("/notify-event")
-async def notify_event(payload: dict):
-    """Worker จะเรียก Endpoint นี้เพื่อบอกให้ API ทำการ Broadcast"""
-    # NOTE: เราจะส่งแค่ message ว่ามี event ใหม่เกิดขึ้น
-    # Frontend จะไปเรียก /dashboard/recent อีกครั้งเพื่อดึงข้อมูลใหม่
-    await manager.broadcast(
-        message="New Event Recorded: " + payload.get("plate", "No Plate")
-    )
-    return {"status": "ok", "message": "Notification broadcasted"}
-
-
 # ====
 #  ROUTES: CHECK PLATE
 # ====
