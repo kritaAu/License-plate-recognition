@@ -6,7 +6,6 @@ import App from "./App";
 import Home from "./Home";
 import Search from "./Search";
 import Member from "./Member";
-import Camera from "./Camera";
 
 createRoot(document.getElementById("root")).render(
   <BrowserRouter>
@@ -15,7 +14,6 @@ createRoot(document.getElementById("root")).render(
         <Route index element={<Home />} />
         <Route path="search" element={<Search />} />
         <Route path="Member" element={<Member />} />
-        <Route path="camera" element={<Camera />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
