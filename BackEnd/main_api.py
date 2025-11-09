@@ -281,9 +281,61 @@ def delete_member(member_id: int):
 
 # ดึง Event ล่าสุด
 @app.get("/events")
-def get_events(limit: int = 10):
-    data = supabase.table("Event").select("*").limit(limit).execute()
-    return data.data
+def get_events(
+    # รับค่า Filters จาก Frontend
+    limit: int = Query(1000, ge=1), 
+    start_date: str | None = Query(None, description="YYYY-MM-DD"),
+    end_date: str | None = Query(None, description="YYYY-MM-DD"),
+    direction: str | None = Query(None),
+    query: str | None = Query(None, description="Plate query")
+):
+    try:
+        # 1. ใช้ Query Builder ของ Supabase และ Join Role มาเลย
+        query_builder = supabase.table("Event").select(
+            "datetime, plate, province, direction, blob,"
+            "Vehicle!Event_vehicle_id_fkey(member:Member!Vehicle_member_id_fkey(role))" 
+        ).order("datetime", desc=True).limit(limit)
+
+        # 2. กรองข้อมูล
+        if start_date:
+            query_builder = query_builder.gte("datetime", f"{start_date}T00:00:00")
+        if end_date:
+            query_builder = query_builder.lte("datetime", f"{end_date}T23:59:59")
+        if direction and direction.lower() != 'all':
+            query_builder = query_builder.eq("direction", direction.upper())
+        if query:
+            query_builder = query_builder.ilike("plate", f"%{query.strip()}%")
+
+        # 3. ดึงข้อมูล
+        response = query_builder.execute()
+        
+        # 4. Map ข้อมูลที่ได้จาก DB ให้เป็น Format ที่ Frontend 
+        results = []
+        for e in response.data or []:
+            vehicle = e.get('Vehicle') or {}
+            if isinstance(vehicle, list):
+                vehicle = vehicle[0] if vehicle else {}
+            
+            role = vehicle.get("member", {}).get("role") or "Visitor"
+            
+            # Map Role ให้เป็น "บุคคลภายใน/ภายนอก"
+            check_status = "บุคคลภายนอก"
+            if role and role.lower() != "visitor": # ถ้า Role ไม่ใช่ Visitor
+                check_status = "บุคคลภายใน" 
+
+            results.append({
+                "time": e.get('datetime'), # ส่ง datetime 
+                "plate": e.get('plate') or "-",
+                "province": e.get('province'),
+                "status": e.get('direction') or "-", # Map "direction" เป็น "status"
+                "check": check_status, # Map "role" เป็น "check"
+                "imgUrl": e.get('blob') or None, #  Map "blob" เป็น "imgUrl"
+            })
+
+        return results #คืนค่าเป็น Array ที่ Map แล้ว
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching events: {str(e)}")
 
 
 # -------------------------------------------------------------
@@ -358,7 +410,7 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
-# 📢 Endpoint สำหรับ Worker (watch_folder.py) ใช้แจ้งเตือน Broadcast
+# Endpoint สำหรับ Worker (watch_folder.py) ใช้แจ้งเตือน Broadcast
 @app.post("/notify-event")
 async def notify_event(payload: dict):
     """Worker จะเรียก Endpoint นี้เพื่อบอกให้ API ทำการ Broadcast"""
@@ -517,27 +569,49 @@ async def upload_image(file: UploadFile = File(...)):
 
 # ทำเป็นไฟล์ csv
 @app.get("/export/events")
-def export_events():
-    response = supabase.table("Event").select("*").execute()
-    data = response.data or []
+def export_events(
+    # 1. 🌟 รับ Parameters จาก Frontend (ที่ส่งมาจาก onExport)
+    start: str | None = Query(None),
+    end: str | None = Query(None),
+    direction: str | None = Query(None),
+    plate: str | None = Query(None) # (Frontend ส่ง "query" มาเป็น "plate")
+):
+    try:
+        # 2.สร้าง Query Builder โดยใช้ Filter
+        query_builder = supabase.table("Event").select("*").order("datetime", desc=True)
 
-    # ให้ Excel (โดยเฉพาะบน Windows) อ่านภาษาไทยถูก: ใส่ BOM
-    output = io.StringIO(newline="")
-    output.write("\ufeff")  # UTF-8 BOM
+        if start:
+            query_builder = query_builder.gte("datetime", f"{start}T00:00:00")
+        if end:
+            query_builder = query_builder.lte("datetime", f"{end}T23:59:59")
+        if direction and direction.lower() != 'all':
+            query_builder = query_builder.eq("direction", direction.upper())
+        if plate:
+            query_builder = query_builder.ilike("plate", f"%{plate.strip()}%")
 
-    # ถ้าไม่มีข้อมูลเลย ให้ header ว่าง ๆ (หรือกำหนดคอลัมน์เอง)
-    fieldnames = list(data[0].keys()) if data else ["datetime","plate","province","direction","role","image"]
-    writer = csv.DictWriter(output, fieldnames=fieldnames)
-    writer.writeheader()
-    if data:
-        writer.writerows(data)
-    output.seek(0)
+        # 3.ดึงข้อมูล
+        response = query_builder.execute()
+        data = response.data or []
+        
+        # 4. โค้ดสร้าง CSV
+        output = io.StringIO(newline="")
+        output.write("\ufeff")  # UTF-8 BOM
 
-    return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=events.csv"}
-    )
+        fieldnames = list(data[0].keys()) if data else ["datetime","plate","province","direction","role","image"]
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        if data:
+            writer.writerows(data)
+        output.seek(0)
+
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=events_filtered.csv"} #ไว้เปลี่ยนชื่อไฟล์
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error exporting events: {str(e)}")
 
 # ====
 #  VIDEO STREAM
