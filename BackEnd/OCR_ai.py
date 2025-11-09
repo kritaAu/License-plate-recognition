@@ -10,10 +10,6 @@ print("[OCR_ai.py] OpenAI Client (OCR) โหลดสำเร็จ")
 
 
 def read_plate(img_b64: str, iso_dt: str, direction: str, cam_id: int):
-    """
-    นี่คือฟังก์ชัน OCR (AI ตัวที่ 3) ที่รับข้อมูลมา
-    แล้วส่งไปให้ GPT-4o อ่าน
-    """
 
     try:
         response = client.responses.create(

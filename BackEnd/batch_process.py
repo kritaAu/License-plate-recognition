@@ -2,7 +2,7 @@ import uvicorn
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from typing import List
 import io
-from supabase import create_client # ⬅️
+from supabase import create_client
 from PIL import Image
 import os
 from ultralytics import YOLO

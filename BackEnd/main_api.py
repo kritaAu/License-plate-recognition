@@ -5,10 +5,7 @@ from pydantic import BaseModel
 from supabase import create_client
 from dotenv import load_dotenv
 from datetime import datetime
-from datetime import date
 import os
-import uuid
-import cv2
 import io
 import csv
 from utils import upload_image_to_storage
