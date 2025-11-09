@@ -108,8 +108,30 @@ export default function Home() {
       const dir = (e.direction || "").toLowerCase();
       const status = dir === "in" ? "เข้า" : dir === "out" ? "ออก" : e.direction || "-";
       const check = (e.role || "").toLowerCase() === "staff" ? "บุคคลภายใน" : "บุคคลภายนอก";
+
+      let formattedTime = "-";
+      if (e.datetime) { // e.datetime คือ ISO string จาก API
+        try {
+          const date = new Date(e.datetime);
+          // 1. ดึงค่า Components ทั้งหมดในรูปแบบ UTC
+          const year = date.getUTCFullYear(); 
+          const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+          const day = String(date.getUTCDate()).padStart(2, '0');
+          const hours = String(date.getUTCHours()).padStart(2, '0');
+          const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+          const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+
+          // 2. ประกอบร่างเป็น "dd/mm/yyyy HH:MM:SS" (ตามเวลา UTC)
+          formattedTime = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+
+        } catch (error) {
+          formattedTime = "Invalid Date";
+        }
+      }
+      // 🌟🌟🌟 จบส่วนที่แก้ไข 🌟🌟🌟
+
       return {
-        time: formatThaiDateTime(e.datetime),
+        time: formattedTime, // 👈 ใช้เวลา UTC ที่เราเพิ่งสร้าง
         plate: `${e.plate || "-"}${e.province ? " จ." + e.province : ""}`,
         status,
         check,
@@ -117,12 +139,8 @@ export default function Home() {
         _raw: e,
       };
     });
-    setRecords(mapped);
 
-    const inCount = filtered.filter((x) => (x.direction || "").toLowerCase() === "in").length;
-    const outCount = filtered.filter((x) => (x.direction || "").toLowerCase() === "out").length;
-    const unknownCount = filtered.filter((x) => !x.plate || x.plate === "-").length;
-    setStats({ total: filtered.length, in: inCount, out: outCount, unknown: unknownCount });
+    setRecords(mapped);
   };
 
   const handleApplyFilters = () => {
