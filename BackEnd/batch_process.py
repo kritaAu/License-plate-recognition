@@ -65,8 +65,12 @@ def check_plate_in_system(plate: str, province: str):
     except Exception as e:
         print(f"[ERROR] เชื่อมต่อ API Server (/check_plate) ไม่ได้: {e}")
         return None
+    
+@app.get("/")
+def root():
+    return {"message": "FastAPI is running!"}
 
-@app.post("/process-batch/")
+@app.post("/batch")
 async def handle_flutter_batch(
     images: List[UploadFile] = File(...), 
     batch_id: str = Form(...),
