@@ -8,13 +8,12 @@ import os
 from ultralytics import YOLO
 import numpy as np
 import requests
-import time
 from datetime import datetime
 from dotenv import load_dotenv
 import base64
 import cv2
-from utils import * 
-from OCR_ai import read_plate 
+from utils import *
+from OCR_ai import read_plate
 
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -22,8 +21,9 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 print("กำลังโหลดโมเดล YOLO (License Plate)...")
 try:
-    model = YOLO("model/lpr_model.pt") 
-    print("โหลด YOLO (License Plate) สำเร็จ")
+    model_lpr = YOLO("model/lpr_model.pt")
+    model_mc = YOLO("model/motorcycle_model.pt")
+    print("โหลด YOLO สำเร็จ")
 except Exception as e:
     print(f"!!! ไม่พบโมเดล 'model/lpr_model.pt': {e}")
     exit()
@@ -33,13 +33,14 @@ try:
     print("Supabase Client (AI Server) โหลดสำเร็จ")
 except Exception as e:
     print(f"!!! ไม่สามารถเชื่อมต่อ Supabase: {e}")
-    supabase = None # (ตั้งเป็น None ถ้าล้มเหลว)
+    supabase = None
 
 API_URL_EVENT = "http://127.0.0.1:8000/events"
 API_URL_CHECK = "http://127.0.0.1:8000/check_plate"
-PAD = 10 
+PAD = 10
 
 app = FastAPI()
+
 
 def send_event(payload: dict):
     try:
@@ -48,10 +49,15 @@ def send_event(payload: dict):
         return r.json()
     except requests.HTTPError as e:
         print(f"[ERROR] API Server (/events) ปฏิเสธ: {e.response.text}")
-        raise HTTPException(status_code=502, detail=f"API Server Error: {e.response.text}")
+        raise HTTPException(
+            status_code=502, detail=f"API Server Error: {e.response.text}"
+        )
     except Exception as e:
         print(f"[ERROR] เชื่อมต่อ API Server (/events) ไม่ได้: {e}")
-        raise HTTPException(status_code=503, detail=f"Cannot connect to API Server: {e}")
+        raise HTTPException(
+            status_code=503, detail=f"Cannot connect to API Server: {e}"
+        )
+
 
 def check_plate_in_system(plate: str, province: str):
     try:
@@ -65,78 +71,95 @@ def check_plate_in_system(plate: str, province: str):
     except Exception as e:
         print(f"[ERROR] เชื่อมต่อ API Server (/check_plate) ไม่ได้: {e}")
         return None
-    
+
+
 @app.get("/")
 def root():
     return {"message": "FastAPI is running!"}
 
+
 @app.post("/batch")
 async def handle_flutter_batch(
-    images: List[UploadFile] = File(...), 
+    images: List[UploadFile] = File(...),
     batch_id: str = Form(...),
     cam_id: int = Form(...),
-    direction: str = Form(...)
+    direction: str = Form(...),
 ):
-    
+
     print(f"---Server: Batch Received ---")
     print(f"Batch ID: {batch_id}, Cam ID: {cam_id}, Direction: {direction}")
     print(f"File Count: {len(images)}")
 
     best_plate_conf = 0.0
-    best_plate_crop_np = None 
-    best_full_image_bytes = None 
+    best_plate_crop_np = None
+    best_full_image_bytes = None
     best_filename = ""
 
     for file in images:
         image_bytes = await file.read()
+        # เปลี่ยนภาพจาก byte เป็น ภาพจริงแล้วเก็บลง io หรือ
         pil_image = Image.open(io.BytesIO(image_bytes))
+        is_motorcycle = False
+        if model_mc: 
+            mc_results = model_mc(pil_image, classes=[0], verbose=False, device=0)
+            if mc_results[0].boxes and len(mc_results[0].boxes) > 0:
+                is_motorcycle = True
 
-        results = model(pil_image, classes=[0], verbose=False) 
+        if not is_motorcycle:
+            print(f"File: {file.filename}, No MC found. Skipping plate detection.")
+            continue
         
+        results = model_lpr(pil_image, classes=[0], verbose=False, device=0)
+
         current_best_conf = 0.0
         current_best_box = None
 
-        if results[0].boxes: 
+        if results[0].boxes:
             try:
                 all_confs = results[0].boxes.conf.cpu().numpy()
-                best_index_in_image = all_confs.argmax() 
+                best_index_in_image = all_confs.argmax()
                 current_best_conf = all_confs[best_index_in_image]
-                current_best_box = results[0].boxes.xyxy.cpu().numpy()[best_index_in_image]
+                current_best_box = (
+                    results[0].boxes.xyxy.cpu().numpy()[best_index_in_image]
+                )
             except Exception as e:
                 current_best_conf = 0.0
-        
+
         print(f"File: {file.filename}, Best Plate Conf: {current_best_conf:.2f}")
 
         if current_best_conf > best_plate_conf:
             best_plate_conf = current_best_conf
             best_filename = file.filename
-            best_full_image_bytes = image_bytes 
-            
+            best_full_image_bytes = image_bytes
+
             x1, y1, x2, y2 = map(int, current_best_box)
-            frame_np = np.array(pil_image) 
+            frame_np = np.array(pil_image)
             best_plate_crop_np = safe_crop(frame_np, x1, y1, x2, y2, pad=PAD)
 
     if best_plate_crop_np is None:
         print("ไม่พบป้ายทะเบียนใน Batch นี้")
-        raise HTTPException(status_code=404, detail="No license plate found in batch")
+        raise HTTPException(status_code=400, detail="No license plate found in batch")
 
-    print(f"---Best Image Found: {best_filename} (Plate Conf: {best_plate_conf:.2f}) ---")
-    
-    success, buffer = cv2.imencode('.jpg', best_plate_crop_np)
+    print(
+        f"---Best Image Found: {best_filename} (Plate Conf: {best_plate_conf:.2f}) ---"
+    )
+
+    success, buffer = cv2.imencode(".jpg", best_plate_crop_np)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to encode crop image")
-    img_b64 = base64.b64encode(buffer).decode('utf-8')
+    img_b64 = base64.b64encode(buffer).decode("utf-8")
 
     iso_dt = datetime.now().isoformat()
 
     ocr_result = read_plate(
-        img_b64=img_b64, 
-        iso_dt=iso_dt, 
-        direction=direction,
-        cam_id=cam_id
-    ) 
-    
-    if not ocr_result or ocr_result.get("plate") == "ไม่มีป้ายทะเบียน" or ocr_result.get("plate") is None:
+        img_b64=img_b64, iso_dt=iso_dt, direction=direction, cam_id=cam_id
+    )
+
+    if (
+        not ocr_result
+        or ocr_result.get("plate") == "ไม่มีป้ายทะเบียน"
+        or ocr_result.get("plate") is None
+    ):
         print(f"GPT-4o ไม่สามารถอ่านป้ายทะเบียนได้: {ocr_result}")
         raise HTTPException(status_code=400, detail="OCR (GPT-4o) failed to read plate")
 
@@ -169,13 +192,13 @@ async def handle_flutter_batch(
         "cam_id": cam_id,
         "vehicle_id": vehicle_id,
     }
-    
+
     try:
         print("กำลังส่ง Event ไปยัง API Server...")
         resp = send_event(event_payload)
         print("ส่ง Event สำเร็จ:", resp)
-        return resp 
-        
+        return resp
+
     except HTTPException as e:
         raise e
     except Exception as e:
