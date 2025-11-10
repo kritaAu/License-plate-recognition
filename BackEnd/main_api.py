@@ -260,7 +260,7 @@ def delete_member(member_id: int):
         if not old_resp.data:
             raise HTTPException(status_code=404, detail="ไม่พบสมาชิกในระบบ")
 
-        # 2. (สำคัญ) ลบ Vehicle ที่ผูกอยู่ก่อน (เพราะมี Foreign Key)
+        # 2. ลบ Vehicle ที่ผูกอยู่ก่อน (เพราะมี Foreign Key)
         supabase.table("Vehicle").delete().eq("member_id", member_id).execute()
 
         # 3. ลบ Member
@@ -381,7 +381,7 @@ async def create_event(event: EventIn):
         if not response.data:
             raise HTTPException(status_code=400, detail="เพิ่มข้อมูล Event ไม่สำเร็จ")
 
-        # 5. (สำคัญ) Broadcast event ใหม่ไปยัง Client (Frontend)
+        # 5. Broadcast event ใหม่ไปยัง Client (Frontend)
         message = f"Event ใหม่: {event.plate or 'ไม่ทราบทะเบียน'} ({direction})"
         await manager.broadcast(message)
 
@@ -481,7 +481,7 @@ def dashboard_summary(date: str | None = None):
 @app.get("/dashboard/recent")
 def dashboard_recent(limit: int = 10):
     try:
-        # 🚀 (N+1 Query Fix) Join เพื่อดึง Role มาใน Query เดียว
+        # N+1 Query Fix Join เพื่อดึง Role มาใน Query เดียว
         response = (
             supabase.table("Event")
             .select(
@@ -513,7 +513,7 @@ def dashboard_recent(limit: int = 10):
                 }
             )
 
-        # คืนค่าใน Format ที่ Frontend (Home.jsx เก่า) คาดหวัง
+        # คืนค่าใน Format ที่ Frontend
         return {"count": len(results), "data": results}
     except Exception as ex:
         raise HTTPException(
@@ -521,7 +521,7 @@ def dashboard_recent(limit: int = 10):
         )
 
 
-# (สำหรับ Frontend หน้า Home - กราฟรายวัน) ดึงสถิติรายชั่วโมง (เข้า/ออก) สำหรับวันที่ระบุ
+# สำหรับ Frontend หน้า Home - กราฟรายวัน ดึงสถิติรายชั่วโมง (เข้า/ออก) สำหรับวันที่ระบุ
 @app.get("/dashboard/daily")
 def dashboard_daily(date: str = Query(..., description="Date in YYYY-MM-DD format")):
     try:
@@ -620,7 +620,7 @@ def export_events(
 
         # 4. สร้างไฟล์ CSV ใน Memory
         output = io.StringIO(newline="")
-        output.write("\ufeff")  # (สำคัญ) UTF-8 BOM สำหรับ Excel อ่านไทย
+        output.write("\ufeff")  # UTF-8 BOM สำหรับ Excel อ่านไทย
 
         fieldnames = (
             list(data[0].keys())
