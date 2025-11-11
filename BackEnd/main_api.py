@@ -460,8 +460,8 @@ def dashboard_summary(date: str | None = None):
         events = response.data
 
         # 2. นับและสรุปผล (Aggregation ใน Python)
-        ins = [e for e in events if e["direction"] == "IN"]
-        outs = [e for e in events if e["direction"] == "OUT"]
+        ins = [e for e in events if e["direction"] == "IN"] 
+        outs = [e for e in events if e["direction"] == "OUT"] 
         unknown = [
             e for e in events if not e.get("plate") or e.get("vehicle_id") is None
         ]
@@ -470,7 +470,7 @@ def dashboard_summary(date: str | None = None):
             "date": date,
             "total_events": len(events),
             "in": len(ins),
-            "out": outs,
+            "out": len(outs),
             "unknown_or_visitor": len(unknown),
         }
     except Exception as e:
