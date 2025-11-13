@@ -5,7 +5,7 @@ import glob
 # --- 1. ตั้งค่า ---
 
 # (นี่คือ URL ของ "นักสืบ" - ที่รันบน Port 8000)
-SERVER_URL = "http://127.0.0.1:8001/process-batch/"
+SERVER_URL = "http://127.0.0.1:8001/batch/"
 IMAGE_DIR = "detect_motor"  # (โฟลเดอร์ที่เราเพิ่งสร้าง)
 
 # --- 2. เตรียมข้อมูล (จำลอง Flutter) ---
@@ -45,7 +45,7 @@ try:
 
     # --- 3. ยิง API (POST Request) ---
     response = requests.post(
-        SERVER_URL, data=payload, files=files_to_send  # (ส่ง Text)  # (ส่ง Files)
+        SERVER_URL, data=payload, files=files_to_send
     )
 
     # --- 4. แสดงผลลัพธ์ ---

@@ -94,97 +94,85 @@ async def handle_flutter_batch(
     best_plate_crop_np = None
     best_full_image_bytes = None
     best_filename = ""
+    best_frame_np = None
+    first_image_bytes = None
 
-    for file in images:
+    for i,file in enumerate(images):
         image_bytes = await file.read()
-        # เปลี่ยนภาพจาก byte เป็น ภาพจริงแล้วเก็บลง io หรือ
+        if i == 0:
+            first_image_bytes = image_bytes
         pil_image = Image.open(io.BytesIO(image_bytes))
-        is_motorcycle = False
-        if model_mc: 
-            mc_results = model_mc(pil_image, classes=[0], verbose=False, device=0)
+        frame_np = np.array(pil_image)
+        plate_candidates = []
+
+        if model_mc:
+            mc_results = model_mc(pil_image, classes=[3], verbose=False, device=0)
             if mc_results[0].boxes and len(mc_results[0].boxes) > 0:
-                is_motorcycle = True
+                for box in mc_results[0].boxes.xyxy.cpu().numpy():
+                    x1, y1, x2, y2 = map(int, box)
+                    plate_candidates.append(safe_crop(frame_np, x1, y1, x2, y2, pad=PAD))
 
-        if not is_motorcycle:
-            print(f"File: {file.filename}, No MC found. Skipping plate detection.")
-            continue
-        
-        results = model_lpr(pil_image, classes=[0], verbose=False, device=0)
+        # fallback ตรวจป้ายเต็มภาพ
+        if not plate_candidates:
+            plate_candidates.append(frame_np)
 
-        current_best_conf = 0.0
-        current_best_box = None
+        # ตรวจป้ายทุก candidate
+        for candidate in plate_candidates:
+            results = model_lpr(Image.fromarray(candidate), classes=[0], verbose=False)
+            if results[0].boxes:
+                try:
+                    confs = results[0].boxes.conf.cpu().numpy()
+                    boxes = results[0].boxes.xyxy.cpu().numpy()
+                    best_idx = confs.argmax()
+                    conf, box = confs[best_idx], boxes[best_idx]
 
-        if results[0].boxes:
-            try:
-                all_confs = results[0].boxes.conf.cpu().numpy()
-                best_index_in_image = all_confs.argmax()
-                current_best_conf = all_confs[best_index_in_image]
-                current_best_box = (
-                    results[0].boxes.xyxy.cpu().numpy()[best_index_in_image]
-                )
-            except Exception as e:
-                current_best_conf = 0.0
+                    if conf > best_plate_conf:
+                        best_plate_conf = conf
+                        best_plate_crop_np = safe_crop(candidate, *map(int, box), pad=PAD)
+                        best_full_image_bytes = image_bytes
+                        best_frame_np = candidate
+                        best_filename = file.filename
+                except Exception:
+                    continue
 
-        print(f"File: {file.filename}, Best Plate Conf: {current_best_conf:.2f}")
-
-        if current_best_conf > best_plate_conf:
-            best_plate_conf = current_best_conf
-            best_filename = file.filename
-            best_full_image_bytes = image_bytes
-
-            x1, y1, x2, y2 = map(int, current_best_box)
-            frame_np = np.array(pil_image)
-            best_plate_crop_np = safe_crop(frame_np, x1, y1, x2, y2, pad=PAD)
-
+    if best_plate_crop_np is not None:
+        print(f"Best file: {best_filename}")
+        print(f"Best frame shape: {best_frame_np.shape}")                
+    # หลังวนครบ batch
     if best_plate_crop_np is None:
         print("ไม่พบป้ายทะเบียนใน Batch นี้")
-        raise HTTPException(status_code=400, detail="No license plate found in batch")
+        image_to_upload = first_image_bytes or await images[0].read()
+        try:
+            image_url = upload_image_to_storage(image_to_upload, ext="jpg", folder="plates")
+        except Exception:
+            image_url = None
 
-    print(
-        f"---Best Image Found: {best_filename} (Plate Conf: {best_plate_conf:.2f}) ---"
-    )
+        event_payload = {
+            "datetime": datetime.now().isoformat(),
+            "plate": "ไม่มีป้ายทะเบียน",
+            "province": None,
+            "direction": direction,
+            "blob": image_url,
+            "cam_id": cam_id,
+            "vehicle_id": None,
+        }
+        return send_event(event_payload)
 
-    success, buffer = cv2.imencode(".jpg", best_plate_crop_np)
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to encode crop image")
+    # ถ้าเจอป้าย
+    _, buffer = cv2.imencode(".jpg", best_plate_crop_np)
     img_b64 = base64.b64encode(buffer).decode("utf-8")
-
-    iso_dt = datetime.now().isoformat()
-
-    ocr_result = read_plate(
-        img_b64=img_b64, iso_dt=iso_dt, direction=direction, cam_id=cam_id
-    )
-
-    if (
-        not ocr_result
-        or ocr_result.get("plate") == "ไม่มีป้ายทะเบียน"
-        or ocr_result.get("plate") is None
-    ):
-        print(f"GPT-4o ไม่สามารถอ่านป้ายทะเบียนได้: {ocr_result}")
-        raise HTTPException(status_code=400, detail="OCR (GPT-4o) failed to read plate")
-
-    plate_text = ocr_result["plate"]
-    province_text = ocr_result.get("province")
-    print(f"Result: {plate_text} | {province_text} ---")
+    ocr_result = read_plate(img_b64=img_b64)
+    plate_text = ocr_result.get("plate", None)
+    province_text = ocr_result.get("province", None)
 
     try:
-        image_url = upload_image_to_storage(
-            best_full_image_bytes, ext="jpg", folder="plates"
-        )
-        print(f"อัปโหลดรูปขึ้น Storage สำเร็จ: {image_url}")
-    except Exception as e:
-        print(f"อัปโหลดรูปขึ้น Storage ล้มเหลว: {e}")
+        image_url = upload_image_to_storage(best_full_image_bytes, ext="jpg", folder="plates")
+    except Exception:
         image_url = None
 
-    print(f"กำลังเช็คป้าย: {plate_text} {province_text}")
     vehicle_id = check_plate_in_system(plate_text, province_text)
-    if vehicle_id:
-        print(f"พบป้ายในระบบ: ID = {vehicle_id}")
-    else:
-        print("ไม่พบป้ายในระบบ (Visitor)")
-
     event_payload = {
-        "datetime": iso_dt,
+        "datetime": datetime.now().isoformat(),
         "plate": plate_text,
         "province": province_text,
         "direction": direction,
@@ -192,19 +180,7 @@ async def handle_flutter_batch(
         "cam_id": cam_id,
         "vehicle_id": vehicle_id,
     }
-
-    try:
-        print("กำลังส่ง Event ไปยัง API Server...")
-        resp = send_event(event_payload)
-        print("ส่ง Event สำเร็จ:", resp)
-        return resp
-
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        print("Error:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return send_event(event_payload)
 
 if __name__ == "__main__":
     print("http://0.0.0.0:8001")

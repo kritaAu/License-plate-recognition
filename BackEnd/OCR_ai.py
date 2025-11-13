@@ -9,7 +9,7 @@ client = OpenAI()
 print("[OCR_ai.py] OpenAI Client (OCR) โหลดสำเร็จ")
 
 
-def read_plate(img_b64: str, iso_dt: str, direction: str, cam_id: int):
+def read_plate(img_b64: str):
 
     try:
         response = client.responses.create(
@@ -35,14 +35,11 @@ def read_plate(img_b64: str, iso_dt: str, direction: str, cam_id: int):
                         - ห้ามเดาหรือเติมจังหวัดถ้าไม่เห็นชัด
                         - ออกผลเป็น JSON เท่านั้น
                         - ค่า plate = plate_top ต่อด้วย plate_bottom (ถ้าไม่มีบรรทัดล่าง ให้ใช้เฉพาะ plate_top)
-                        -ถ้าไม่มีป้ายทะเบียนหรือภาพอะไรไม่รู้ให้plate เป็น "ไม่มีป้ายทะเบียน" province เป็น Null ยกเว้น time,direction,camera จะต้องมีเสมอ
+                        -ถ้าไม่มีป้ายทะเบียนหรือภาพอะไรไม่รู้ให้plate เป็น "ไม่มีป้ายทะเบียน" province เป็น Null
                         Output JSON:
                         {
                         "plate": "<plate_top(+plate_bottom)>",
-                        "province": "<provinceหรือเว้นว่างถ้าไม่เห็น>",
-                        "time":"<datetime จากไฟล์>"
-                        "direction":"<IN or OUT>"
-                        "camera":<number>
+                        "province": "<provinceหรือเว้นว่างถ้าไม่เห็น>"
                         }
                         """
                     ),
@@ -52,12 +49,12 @@ def read_plate(img_b64: str, iso_dt: str, direction: str, cam_id: int):
                     "content": [
                         {
                             "type": "input_text",
-                            "text": f'อ่านป้ายทะเบียนแล้ว output เป็น JSON โดยให้ datetime = "{iso_dt}" และ direction = "{direction}"และ Camera = "{cam_id}"',
+                            "text": f'อ่านป้ายทะเบียนแล้ว output เป็น format JSON ',
                         },
                         {
                             "type": "input_image",
                             "image_url": f"data:image/jpeg;base64,{img_b64}",
-                            "detail": "low",
+                            "detail": "high",
                         },
                     ],
                 },
@@ -75,18 +72,12 @@ def read_plate(img_b64: str, iso_dt: str, direction: str, cam_id: int):
         except Exception as e:
             print(f"[ERROR OCR] {e}")
             return {
-                "time": iso_dt,
                 "plate": "ไม่มีป้ายทะเบียน",
                 "province": None,
-                "direction": direction,
-                "camera": cam_id,
             }
     except Exception as e:
         print(f"[ERROR OCR] {e}")
         return {
-            "time": iso_dt,
             "plate": "ไม่มีป้ายทะเบียน",
-            "province": None,
-            "direction": direction,
-            "camera": cam_id,
+            "province": None
         }
