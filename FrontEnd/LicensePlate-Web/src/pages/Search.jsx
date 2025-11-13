@@ -1,99 +1,107 @@
 // src/pages/Search.jsx (ฉบับแก้ไขที่สมบูรณ์)
-import { useEffect, useState, useCallback } from "react";
-import Filters from "../components/Filters"; 
+import { useEffect, useState } from "react";
+import Filters from "../components/Filters";
 import RecordsTable from "../components/RecordsTable";
 import { formatThaiDateTime } from "../utils/date";
 import { downloadCsv } from "../utils/downloadCsv";
 
-const API = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+const API_BASE = (import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
-// 🌟 Helper function ใหม่สำหรับเรียก API /events
+// แปลงทิศทางเป็นภาษาไทย
+const toThaiDirection = (v) => {
+  const s = String(v || "").toUpperCase();
+  if (s === "IN") return "เข้า";
+  if (s === "OUT") return "ออก";
+  if (s === "UNKNOWN") return "ไม่ทราบ";
+  return s || "-";
+};
+
+// ดึงเหตุการณ์ตามฟิลเตอร์
 const fetchFilteredEvents = async (currentFilters) => {
-  // 1. สร้าง Query Parameters
   const params = new URLSearchParams({
     start_date: currentFilters.start || "",
     end_date: currentFilters.end || "",
     direction: currentFilters.direction || "all",
     query: currentFilters.query || "",
-    limit: 5000, 
+    limit: 5000,
   });
 
   try {
-    const response = await fetch(`${API}/events?${params.toString()}`);
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.statusText}`);
-    }
-    
-    const eventsList = await response.json(); // API คืนค่า Array ที่ Map แล้ว
+    const res = await fetch(`${API_BASE}/events?${params.toString()}`);
+    if (!res.ok) throw new Error(`API Error: ${res.status} ${res.statusText}`);
 
-    // 2. Map ข้อมูลที่ได้จาก API (เฉพาะเวลา)
-    const mappedRecords = eventsList.map(e => ({
-        ...e, // ใช้ข้อมูลที่ Map แล้วจาก API (plate, province, status, check, imgUrl)
-        time: formatThaiDateTime(e.time), // แปลงเวลาเป็น String
-    }));
-    return mappedRecords;
+    // backend ส่ง array ที่แมปแล้ว: { time, plate, province, status, check, imgUrl }
+    const list = await res.json();
 
-  } catch (error) {
-    console.error("Failed to fetch events:", error);
-    return []; 
+    // แปลงเวลา + ทิศทางเป็นไทย (คงค่าเดิมไว้ใน statusCode เผื่อคอมโพเนนต์อื่นใช้งาน)
+    return list.map((e) => {
+      const statusCode = e.status; // EN: IN/OUT/UNKNOWN (จาก backend)
+      return {
+        ...e,
+        time: formatThaiDateTime(e.time),
+        statusCode,
+        status: toThaiDirection(statusCode), // ใช้ค่านี้แสดงผลในตาราง
+      };
+    });
+  } catch (err) {
+    console.error("Failed to fetch events:", err);
+    return [];
   }
 };
 
 export default function Search() {
   const [filters, setFilters] = useState({
-    // 🌟🌟🌟 แก้ไขจุดนี้ 🌟🌟🌟
-    start: "", // เริ่มต้นเป็นค่าว่าง
-    end: "",   // เริ่มต้นเป็นค่าว่าง
-    // 🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟🌟
+    start: "",   // เริ่มต้นค่าว่าง
+    end: "",     // เริ่มต้นค่าว่าง
     direction: "all",
     query: "",
   });
 
   const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true); 
+  const [loading, setLoading] = useState(true);
 
-  // 🌟 โหลดข้อมูลครั้งแรก (จะใช้ filter ที่เป็นค่าว่าง)
+  // โหลดครั้งแรก
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const mappedRecords = await fetchFilteredEvents(filters); 
-      setRecords(mappedRecords);
+      const data = await fetchFilteredEvents(filters);
+      setRecords(data);
       setLoading(false);
     })();
-  }, []); // 🌟 ให้ทำงานแค่ครั้งเดียวตอนเปิดหน้า
+  }, []); // ทำงานครั้งเดียว
 
-  // 🌟 กด “ใช้ฟิลเตอร์” -> เรียก API ใหม่ (เหมือนเดิม)
+  // กด “ใช้ฟิลเตอร์”
   const onApply = async () => {
     setLoading(true);
-    const mappedRecords = await fetchFilteredEvents(filters);
-    setRecords(mappedRecords);
+    const data = await fetchFilteredEvents(filters);
+    setRecords(data);
     setLoading(false);
   };
 
-  // 🌟 กด “ล้างฟิลเตอร์” -> เรียก API ใหม่ (เหมือนเดิม)
+  // กด “ล้างฟิลเตอร์”
   const onReset = async () => {
     setLoading(true);
     const f = { start: "", end: "", direction: "all", query: "" };
     setFilters(f);
-    const mappedRecords = await fetchFilteredEvents(f); 
-    setRecords(mappedRecords);
+    const data = await fetchFilteredEvents(f);
+    setRecords(data);
     setLoading(false);
   };
 
-  // 🌟 กด “Export CSV” (เหมือนเดิม)
+  // Export CSV
   const onExport = async () => {
     const params = new URLSearchParams({
       start: filters.start || "",
       end: filters.end || "",
       direction: filters.direction !== "all" ? filters.direction : "",
-      plate: filters.query || "", 
+      plate: filters.query || "",
     });
-    await downloadCsv(`${API}/export/events?${params.toString()}`);
+    await downloadCsv(`${API_BASE}/export/events?${params.toString()}`);
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-6">
-      {/* 🌟 ใช้ Component Filters.jsx (ที่คุณอัปโหลด) */}
+    <div className="max-w-7xl mx-auto px-6 py-6 bg-gradient-to-tr from-white to-blue-400">
+      {/* แผงฟิลเตอร์ */}
       <div className="bg-slate-200/60 rounded-xl p-6">
         <Filters
           filters={filters}
@@ -108,22 +116,16 @@ export default function Search() {
       <section className="mt-6 bg-white rounded-2xl border border-slate-100 shadow p-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold">รายการล่าสุด</h3>
-          <span className="text-sm text-slate-600">
-            Items {records.length} items
-          </span>
+          <span className="text-sm text-slate-600">Items {records.length} items</span>
         </div>
 
-        <RecordsTable records={records} />
+        <RecordsTable records={records} pageSize={10} />
 
         {loading && (
-          <div className="py-6 text-center text-sm text-slate-600">
-            กำลังโหลด...
-          </div>
+          <div className="py-6 text-center text-sm text-slate-600">กำลังโหลด...</div>
         )}
-         {!loading && records.length === 0 && (
-          <div className="py-6 text-center text-sm text-slate-600">
-            ไม่พบข้อมูล
-          </div>
+        {!loading && records.length === 0 && (
+          <div className="py-6 text-center text-sm text-slate-600">ไม่พบข้อมูล</div>
         )}
       </section>
     </div>

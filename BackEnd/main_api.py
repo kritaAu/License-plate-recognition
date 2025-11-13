@@ -9,7 +9,8 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
+from typing import Optional, Union, Literal
 from supabase import create_client
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
@@ -63,11 +64,38 @@ class EventIn(BaseModel):
 class MemberCreate(BaseModel):
     firstname: str
     lastname: str
-    std_id: int
-    faculty: str
-    major: str
-    role: str
+    std_id: Optional[Union[int, str]] = None
+    faculty: Optional[str] = None
+    major: Optional[str] = None
+    role: Literal["นักศึกษา", "อาจารย์", "เจ้าหน้าที่", "อื่น ๆ", "อื่นๆ"] = "นักศึกษา"
+  # แปลง std_id ที่เป็นสตริงตัวเลขให้เป็น int อัตโนมัติ
+    @field_validator("std_id")
+    @classmethod
+    def normalize_std_id(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, str) and v.isdigit():
+            return int(v)
+        return v
 
+    # บังคับเงื่อนไขตาม role
+    @model_validator(mode="after")
+    def validate_by_role(self):
+        if self.role == "นักศึกษา":
+            # นักศึกษา ต้องมี std_id และ (ถ้าต้องการ) major
+            if self.std_id is None or str(self.std_id) == "":
+                raise ValueError("std_id is required for role นักศึกษา")
+            # ถ้าต้องการให้ 'major' บังคับด้วย ให้ปลดคอมเมนต์บรรทัดถัดไป
+            # if not (self.major and self.major.strip()):
+            #     raise ValueError("major is required for role นักศึกษา")
+        elif self.role == "อาจารย์":
+            self.std_id = None
+            self.major = None
+        elif self.role == "เจ้าหน้าที่":
+            self.std_id = None
+            self.faculty = None
+            self.major = None
+        return self
 
 # Model กำหนดโครงสร้างข้อมูล Vehicle สำหรับการสร้างรถใหม่
 class VehicleCreate(BaseModel):
@@ -190,11 +218,11 @@ def get_members(
 
 # Endpoint ลงทะเบียนสมาชิกใหม่ พร้อมกับรถ 1 คัน
 @app.post("/members/register")
-@app.post("/register")  # รองรับ Path เก่า
+@app.post("/register")
 def register_member_with_vehicle(payload: RegisterRequest):
     try:
-        # เพิ่มข้อมูล Member
-        m_in = payload.member.model_dump()
+        # member
+        m_in = payload.member.model_dump(exclude_none=True)
 
         sid = m_in.get("std_id")
         if isinstance(sid, str) and sid.isdigit():
@@ -207,21 +235,16 @@ def register_member_with_vehicle(payload: RegisterRequest):
         member = m_res.data[0]
         member_id = member["member_id"]
 
-        # เพิ่มข้อมูล Vehicle
-        v_in = payload.vehicle.model_dump()
+        # vehicle
+        v_in = payload.vehicle.model_dump(exclude_none=True)
         v_in["member_id"] = member_id
         v_res = supabase.table("Vehicle").insert(v_in).execute()
 
-        # Rollback ถ้าเพิ่ม Vehicle ไม่สำเร็จ ให้ลบ Member ทิ้ง
         if not v_res.data:
             supabase.table("Member").delete().eq("member_id", member_id).execute()
-            raise HTTPException(
-                status_code=400, detail="เพิ่มข้อมูลรถไม่สำเร็จ (Member ถูก Rollback)"
-            )
+            raise HTTPException(status_code=400, detail="เพิ่มข้อมูลรถไม่สำเร็จ (Member ถูก Rollback)")
 
         vehicle = v_res.data[0]
-
-        # คืนค่าข้อมูลสรุป
         row = {
             "member_id": member_id,
             "std_id": member.get("std_id"),
@@ -231,7 +254,6 @@ def register_member_with_vehicle(payload: RegisterRequest):
             "province": vehicle.get("province"),
         }
         return {"message": "เพิ่มข้อมูลสมาชิกและรถเรียบร้อยแล้ว", "row": row}
-
     except HTTPException:
         raise
     except Exception as e:
@@ -302,6 +324,26 @@ def delete_member(member_id: int):
 # ROUTES: EVENTS (จัดการเหตุการณ์)
 # =====
 # Endpoint หน้า Search/Home ดึงข้อมูล Event ทั้งหมด รองรับการกรอง (Filter) ตามวันที่, ทิศทาง, และป้ายทะเบียน
+# หา role จากป้าย/จังหวัด กรณี event ไม่มี vehicle_id หรือ JOIN ไม่เจอ
+def _role_from_plate_province(plate: str | None, province: str | None):
+    if not plate or not province:
+        return None
+    try:
+        res = (
+            supabase.table("Vehicle")
+            .select("member:Member!Vehicle_member_id_fkey(role)")
+            .ilike("plate", str(plate).strip())
+            .ilike("province", str(province).strip())
+            .limit(1)
+            .execute()
+        )
+        if res.data:
+            member = (res.data[0].get("member") or {})
+            return member.get("role")
+    except Exception:
+        pass
+    return None
+
 @app.get("/events")
 def get_events(
     limit: int = Query(1000, ge=1),
@@ -311,73 +353,89 @@ def get_events(
     query: str | None = Query(None, description="Plate query"),
 ):
     try:
-        # สร้าง Query Builder และ Join Role มาเลย (แก้ N+1 Query)
-        query_builder = (
+        qb = (
             supabase.table("Event")
             .select(
-                "datetime, plate, province, direction, blob,"
+                "datetime, plate, province, direction, blob, vehicle_id,"
                 "Vehicle!Event_vehicle_id_fkey(member:Member!Vehicle_member_id_fkey(role))"
             )
             .order("datetime", desc=True)
             .limit(limit)
         )
 
-        # กรองข้อมูล (Filtering)
+        # Filters
         if start_date:
-            query_builder = query_builder.gte("datetime", f"{start_date}T00:00:00")
+            qb = qb.gte("datetime", f"{start_date}T00:00:00")
         if end_date:
-            query_builder = query_builder.lte("datetime", f"{end_date}T23:59:59")
+            qb = qb.lte("datetime", f"{end_date}T23:59:59")
         if direction and direction.lower() != "all":
-            query_builder = query_builder.eq("direction", direction.upper())
+            qb = qb.eq("direction", direction.upper())
         if query:
-            query_builder = query_builder.ilike("plate", f"%{query.strip()}%")
+            qb = qb.ilike("plate", f"%{query.strip()}%")
 
-        # ดึงข้อมูล
-        response = query_builder.execute()
+        resp = qb.execute()
 
-        # Map ข้อมูลให้เป็น Format ที่ Frontend (RecordsTable) ต้องการ
+        # แผนที่ทิศทาง -> ไทย
+        dir_th = {"IN": "เข้า", "OUT": "ออก"}
+
         results = []
-        for e in response.data or []:
+        for e in (resp.data or []):
+            # ดึง role จาก join ก่อน
             vehicle = e.get("Vehicle") or {}
             if isinstance(vehicle, list):
                 vehicle = vehicle[0] if vehicle else {}
+            member_obj = vehicle.get("member") or {}
+            if isinstance(member_obj, list):
+                member_obj = member_obj[0] if member_obj else {}
+            role = member_obj.get("role")
 
-            role = vehicle.get("member", {}).get("role") or "Visitor"
+            # ถ้ายังไม่ได้ role (เช่น event เก่าที่ไม่มี vehicle_id) → fallback หาโดย plate+province
+            if not role:
+                role = _role_from_plate_province(e.get("plate"), e.get("province"))
 
-            check_status = "บุคคลภายนอก"
-            if role and role.lower() != "visitor":
-                check_status = "บุคคลภายใน"
+            check_status = "บุคคลภายนอก" if not role or str(role).lower() == "visitor" else "บุคคลภายใน"
+
+            direction_en = (e.get("direction") or "").upper()
+            direction_th = dir_th.get(direction_en, "ไม่ทราบ")
 
             results.append(
                 {
                     "time": e.get("datetime"),
                     "plate": e.get("plate") or "-",
-                    "province": e.get("province"),
-                    "status": e.get("direction") or "-",  # Map -> status
-                    "check": check_status,  # Map -> check
-                    "imgUrl": e.get("blob") or None,  # Map -> imgUrl
+                    "province": e.get("province") or "-",
+                    "status": direction_th,      # ทิศทางเป็นไทย
+                    "check": check_status,       # คนใน/คนนอก
+                    "imgUrl": e.get("blob") or None,
                 }
             )
 
-        return results  # คืนค่าเป็น Array ที่ Map แล้ว
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching events: {str(e)}")
+        return results
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=f"Error fetching events: {str(ex)}")
+
 
 
 # Endpoint สำหรับ batch_process สร้าง Event ใหม่, บันทึกลง DB, และ Broadcast ไปยัง WebSocket
 @app.post("/events")
 async def create_event(event: EventIn):
     try:
-        vehicle_data = None
+        # --- Normalize ค่าที่เข้ามา ---
+        plate_raw = (event.plate or "").strip()
+        prov_raw  = (event.province or "").strip()
+        p_can     = _canon_plate(plate_raw)
+        prov_can  = _canon_text(prov_raw)
 
-        # ตรวจสอบ Vehicle ในระบบ
-        if event.plate and event.province:
-            vehicle_check = (
+        # --- ตรวจสอบ Vehicle ในระบบ (แบบ normalize) ---
+        vehicle_data = None
+        if p_can and prov_can:
+            guess = (
                 supabase.table("Vehicle")
                 .select("vehicle_id, plate, province, member_id")
-                .eq("plate", event.plate)
-                .eq("province", event.province)
+                .ilike("plate",    f"%{plate_raw}%")   # กรองหยาบ
+                .ilike("province", f"%{prov_raw}%")
+                .limit(20)
                 .execute()
+            
             )
             if vehicle_check.data:
                 vehicle_data = vehicle_check.data[0]
@@ -523,8 +581,14 @@ def dashboard_recent(limit: int = 10):
             if isinstance(vehicle, list):
                 vehicle = vehicle[0] if vehicle else {}
 
-            role = vehicle.get("member", {}).get("role") or "Visitor"
-            image_url = e.get("blob") or None
+            # 1) ลองอ่าน role จาก JOIN (vehicle_id)
+            role = (vehicle.get("member") or {}).get("role")
+
+            # 2) ถ้าไม่พบ (เช่น vehicle_id ว่าง) → หา role จากป้าย/จังหวัด
+            if not role:
+                role = _role_from_plate_province(e.get("plate"), e.get("province"))
+
+            role = role or "Visitor"  # fallback สุดท้าย
 
             results.append(
                 {
@@ -533,7 +597,7 @@ def dashboard_recent(limit: int = 10):
                     "province": e.get("province") or "-",
                     "direction": e.get("direction") or "-",
                     "role": role,
-                    "image": image_url,
+                    "image": e.get("blob") or None,
                 }
             )
 
@@ -542,6 +606,7 @@ def dashboard_recent(limit: int = 10):
         raise HTTPException(
             status_code=500, detail=f"Error in dashboard_recent: {str(ex)}"
         )
+
 
 
 # Endpoint หน้า Home - กราฟรายวัน ดึงสถิติรายชั่วโมง (เข้า/ออก) สำหรับวันที่ระบุ

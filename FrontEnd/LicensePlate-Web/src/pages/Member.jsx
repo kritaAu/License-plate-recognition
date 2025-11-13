@@ -2,10 +2,14 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   getMembers,
-  updateMember,         // ใช้กับปุ่มแก้ไข
+  updateMember,
   deleteMember,
   registerMemberWithVehicle,
 } from "../services/searchApi";
+
+/* ---------------- Utils เล็กๆ ---------------- */
+const trimOrEmpty = (v) => (typeof v === "string" ? v.trim() : v);
+const isDigits = (s) => /^\d+$/.test(String(s || ""));
 
 /* ---------------- Modal: เพิ่ม/ลงทะเบียน ---------------- */
 function AddMemberModal({ open, onClose, onSaved }) {
@@ -44,18 +48,22 @@ function AddMemberModal({ open, onClose, onSaved }) {
 
   if (!open) return null;
 
+  const isLecturer = member.role === "อาจารย์";
+  const isStaff = member.role === "เจ้าหน้าที่";
+  const isStudent = !isLecturer && !isStaff;
+
   const plate = `${(plateLetters || "").trim()} ${(plateNumbers || "").trim()}`.trim();
 
   const submit = async (e) => {
     e.preventDefault();
     if (submitting) return;
 
-    // ตรวจข้อมูล
-    if (!member.firstname?.trim() || !member.lastname?.trim() || !String(member.std_id).trim()) {
-      alert("กรอกชื่อ-นามสกุล และรหัสนักศึกษาให้ครบด้วยนะ");
+    // ตรวจข้อมูลพื้นฐาน
+    if (!trimOrEmpty(member.firstname) || !trimOrEmpty(member.lastname)) {
+      alert("กรอกชื่อ-นามสกุลให้ครบด้วยนะ");
       return;
     }
-    if (!plate || !province?.trim()) {
+    if (!plate || !trimOrEmpty(province)) {
       alert("กรอกทะเบียนรถและจังหวัดให้ครบด้วยนะ");
       return;
     }
@@ -64,30 +72,57 @@ function AddMemberModal({ open, onClose, onSaved }) {
       return;
     }
 
-    const std_id = /^\d+$/.test(String(member.std_id))
-      ? Number(member.std_id)
-      : member.std_id;
+    // เฉพาะนักศึกษา ต้องมี std_id และ major
+    if (isStudent) {
+      if (!String(member.std_id).trim()) {
+        alert("กรอกรหัสนักศึกษาด้วยนะ");
+        return;
+      }
+      if (!String(member.major).trim()) {
+        alert("กรอกสาขาด้วยนะ");
+        return;
+      }
+    }
+
+    // -------- payload แบบ NESTED ตามที่แบ็กเอนด์คาด --------
+    const memberPayload = {
+      firstname: trimOrEmpty(member.firstname),
+      lastname: trimOrEmpty(member.lastname),
+      role: member.role,
+      // นักศึกษา → ใส่ std_id/major และ faculty (ถ้ามี)
+      ...(isStudent && {
+        std_id: isDigits(member.std_id)
+          ? Number(String(member.std_id).trim())
+          : String(member.std_id).trim(),
+        major: String(member.major).trim(),
+        ...(member.faculty?.trim() ? { faculty: member.faculty.trim() } : {}),
+      }),
+      // อาจารย์ → ใส่ faculty ได้ (ไม่ต้อง std_id/major)
+      ...(isLecturer &&
+        (member.faculty?.trim() ? { faculty: member.faculty.trim() } : {})),
+      // เจ้าหน้าที่ → ไม่ส่ง std_id/faculty/major
+    };
+
+    // ตัดคีย์ค่าว่าง/undefined ออก
+    Object.keys(memberPayload).forEach((k) => {
+      const v = memberPayload[k];
+      if (v === "" || v == null) delete memberPayload[k];
+    });
 
     const payload = {
-      member: {
-        firstname: member.firstname.trim(),
-        lastname: member.lastname.trim(),
-        std_id,
-        faculty: member.faculty?.trim() || "",
-        major: member.major?.trim() || "",
-        role: member.role || "นักศึกษา",
-      },
+      member: memberPayload,
       vehicle: {
         plate,
         province: province.trim(),
       },
     };
+    // --------------------------------------------------------
 
     try {
       setSubmitting(true);
-      await registerMemberWithVehicle(payload); // POST /register
-      onSaved?.();   // reload ตารางหน้า Member
-      onClose();     // ปิด modal
+      await registerMemberWithVehicle(payload); // ส่งแบบ nested
+      onSaved?.(); // reload ตารางหน้า Member
+      onClose(); // ปิด modal
     } catch (err) {
       alert(err.message || "บันทึกไม่สำเร็จ");
     } finally {
@@ -105,22 +140,31 @@ function AddMemberModal({ open, onClose, onSaved }) {
           <form onSubmit={submit} className="space-y-5">
             {/* แถว 1 */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div>
-                <label className="mb-1 block text-sm text-gray-600">เลขทะเบียนนักศึกษา</label>
-                <input
-                  className="w-full rounded-lg border px-3 py-2"
-                  placeholder="เช่น 2310xxxxxx"
-                  value={member.std_id}
-                  onChange={(e) => setMember((s) => ({ ...s, std_id: e.target.value }))}
-                  required
-                />
-              </div>
+              {/* std_id เฉพาะนักศึกษา */}
+              {isStudent && (
+                <div>
+                  <label className="mb-1 block text-sm text-gray-600">
+                    เลขทะเบียนนักศึกษา
+                  </label>
+                  <input
+                    className="w-full rounded-lg border px-3 py-2"
+                    placeholder="เช่น 2310xxxxxx"
+                    value={member.std_id}
+                    onChange={(e) =>
+                      setMember((s) => ({ ...s, std_id: e.target.value }))
+                    }
+                    required
+                  />
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm text-gray-600">ชื่อ</label>
                 <input
                   className="w-full rounded-lg border px-3 py-2"
                   value={member.firstname}
-                  onChange={(e) => setMember((s) => ({ ...s, firstname: e.target.value }))}
+                  onChange={(e) =>
+                    setMember((s) => ({ ...s, firstname: e.target.value }))
+                  }
                   required
                 />
               </div>
@@ -129,7 +173,9 @@ function AddMemberModal({ open, onClose, onSaved }) {
                 <input
                   className="w-full rounded-lg border px-3 py-2"
                   value={member.lastname}
-                  onChange={(e) => setMember((s) => ({ ...s, lastname: e.target.value }))}
+                  onChange={(e) =>
+                    setMember((s) => ({ ...s, lastname: e.target.value }))
+                  }
                   required
                 />
               </div>
@@ -137,33 +183,54 @@ function AddMemberModal({ open, onClose, onSaved }) {
 
             {/* แถว 2 */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div>
-                <label className="mb-1 block text-sm text-gray-600">คณะ</label>
-                <input
-                  className="w-full rounded-lg border px-3 py-2"
-                  value={member.faculty}
-                  onChange={(e) => setMember((s) => ({ ...s, faculty: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm text-gray-600">สาขา</label>
-                <input
-                  className="w-full rounded-lg border px-3 py-2"
-                  value={member.major}
-                  onChange={(e) => setMember((s) => ({ ...s, major: e.target.value }))}
-                />
-              </div>
+              {/* คณะ: ซ่อนเมื่อเจ้าหน้าที่ */}
+              {!isStaff && (
+                <div>
+                  <label className="mb-1 block text-sm text-gray-600">คณะ</label>
+                  <input
+                    className="w-full rounded-lg border px-3 py-2"
+                    value={member.faculty}
+                    onChange={(e) =>
+                      setMember((s) => ({ ...s, faculty: e.target.value }))
+                    }
+                  />
+                </div>
+              )}
+              {/* สาขา: เฉพาะนักศึกษา (required) */}
+              {isStudent && (
+                <div>
+                  <label className="mb-1 block text-sm text-gray-600">สาขา</label>
+                  <input
+                    className="w-full rounded-lg border px-3 py-2"
+                    value={member.major}
+                    onChange={(e) =>
+                      setMember((s) => ({ ...s, major: e.target.value }))
+                    }
+                    required
+                  />
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm text-gray-600">ตำแหน่ง</label>
                 <select
                   className="w-full rounded-lg border bg-white px-3 py-2"
                   value={member.role}
-                  onChange={(e) => setMember((s) => ({ ...s, role: e.target.value }))}
+                  onChange={(e) => {
+                    const role = e.target.value;
+                    setMember((s) => ({
+                      ...s,
+                      role,
+                      // เปลี่ยนเป็น อาจารย์/เจ้าหน้าที่ -> ล้าง std_id/major
+                      std_id: role === "อาจารย์" || role === "เจ้าหน้าที่" ? "" : s.std_id,
+                      major: role === "อาจารย์" || role === "เจ้าหน้าที่" ? "" : s.major,
+                      // เปลี่ยนเป็น เจ้าหน้าที่ -> ล้าง faculty ด้วย
+                      faculty: role === "เจ้าหน้าที่" ? "" : s.faculty,
+                    }));
+                  }}
                 >
                   <option>นักศึกษา</option>
                   <option>อาจารย์</option>
                   <option>เจ้าหน้าที่</option>
-                  <option>อื่น ๆ</option>
                 </select>
               </div>
             </div>
@@ -228,12 +295,16 @@ function AddMemberModal({ open, onClose, onSaved }) {
 function EditMemberModal({ open, onClose, member, onSave }) {
   const [form, setForm] = useState({ firstname: "", lastname: "", std_id: "" });
 
+  const isLecturer = member?.role === "อาจารย์";
+  const isStaff = member?.role === "เจ้าหน้าที่";
+  const isStudent = !isLecturer && !isStaff;
+
   useEffect(() => {
     if (!open) return;
     setForm({
       firstname: member?.firstname ?? "",
-      lastname:  member?.lastname  ?? "",
-      std_id:    String(member?.std_id ?? ""),
+      lastname: member?.lastname ?? "",
+      std_id: String(member?.std_id ?? ""),
     });
   }, [open, member]);
 
@@ -248,8 +319,11 @@ function EditMemberModal({ open, onClose, member, onSave }) {
     e.preventDefault();
     const payload = {
       firstname: form.firstname.trim(),
-      lastname:  form.lastname.trim(),
-      std_id: /^\d+$/.test(form.std_id) ? Number(form.std_id) : form.std_id,
+      lastname: form.lastname.trim(),
+      std_id:
+        isStudent
+          ? (isDigits(form.std_id) ? Number(form.std_id) : form.std_id)
+          : (form.std_id ? form.std_id : ""),
     };
     onSave(payload);
   };
@@ -286,29 +360,33 @@ function EditMemberModal({ open, onClose, member, onSave }) {
             />
           </div>
 
-          <div>
-            <label className="block text-sm text-slate-600 mb-1">รหัสนักศึกษา</label>
-            <input
-              name="std_id"
-              value={form.std_id}
-              onChange={onChange}
-              className="w-full rounded-lg border px-3 py-2"
-              required
-            />
-          </div>
+          {/* std_id เฉพาะนักศึกษา */}
+          {isStudent && (
+            <div>
+              <label className="block text-sm text-slate-600 mb-1">รหัสนักศึกษา</label>
+              <input
+                name="std_id"
+                value={form.std_id}
+                onChange={onChange}
+                className="w-full rounded-lg border px-3 py-2"
+                required
+              />
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose}
-              className="rounded-lg border px-4 py-2">ยกเลิก</button>
-            <button type="submit"
-              className="rounded-lg bg-blue-600 text-white px-4 py-2">บันทึก</button>
+            <button type="button" onClick={onClose} className="rounded-lg border px-4 py-2">
+              ยกเลิก
+            </button>
+            <button type="submit" className="rounded-lg bg-blue-600 text-white px-4 py-2">
+              บันทึก
+            </button>
           </div>
         </form>
       </div>
     </div>
   );
 }
-
 
 export default function Member() {
   // ฟิลเตอร์ด้านบน
@@ -327,7 +405,7 @@ export default function Member() {
   const load = async () => {
     setLoading(true);
     try {
-      const list = await getMembers(); // [{ member_id, std_id, firstname, lastname, plate, province, ...}]
+      const list = await getMembers(); // [{ member_id, std_id, firstname, lastname, plate, province, role, ...}]
       setRows(Array.isArray(list) ? list : []);
     } finally {
       setLoading(false);
@@ -346,7 +424,7 @@ export default function Member() {
     return rows.filter((r) => {
       const plate = String(r.plate ?? "").toLowerCase();
       const first = String(r.firstname ?? "").toLowerCase();
-      const last  = String(r.lastname ?? "").toLowerCase();
+      const last = String(r.lastname ?? "").toLowerCase();
       return (!p || plate.includes(p)) && (!fn || first.includes(fn)) && (!ln || last.includes(ln));
     });
   }, [rows, filters]);
@@ -363,14 +441,29 @@ export default function Member() {
     try {
       await updateMember(editing.member_id, payload);
       // อัปเดตแถวในตารางทันที
-      setRows(prev =>
-        prev.map(r => (r.member_id === editing.member_id ? { ...r, ...payload } : r))
+      setRows((prev) =>
+        prev.map((r) => (r.member_id === editing.member_id ? { ...r, ...payload } : r))
       );
       setOpenEdit(false);
       setEditing(null);
     } catch (err) {
       alert(`อัปเดตไม่สำเร็จ: ${err.message}`);
     }
+  };
+
+  // แสดง badge ตามตำแหน่ง
+  const renderRole = (role) => {
+    const r = (role || "").trim();
+    const color =
+      r === "นักศึกษา"   ? "bg-blue-100 text-blue-800" :
+      r === "อาจารย์"     ? "bg-emerald-100 text-emerald-800" :
+      r === "เจ้าหน้าที่" ? "bg-violet-100 text-violet-800" :
+                             "bg-slate-100 text-slate-700";
+    return (
+      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${color}`}>
+        {r || "—"}
+      </span>
+    );
   };
 
   return (
@@ -428,6 +521,7 @@ export default function Member() {
                 <th className="px-3 py-3">ทะเบียนรถ</th>
                 <th className="px-3 py-3">รหัสนักศึกษา</th>
                 <th className="px-3 py-3">ชื่อ-นามสกุล</th>
+                <th className="px-3 py-3">ตำแหน่ง</th>{/* เพิ่มคอลัมน์ */}
                 <th className="w-16 px-3 py-3">ลบ</th>
                 <th className="w-16 px-3 py-3">แก้ไข</th>
               </tr>
@@ -436,8 +530,9 @@ export default function Member() {
               {filtered.map((r) => (
                 <tr key={r.member_id} className="hover:bg-slate-50/70">
                   <td className="px-3 py-2">{r.plate}</td>
-                  <td className="px-3 py-2">{r.std_id}</td>
+                  <td className="px-3 py-2">{r.std_id ?? "—"}</td>
                   <td className="px-3 py-2">{`${r.firstname ?? ""} ${r.lastname ?? ""}`}</td>
+                  <td className="px-3 py-2">{renderRole(r.role)}</td>{/* แสดง badge */}
                   <td className="px-3 py-2">
                     <button
                       onClick={async () => {
@@ -462,7 +557,7 @@ export default function Member() {
               ))}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                  <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
                     ไม่พบข้อมูล
                   </td>
                 </tr>
@@ -487,7 +582,10 @@ export default function Member() {
 
       <EditMemberModal
         open={openEdit}
-        onClose={() => { setOpenEdit(false); setEditing(null); }}
+        onClose={() => {
+          setOpenEdit(false);
+          setEditing(null);
+        }}
         member={editing}
         onSave={handleSaveEdit}
       />
