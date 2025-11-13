@@ -19,7 +19,8 @@ import csv
 from utils import upload_image_to_storage
 
 
-# 2. ENVIRONMENT & DATABASE SETUP
+# ENVIRONMENT & DATABASE SETUP
+# =====
 # โหลดตัวแปรจากไฟล์ .env
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -29,7 +30,8 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
-# 3. FASTAPI INITIALIZATION
+# FASTAPI INITIALIZATION
+# =====
 # สร้างแอป FastAPI หลัก
 app = FastAPI(title="License Plate Recognition API")
 
@@ -44,8 +46,9 @@ app.add_middleware(
 )
 
 
-# 4. PYDANTIC MODELS
-# Model สำหรับรับข้อมูล Event ใหม่จาก watch_folder.py
+# PYDANTIC MODELS (ตัวตรวจสอบข้อมูล)
+# =====
+# Model กำหนดโครงสร้างข้อมูล Event ที่รับมาจาก Worker
 class EventIn(BaseModel):
     datetime: datetime
     plate: str | None = None
@@ -56,7 +59,7 @@ class EventIn(BaseModel):
     direction: str | None = None
 
 
-# Model สำหรับข้อมูล Member ส่วนหนึ่งของ RegisterRequest
+# Model กำหนดโครงสร้างข้อมูล Member สำหรับการสร้างสมาชิกใหม่
 class MemberCreate(BaseModel):
     firstname: str
     lastname: str
@@ -66,19 +69,19 @@ class MemberCreate(BaseModel):
     role: str
 
 
-# Model สำหรับข้อมูล Vehicle ส่วนหนึ่งของ RegisterRequest
+# Model กำหนดโครงสร้างข้อมูล Vehicle สำหรับการสร้างรถใหม่
 class VehicleCreate(BaseModel):
     plate: str
     province: str
 
 
-# Model สำหรับ Endpoint /register รวม Member และ Vehicle
+# Model รับข้อมูล Member และ Vehicle พร้อมกันใน Request เดียว
 class RegisterRequest(BaseModel):
     member: MemberCreate
     vehicle: VehicleCreate
 
 
-# Model สำหรับอัปเดตข้อมูล Member PUT /members/{id}
+# Model กำหนดโครงสร้างข้อมูลสำหรับอัปเดต Member
 class MemberUpdate(BaseModel):
     firstname: str | None = None
     lastname: str | None = None
@@ -88,20 +91,20 @@ class MemberUpdate(BaseModel):
     role: str | None = None
 
 
-# 5. WEBSOCKET MANAGER
-# คลาสสำหรับจัดการการเชื่อมต่อ WebSocket ทั้งหมดเพื่อส่งอัปเดตแบบ Real-Time ไปยัง Frontend
+# WEBSOCKET MANAGER
+# =====
+# Class คลาสสำหรับจัดการการเชื่อมต่อ WebSocket ทั้งหมด
 class ConnectionManager:
     def __init__(self):
-        # ลิสต์สำหรับเก็บ client ที่เชื่อมต่ออยู่
         self.active_connections: list[WebSocket] = []
 
-    # รับการเชื่อมต่อใหม่จาก Client
+    # Method รับการเชื่อมต่อใหม่จาก Client
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
         print(f"WebSocket connected: {len(self.active_connections)} active client(s)")
 
-    # ลบ Client ที่ตัดการเชื่อมต่อออก
+    # Method ลบ Client ที่ตัดการเชื่อมต่อออก
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
@@ -109,9 +112,9 @@ class ConnectionManager:
                 f"WebSocket disconnected: {len(self.active_connections)} active client(s)"
             )
 
-    # ส่งข้อความ (แจ้งเตือน) ไปยังทุก Client ที่เชื่อมต่ออยู่
+    # Method ส่งข้อความแจ้งเตือน ไปยังทุก Client ที่เชื่อมต่ออยู่
     async def broadcast(self, message: str):
-        print(f"📡 Broadcast to {len(self.active_connections)} clients: {message}")
+        print(f"Broadcast to {len(self.active_connections)} clients: {message}")
         for connection in self.active_connections:
             try:
                 await connection.send_text(message)
@@ -123,26 +126,47 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-#  6. ROUTES: MEMBERS (จัดการข้อมูลสมาชิก)
-# ดึงข้อมูลสมาชิกทั้งหมด สำหรับหน้า Member
+# ROUTES: MEMBERS (จัดการข้อมูลสมาชิก)
+# =====
+# Endpoint ดึงข้อมูลสมาชิกทั้งหมด (สำหรับหน้า Member) พร้อม Join ข้อมูลรถ (รองรับการค้นหา/Filter)
 @app.get("/members")
-def get_members():
+def get_members(
+    # Query Parameters สำหรับรับค่าจาก Frontend
+    plate: str | None = Query(
+        None,
+    ),
+    firstname: str | None = Query(
+        None,
+    ),
+    lastname: str | None = Query(
+        None,
+    ),
+):
     try:
-        # ใช้ Supabase Join (Vehicle(...))
-        response = (
-            supabase.table("Member")
-            .select(
-                "member_id, firstname, lastname, std_id, faculty, major, role, Vehicle(plate, province)"
-            )
-            .execute()
+        # สร้าง Query Builder
+        query_builder = supabase.table("Member").select(
+            "member_id, firstname, lastname, std_id, faculty, major, role, Vehicle(plate, province)"
         )
 
-        # จัดการข้อมูล Vehicle ที่อาจมาเป็น List
+        # Filtering
+        if firstname:
+            query_builder = query_builder.ilike("firstname", f"%{firstname.strip()}%")
+
+        if lastname:
+            query_builder = query_builder.ilike("lastname", f"%{lastname.strip()}%")
+
+        if plate:
+            query_builder = query_builder.ilike("Vehicle.plate", f"%{plate.strip()}%")
+
+        # ดึงข้อมูล
+        response = query_builder.execute()
+
+        # Map ข้อมูล
         members = []
         for row in response.data or []:
             vehicle = row.get("Vehicle") or {}
             if isinstance(vehicle, list) and vehicle:
-                vehicle = vehicle[0]  # เอาคันแรก
+                vehicle = vehicle[0]
             elif isinstance(vehicle, list):
                 vehicle = {}
 
@@ -164,12 +188,12 @@ def get_members():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Endpoint ลงทะเบียนสมาชิกใหม่ พร้อมกับรถ 1 คัน
 @app.post("/members/register")
-# ลงทะเบียนสมาชิกใหม่ พร้อมกับรถ 1 คัน
 @app.post("/register")  # รองรับ Path เก่า
 def register_member_with_vehicle(payload: RegisterRequest):
     try:
-        # 1. เพิ่มข้อมูล Member
+        # เพิ่มข้อมูล Member
         m_in = payload.member.model_dump()
 
         sid = m_in.get("std_id")
@@ -183,13 +207,12 @@ def register_member_with_vehicle(payload: RegisterRequest):
         member = m_res.data[0]
         member_id = member["member_id"]
 
-        # 2. เพิ่มข้อมูล Vehicle โดยอ้างอิง member_id
+        # เพิ่มข้อมูล Vehicle
         v_in = payload.vehicle.model_dump()
         v_in["member_id"] = member_id
-
         v_res = supabase.table("Vehicle").insert(v_in).execute()
 
-        # 3. เพิ่ม Vehicle ไม่สำเร็จ ให้ลบ Member ที่เพิ่งสร้างทิ้ง (Rollback)
+        # Rollback ถ้าเพิ่ม Vehicle ไม่สำเร็จ ให้ลบ Member ทิ้ง
         if not v_res.data:
             supabase.table("Member").delete().eq("member_id", member_id).execute()
             raise HTTPException(
@@ -198,7 +221,7 @@ def register_member_with_vehicle(payload: RegisterRequest):
 
         vehicle = v_res.data[0]
 
-        # 4. คืนค่าข้อมูลสรุป (Frontend)
+        # คืนค่าข้อมูลสรุป
         row = {
             "member_id": member_id,
             "std_id": member.get("std_id"),
@@ -215,23 +238,23 @@ def register_member_with_vehicle(payload: RegisterRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# อัปเดตข้อมูลสมาชิก (เฉพาะ field ที่ส่งมา)
+# Endpoint อัปเดตข้อมูลสมาชิก เฉพาะ field ที่ส่งมา
 @app.put("/members/{member_id}")
 def update_member(member_id: int, data: MemberUpdate):
     try:
-        # 1. ตรวจสอบว่ามี Member ID นี้จริงหรือไม่
+        # ตรวจสอบว่ามี Member ID นี้จริงหรือไม่
         old_resp = (
             supabase.table("Member").select("*").eq("member_id", member_id).execute()
         )
         if not old_resp.data:
             raise HTTPException(status_code=404, detail="ไม่พบสมาชิกในระบบ")
 
-        # 2. กรองเฉพาะ field ที่ส่งมา (ไม่เอาค่า None)
+        # กรองเฉพาะ field ที่ส่งมา ไม่เอา None
         update_fields = data.model_dump(exclude_none=True)
         if not update_fields:
             raise HTTPException(status_code=400, detail="ไม่พบข้อมูลที่ต้องการอัปเดต")
 
-        # 3. สั่งอัปเดต
+        # สั่งอัปเดต
         new_resp = (
             supabase.table("Member")
             .update(update_fields)
@@ -249,21 +272,21 @@ def update_member(member_id: int, data: MemberUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ลบสมาชิกและรถที่ผูกอยู่
+# Endpoint ลบสมาชิกและรถที่ผูกอยู่
 @app.delete("/members/{member_id}")
 def delete_member(member_id: int):
     try:
-        # 1. ตรวจสอบว่ามี Member ID นี้จริงหรือไม่
+        # ตรวจสอบว่ามี Member ID นี้จริงหรือไม่
         old_resp = (
             supabase.table("Member").select("*").eq("member_id", member_id).execute()
         )
         if not old_resp.data:
             raise HTTPException(status_code=404, detail="ไม่พบสมาชิกในระบบ")
 
-        # 2. ลบ Vehicle ที่ผูกอยู่ก่อน (เพราะมี Foreign Key)
+        # ลบ Vehicle ที่ผูกอยู่ก่อน
         supabase.table("Vehicle").delete().eq("member_id", member_id).execute()
 
-        # 3. ลบ Member
+        # ลบ Member
         supabase.table("Member").delete().eq("member_id", member_id).execute()
 
         return {
@@ -276,19 +299,19 @@ def delete_member(member_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#  7. ROUTES: EVENTS
+# ROUTES: EVENTS (จัดการเหตุการณ์)
+# =====
+# Endpoint หน้า Search/Home ดึงข้อมูล Event ทั้งหมด รองรับการกรอง (Filter) ตามวันที่, ทิศทาง, และป้ายทะเบียน
 @app.get("/events")
 def get_events(
-    # รับค่า Filters จาก Frontend (หน้า Search)
     limit: int = Query(1000, ge=1),
     start_date: str | None = Query(None, description="YYYY-MM-DD"),
     end_date: str | None = Query(None, description="YYYY-MM-DD"),
     direction: str | None = Query(None),
     query: str | None = Query(None, description="Plate query"),
 ):
-    # (สำหรับหน้า Search และ Home) ดึงข้อมูล Event ทั้งหมด รองรับการกรอง (Filter) ตามวันที่, ทิศทาง, และป้ายทะเบียน
     try:
-        # 1. สร้าง Query Builder และ Join Role มาเลย (แก้ N+1 Query)
+        # สร้าง Query Builder และ Join Role มาเลย (แก้ N+1 Query)
         query_builder = (
             supabase.table("Event")
             .select(
@@ -299,7 +322,7 @@ def get_events(
             .limit(limit)
         )
 
-        # 2. กรองข้อมูล (Filtering)
+        # กรองข้อมูล (Filtering)
         if start_date:
             query_builder = query_builder.gte("datetime", f"{start_date}T00:00:00")
         if end_date:
@@ -307,13 +330,12 @@ def get_events(
         if direction and direction.lower() != "all":
             query_builder = query_builder.eq("direction", direction.upper())
         if query:
-            # ค้นหาป้ายทะเบียนแบบ "contains" (มีคำนั้นอยู่)
             query_builder = query_builder.ilike("plate", f"%{query.strip()}%")
 
-        # 3. ดึงข้อมูล
+        # ดึงข้อมูล
         response = query_builder.execute()
 
-        # 4. Map ข้อมูล (แปลง) ให้เป็น Format ที่ Frontend (RecordsTable) ต้องการ | เพื่อลดภาระการประมวลผลที่ Frontend
+        # Map ข้อมูลให้เป็น Format ที่ Frontend (RecordsTable) ต้องการ
         results = []
         for e in response.data or []:
             vehicle = e.get("Vehicle") or {}
@@ -323,7 +345,7 @@ def get_events(
             role = vehicle.get("member", {}).get("role") or "Visitor"
 
             check_status = "บุคคลภายนอก"
-            if role and role.lower() != "visitor":  # ถ้า Role ไม่ใช่ Visitor
+            if role and role.lower() != "visitor":
                 check_status = "บุคคลภายใน"
 
             results.append(
@@ -342,13 +364,13 @@ def get_events(
         raise HTTPException(status_code=500, detail=f"Error fetching events: {str(e)}")
 
 
-# (Endpoint หลักสำหรับ Worker) สร้าง Event ใหม่, บันทึกลง DB, และ Broadcast ไปยัง WebSocket
+# Endpoint สำหรับ batch_process สร้าง Event ใหม่, บันทึกลง DB, และ Broadcast ไปยัง WebSocket
 @app.post("/events")
 async def create_event(event: EventIn):
     try:
         vehicle_data = None
 
-        # 1. ตรวจสอบ Vehicle ในระบบ
+        # ตรวจสอบ Vehicle ในระบบ
         if event.plate and event.province:
             vehicle_check = (
                 supabase.table("Vehicle")
@@ -360,12 +382,12 @@ async def create_event(event: EventIn):
             if vehicle_check.data:
                 vehicle_data = vehicle_check.data[0]
 
-        # 2. ตรวจสอบ direction (ใช้ cam_id เป็น Fallback ถ้า Worker ไม่ได้ส่งมา)
+        # ตรวจสอบ direction (ใช้ cam_id เป็น Fallback)
         direction = event.direction or (
             "IN" if event.cam_id == 1 else "OUT" if event.cam_id == 2 else "UNKNOWN"
         )
 
-        # 3. เตรียมข้อมูล (Payload)
+        # เตรียมข้อมูล (Payload)
         payload = {
             "datetime": event.datetime.isoformat(),
             "plate": event.plate or None,
@@ -376,12 +398,12 @@ async def create_event(event: EventIn):
             "vehicle_id": vehicle_data["vehicle_id"] if vehicle_data else None,
         }
 
-        # 4. บันทึกลง Supabase
+        # บันทึกลง Supabase
         response = supabase.table("Event").insert(payload).execute()
         if not response.data:
             raise HTTPException(status_code=400, detail="เพิ่มข้อมูล Event ไม่สำเร็จ")
 
-        # 5. Broadcast event ใหม่ไปยัง Client (Frontend)
+        # * Broadcast event ใหม่ไปยัง Client (ไป Frontend)
         message = f"Event ใหม่: {event.plate or 'ไม่ทราบทะเบียน'} ({direction})"
         await manager.broadcast(message)
 
@@ -394,7 +416,7 @@ async def create_event(event: EventIn):
         raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาด: {str(e)}")
 
 
-# (Endpoint หลักสำหรับ Frontend) รับการเชื่อมต่อ WebSocket จาก Client (React) และค้างไว้เพื่อรอรับการ Broadcast
+# Endpoint สำหรับ Frontend รับการเชื่อมต่อ WebSocket จาก Client (React) และค้างไว้เพื่อรอรับการ Broadcast
 @app.websocket("/ws/events")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -408,12 +430,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 #  8. ROUTES: CHECK PLATE
+# ===
+# Endpoint สำหรับ batch_process ตรวจสอบว่าป้ายทะเบียนนี้มีในระบบ (ตาราง Vehicle) หรือไม่
 @app.get("/check_plate")
 def check_plate(
     plate: str | None = Query(None, description="ทะเบียนรถ"),
     province: str | None = Query(None, description="จังหวัด"),
 ):
-    # (Endpoint สำหรับ Worker) ตรวจสอบว่าป้ายทะเบียนนี้มีในระบบ (ตาราง Vehicle) หรือไม่
     try:
         # Join เพื่อดึง Role มาด้วย
         query = supabase.table("Vehicle").select(
@@ -441,7 +464,8 @@ def check_plate(
 
 
 #  9. ROUTES: DASHBOARD
-# (สำหรับ Frontend หน้า Home) ดึงข้อมูล Stats Cards (ทั้งหมด, เข้า, ออก, ไม่รู้จัก) ของวันที่เลือก
+# =====
+# Endpoint หน้า Home ดึงข้อมูล Stats Cards (ทั้งหมด, เข้า, ออก, ไม่รู้จัก) ของวันที่เลือก
 @app.get("/dashboard/summary")
 def dashboard_summary(date: str | None = None):
     try:
@@ -449,7 +473,7 @@ def dashboard_summary(date: str | None = None):
         date = date or datetime.now().strftime("%Y-%m-%d")
         start, end = f"{date}T00:00:00", f"{date}T23:59:59"
 
-        # 1. ดึงข้อมูล Event เฉพาะวันนั้น
+        # ดึงข้อมูล Event เฉพาะวันนั้น
         response = (
             supabase.table("Event")
             .select("event_id, plate, province, direction, vehicle_id")
@@ -459,9 +483,9 @@ def dashboard_summary(date: str | None = None):
         )
         events = response.data
 
-        # 2. นับและสรุปผล (Aggregation ใน Python)
-        ins = [e for e in events if e["direction"] == "IN"] 
-        outs = [e for e in events if e["direction"] == "OUT"] 
+        # นับและสรุปผล (Aggregation ใน Python)
+        ins = [e for e in events if e["direction"] == "IN"]
+        outs = [e for e in events if e["direction"] == "OUT"]
         unknown = [
             e for e in events if not e.get("plate") or e.get("vehicle_id") is None
         ]
@@ -477,11 +501,11 @@ def dashboard_summary(date: str | None = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# (สำหรับ Frontend หน้า Home - ถ้าใช้ Logic เดิม) ดึง Event ล่าสุด 10 รายการ (พร้อม Role)
+# Endpoint สำหรับหน้า Home ดึง Event ล่าสุด 10 รายการ (พร้อม Role คนนอกหรือคนใน)
 @app.get("/dashboard/recent")
 def dashboard_recent(limit: int = 10):
     try:
-        # N+1 Query Fix Join เพื่อดึง Role มาใน Query เดียว
+        # (N+1 Query Fix) Join เพื่อดึง Role มาใน Query เดียว
         response = (
             supabase.table("Event")
             .select(
@@ -513,7 +537,6 @@ def dashboard_recent(limit: int = 10):
                 }
             )
 
-        # คืนค่าใน Format ที่ Frontend
         return {"count": len(results), "data": results}
     except Exception as ex:
         raise HTTPException(
@@ -521,15 +544,15 @@ def dashboard_recent(limit: int = 10):
         )
 
 
-# สำหรับ Frontend หน้า Home - กราฟรายวัน ดึงสถิติรายชั่วโมง (เข้า/ออก) สำหรับวันที่ระบุ
+# Endpoint หน้า Home - กราฟรายวัน ดึงสถิติรายชั่วโมง (เข้า/ออก) สำหรับวันที่ระบุ
 @app.get("/dashboard/daily")
 def dashboard_daily(date: str = Query(..., description="Date in YYYY-MM-DD format")):
     try:
-        # 1. Parse date and define time range
+        # วิเคราะห์วันที่และกำหนดช่วงเวลา
         start_date = datetime.strptime(date, "%Y-%m-%d")
         end_date = start_date + timedelta(days=1)
 
-        # 2. Fetch all events for the day from Supabase
+        # ดึงข้อมูลเหตุการณ์ทั้งหมดของวันนั้น
         response = (
             supabase.table("Event")
             .select("datetime, direction")
@@ -537,35 +560,30 @@ def dashboard_daily(date: str = Query(..., description="Date in YYYY-MM-DD forma
             .lt("datetime", end_date.isoformat())
             .execute()
         )
-
         events = response.data
 
-        # 3. Initialize hourly series for 24 hours
+        # กำหนดค่าเริ่มต้นให้ชุดข้อมูลรายชั่วโมง (24 ชั่วโมง)
         hourly_data = {}
         for h in range(24):
             hour_str = f"{h:02d}:00"
             hourly_data[h] = {"label": hour_str, "inside": 0, "outside": 0}
 
-        # 4. Aggregate events in Python
+        # สรุปผลเหตุการณ์ ด้วย Python
         for event in events:
             event_dt = datetime.fromisoformat(event["datetime"])
             hour = event_dt.hour
             direction = event.get("direction", "").lower()
 
             if 0 <= hour < 24:
-                # 'inside' (บุคคลภายใน) ถูก Map จาก Logic ของ DailyLineChart.jsx
-                # 'outside' (บุคคลภายนอก)
-                # Logic นี้ของ Home.jsx เก่านับเฉพาะ "IN"
-                # แต่ Logic ใหม่ใน /dashboard/daily นับทั้ง "IN" และ "OUT"
                 if direction == "in":
-                    hourly_data[hour]["inside"] += 1  #
+                    hourly_data[hour]["inside"] += 1
                 elif direction == "out":
                     hourly_data[hour]["outside"] += 1
 
-        # 5. Convert dictionary to list for the frontend
+        # แปลง Dictionary ให้เป็น List
         result_series = [hourly_data[h] for h in range(24)]
 
-        return result_series  # คืนค่าเป็น Array [ {label: "00:00", ...}, ... ]
+        return result_series
 
     except ValueError:
         raise HTTPException(
@@ -577,14 +595,69 @@ def dashboard_daily(date: str = Query(..., description="Date in YYYY-MM-DD forma
         )
 
 
+# Endpoint หน้า Home - กราฟรายเดือน ดึงสถิติ (เข้า/ออก) สำหรับปีที่ระบุ
+@app.get("/dashboard/monthly", tags=["Dashboard"])
+def dashboard_monthly(
+    # รับค่าปี (ถ้าไม่ส่งมา ให้ใช้ปีปัจจุบัน)
+    year: int = Query(
+        datetime.now().year, description="Year to get stats for (e.g., 2025)"
+    )
+):
+
+    # ดึงสถิติรายเดือน (เข้า/ออก) สำหรับปีที่ระบุ (เรียกใช้ SQL Function 'get_monthly_stats' ที่เราสร้างไว้ในขั้นตอนที่ 1)
+    try:
+        # 1. สร้าง Map เพื่อแปลงเลขเดือน (1-12) เป็นชื่อย่อ
+        month_map = {
+            1: "Jan",
+            2: "Feb",
+            3: "Mar",
+            4: "Apr",
+            5: "May",
+            6: "Jun",
+            7: "Jul",
+            8: "Aug",
+            9: "Sep",
+            10: "Oct",
+            11: "Nov",
+            12: "Dec",
+        }
+
+        # เรียก RPC (Remote Procedure Call) ไปยังฟังก์ชัน SQL โดยส่ง parameter '{"_year": year}' เข้าไป
+        response = supabase.rpc("get_monthly_stats", {"_year": year}).execute()
+
+        if not response.data:
+            # ถ้า RPC ล้มเหลว หรือไม่มีข้อมูล
+            return [
+                {"month": month_map[m], "inside": 0, "outside": 0} for m in range(1, 13)
+            ]
+
+        # Map ผลลัพธ์ (ที่ได้เป็น {month_num: 1, ...}) เป็น Format ที่ Frontend ต้องการ
+        results = []
+        for row in response.data:
+            month_name = month_map.get(row["month_num"], "Unknown")
+            results.append(
+                {
+                    "month": month_name,
+                    "inside": row.get("inside", 0),
+                    "outside": row.get("outside", 0),
+                }
+            )
+
+        return results
+
+    except Exception as ex:
+        raise HTTPException(
+            status_code=500, detail=f"Error in dashboard_monthly: {str(ex)}"
+        )
+
+
 #  10. ROUTES: UPLOAD IMAGE
-# (Endpoint สำหรับ Worker) อัปโหลดไฟล์ภาพ (blob) ไปยัง Storage
+# =====
+# Endpoint สำหรับ batch_process อัปโหลดไฟล์ภาพ (blob) ไปยัง Storage
 @app.post("/upload")
 async def upload_image(file: UploadFile = File(...)):
     try:
-        # (async def เพราะต้อง await file.read())
         contents = await file.read()
-        # (ควรเพิ่มการตรวจสอบขนาดไฟล์/ประเภทไฟล์ ที่นี่)
         url = upload_image_to_storage(contents, folder="plates")
         return {"url": url}
     except Exception as e:
@@ -592,17 +665,17 @@ async def upload_image(file: UploadFile = File(...)):
 
 
 #  11. ROUTES: EXPORT CSV
+# =====
+# Endpoint หน้า Search Export ข้อมูล CSV ตาม Filter ที่เลือก
 @app.get("/export/events")
 def export_events(
-    # 1. รับ Parameters จาก Frontend (หน้า Search)
     start: str | None = Query(None),
     end: str | None = Query(None),
     direction: str | None = Query(None),
-    plate: str | None = Query(None),  # (Frontend ส่ง "query" มาเป็น "plate")
+    plate: str | None = Query(None),
 ):
-    # (สำหรับ Frontend หน้า Search) Export ข้อมูล CSV ตาม Filter ที่เลือก
     try:
-        # 2. สร้าง Query Builder โดยใช้ Filter
+        # สร้าง Query Builder โดยใช้ Filter
         query_builder = supabase.table("Event").select("*").order("datetime", desc=True)
 
         if start:
@@ -614,13 +687,13 @@ def export_events(
         if plate:
             query_builder = query_builder.ilike("plate", f"%{plate.strip()}%")
 
-        # 3. ดึงข้อมูล
+        # ดึงข้อมูล
         response = query_builder.execute()
         data = response.data or []
 
-        # 4. สร้างไฟล์ CSV ใน Memory
+        # สร้างไฟล์ CSV ใน Memory
         output = io.StringIO(newline="")
-        output.write("\ufeff")  # UTF-8 BOM สำหรับ Excel อ่านไทย
+        output.write("\ufeff")  # UTF-8 BOM (สำหรับ Excel อ่านไทย)
 
         fieldnames = (
             list(data[0].keys())
@@ -631,9 +704,9 @@ def export_events(
         writer.writeheader()
         if data:
             writer.writerows(data)
-        output.seek(0)  # กลับไปที่จุดเริ่มต้นของไฟล์
+        output.seek(0)
 
-        # 5. ส่งไฟล์ CSV กลับไป
+        # ส่งไฟล์ CSV กลับไป
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv; charset=utf-8",
@@ -643,7 +716,8 @@ def export_events(
         raise HTTPException(status_code=500, detail=f"Error exporting events: {str(e)}")
 
 
-#  12. HEALTH CHECK
+# HEALTH CHECK
+# =====
 # Endpoint ตรวจสอบว่า API ทำงานอยู่
 @app.get("/")
 def root():
