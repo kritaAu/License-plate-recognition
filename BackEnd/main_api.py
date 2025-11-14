@@ -13,13 +13,26 @@ from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional, Union, Literal
 from supabase import create_client
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import io
 import csv
 from utils import upload_image_to_storage
 
 
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
+
+def get_bkk_tz():
+    if ZoneInfo:
+        try:
+            return ZoneInfo("Asia/Bangkok")
+        except Exception:
+            pass
+    # fallback ถ้าไม่มี tzdata บนเครื่อง
+    return timezone(timedelta(hours=7))
 # ENVIRONMENT & DATABASE SETUP
 # =====
 # โหลดตัวแปรจากไฟล์ .env
@@ -424,53 +437,35 @@ def get_events(
 
 
 # Endpoint สำหรับ batch_process สร้าง Event ใหม่, บันทึกลง DB, และ Broadcast ไปยัง WebSocket
-def normalize_plate(s: str | None) -> str | None:
-    # ตัดช่องว่างทั้งหมดออก (กันเคส "1ลบ521" vs "1ลบ 521")
-    return "".join(str(s or "").split()) or None
-
 @app.post("/events")
 async def create_event(event: EventIn):
     try:
+        # --- Normalize ค่าที่เข้ามา ---
+        plate_raw = (event.plate or "").strip()
+        prov_raw = (event.province or "").strip()
+        p_can = _canon_plate(plate_raw)
+        prov_can = _canon_text(prov_raw)
+
+        # --- ตรวจสอบ Vehicle ในระบบ (แบบ normalize) ---
         vehicle_data = None
+        if p_can and prov_can:
+            guess = (
+                supabase.table("Vehicle")
+                .select("vehicle_id, plate, province, member_id")
+                .ilike("plate", f"%{plate_raw}%")  # กรองหยาบ
+                .ilike("province", f"%{prov_raw}%")
+                .limit(20)
+                .execute()
+            )
+            if guess.data:
+                vehicle_data = guess.data[0]
 
-        # --- ตรวจสอบ Vehicle ในระบบ: ยืดหยุ่นขึ้น ---
-        plate_norm = normalize_plate(event.plate)
-        prov = (event.province or "").strip()
-
-        if plate_norm:
-            # 1) พยายาม exact match ก่อน (ถ้ามี province)
-            if prov:
-                exact = (
-                    supabase.table("Vehicle")
-                    .select("vehicle_id, plate, province, member_id")
-                    .eq("plate", (event.plate or "").strip())
-                    .eq("province", prov)
-                    .limit(1)
-                    .execute()
-                )
-                if exact.data:
-                    vehicle_data = exact.data[0]
-
-            # 2) ถ้ายังไม่เจอ -> ค้นแบบคลุมเครือ: plate ไม่สนช่องว่าง / province ไม่บังคับ
-            if not vehicle_data:
-                like_q = (
-                    supabase.table("Vehicle")
-                    .select("vehicle_id, plate, province, member_id")
-                    # ค้นหา plate แบบ ilike ด้วย plate ที่ตัดช่องว่างแล้ว
-                    .ilike("plate", f"%{plate_norm}%")
-                )
-                if prov:
-                    like_q = like_q.ilike("province", f"%{prov}%")
-                like_res = like_q.limit(1).execute()
-                if like_res.data:
-                    vehicle_data = like_res.data[0]
-
-        # --- ตรวจสอบ direction (fallback ตามเดิม) ---
+        # ตรวจสอบ direction (ใช้ cam_id เป็น Fallback)
         direction = event.direction or (
             "IN" if event.cam_id == 1 else "OUT" if event.cam_id == 2 else "UNKNOWN"
         )
 
-        # --- เตรียม payload และบันทึก ---
+        # เตรียมข้อมูล (Payload)
         payload = {
             "datetime": event.datetime.isoformat(),
             "plate": event.plate or None,
@@ -481,11 +476,12 @@ async def create_event(event: EventIn):
             "vehicle_id": vehicle_data["vehicle_id"] if vehicle_data else None,
         }
 
+        # บันทึกลง Supabase
         response = supabase.table("Event").insert(payload).execute()
         if not response.data:
             raise HTTPException(status_code=400, detail="เพิ่มข้อมูล Event ไม่สำเร็จ")
 
-        # แจ้ง realtime ไปหน้าเว็บตามเดิม
+        # * Broadcast event ใหม่ไปยัง Client (ไป Frontend)
         message = f"Event ใหม่: {event.plate or 'ไม่ทราบทะเบียน'} ({direction})"
         await manager.broadcast(message)
 
@@ -633,54 +629,50 @@ def dashboard_recent(limit: int = 50):
 
 
 # Endpoint หน้า Home - กราฟรายวัน ดึงสถิติรายชั่วโมง (เข้า/ออก) สำหรับวันที่ระบุ
+BKK = get_bkk_tz()
+
 @app.get("/dashboard/daily")
 def dashboard_daily(date: str = Query(..., description="Date in YYYY-MM-DD format")):
     try:
-        # วิเคราะห์วันที่และกำหนดช่วงเวลา
-        start_date = datetime.strptime(date, "%Y-%m-%d")
-        end_date = start_date + timedelta(days=1)
+        # 1) ผู้ใช้เลือก "วันแบบไทย" → ทำเป็นช่วงเวลา local แล้วแปลงเป็น UTC ใช้ใน query
+        start_local = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=BKK)
+        end_local   = start_local + timedelta(days=1)
 
-        # ดึงข้อมูลเหตุการณ์ทั้งหมดของวันนั้น
+        start_utc = start_local.astimezone(timezone.utc).isoformat()
+        end_utc   = end_local.astimezone(timezone.utc).isoformat()
+
+        # 2) ดึงเหตุการณ์ในช่วง UTC นั้น ๆ
         response = (
             supabase.table("Event")
             .select("datetime, direction")
-            .gte("datetime", start_date.isoformat())
-            .lt("datetime", end_date.isoformat())
+            .gte("datetime", start_utc)
+            .lt("datetime",  end_utc)
             .execute()
         )
-        events = response.data
+        events = response.data or []
 
-        # กำหนดค่าเริ่มต้นให้ชุดข้อมูลรายชั่วโมง (24 ชั่วโมง)
-        hourly_data = {}
-        for h in range(24):
-            hour_str = f"{h:02d}:00"
-            hourly_data[h] = {"label": hour_str, "inside": 0, "outside": 0}
+        # 3) เตรียม bucket 24 ชั่วโมง (label เป็น local)
+        hourly_data = {h: {"label": f"{h:02d}:00", "inside": 0, "outside": 0} for h in range(24)}
 
-        # สรุปผลเหตุการณ์ ด้วย Python
-        for event in events:
-            event_dt = datetime.fromisoformat(event["datetime"])
-            hour = event_dt.hour
-            direction = event.get("direction", "").lower()
+        # 4) เวลาจาก DB เป็น UTC → แปลงเป็นเวลาท้องถิ่น (ไทย) แล้วค่อยนับชั่วโมง
+        for e in events:
+            dt_utc = datetime.fromisoformat(e["datetime"])   # aware (+00)
+            dt_local = dt_utc.astimezone(BKK)
 
+            hour = dt_local.hour
+            direction = (e.get("direction") or "").lower()
             if 0 <= hour < 24:
                 if direction == "in":
                     hourly_data[hour]["inside"] += 1
                 elif direction == "out":
                     hourly_data[hour]["outside"] += 1
 
-        # แปลง Dictionary ให้เป็น List
-        result_series = [hourly_data[h] for h in range(24)]
-
-        return result_series
+        return [hourly_data[h] for h in range(24)]
 
     except ValueError:
-        raise HTTPException(
-            status_code=400, detail="Invalid date format. Use YYYY-MM-DD."
-        )
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
     except Exception as ex:
-        raise HTTPException(
-            status_code=500, detail=f"Error in dashboard_daily: {str(ex)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error in dashboard_daily: {str(ex)}")
 
 
 # Endpoint หน้า Home - กราฟรายเดือน ดึงสถิติ (เข้า/ออก) สำหรับปีที่ระบุ
