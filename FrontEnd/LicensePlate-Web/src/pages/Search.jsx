@@ -1,5 +1,5 @@
 // src/pages/Search.jsx (ฉบับแก้ไขที่สมบูรณ์)
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react"; // ===== MODIFIED: เพิ่ม useRef =====
 import Filters from "../components/Filters";
 import RecordsTable from "../components/RecordsTable";
 import { formatThaiDateTime } from "../utils/date";
@@ -8,6 +8,20 @@ import { downloadCsv } from "../utils/downloadCsv";
 const API_BASE = (
   import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
+
+// ===== ADDED: สร้าง WS_URL (เหมือนใน Home.jsx) =====
+const WS_URL =
+  (import.meta.env?.VITE_WS_URL || API_BASE.replace(/^http/i, "ws")) +
+  "/ws/events";
+
+// ===== ADDED: helper นี้จำเป็นสำหรับแปลง 'role' จาก WS (เหมือนใน Home.jsx) =====
+function isInsideRole(role) {
+  const r = String(role || "").trim();
+  const rl = r.toLowerCase();
+  if (["นักศึกษา", "อาจารย์", "เจ้าหน้าที่"].includes(r)) return true;
+  if (["staff", "employee", "internal", "insider"].includes(rl)) return true;
+  return false;
+}
 
 // แปลงทิศทางเป็นภาษาไทย
 const toThaiDirection = (v) => {
@@ -62,6 +76,11 @@ export default function Search() {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ===== ADDED: Refs สำหรับ WebSocket (เหมือนใน Home.jsx) =====
+  const wsRef = useRef(null);
+  const retryRef = useRef(0);
+  const stopRef = useRef(false);
+
   // โหลดครั้งแรก
   useEffect(() => {
     (async () => {
@@ -72,10 +91,74 @@ export default function Search() {
     })();
   }, []); // ทำงานครั้งเดียว
 
+  // ===== ADDED: WebSocket effect (เหมือนใน Home.jsx) =====
+  useEffect(() => {
+    stopRef.current = false;
+    let retry = retryRef.current;
+
+    function connect() {
+      const ws = new WebSocket(WS_URL);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        retryRef.current = 0;
+      };
+
+      ws.onmessage = (ev) => {
+        try {
+          // 1. รับข้อมูลดิบจาก WS
+          const data =
+            typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
+          if (!data?.datetime) return;
+
+          // 2. แปลงข้อมูล (data) ให้อยู่ใน Format ที่ตาราง (RecordsTable) ต้องการ
+          // (ต้องแปลงเอง เพราะข้อมูลจาก WS จะไม่เหมือนข้อมูลที่มาจาก /events)
+          const check = isInsideRole(data.role) ? "บุคคลภายใน" : "บุคคลภายนอก";
+          const newRecord = {
+            time: formatThaiDateTime(data.datetime),
+            plate: `${data.plate || "-"}${
+              data.province ? " จ." + data.province : ""
+            }`,
+            status: toThaiDirection(data.direction),
+            check: check,
+            imgUrl: data.image || data.blob || null,
+            _raw: data, // เก็บข้อมูลดิบไว้เผื่อ
+          };
+
+          // 3. อัปเดต State (เพิ่มรายการใหม่ไว้บนสุด)
+          setRecords((prev) => [newRecord, ...prev]);
+        } catch (e) {
+          console.error("WS message processing error:", e);
+        }
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+
+      ws.onclose = () => {
+        if (stopRef.current) return;
+        const delay = Math.min(16000, 1000 * 2 ** Math.min(4, retry++));
+        retryRef.current = retry;
+        setTimeout(connect, delay);
+      };
+    }
+
+    connect();
+
+    return () => {
+      stopRef.current = true;
+      try {
+        wsRef.current?.close();
+      } catch {}
+    };
+  }, []); // [] = ทำงานครั้งเดียวเมื่อเปิดหน้านี้
+
   // กด “ใช้ฟิลเตอร์”
   const onApply = async () => {
     setLoading(true);
     const data = await fetchFilteredEvents(filters);
+    // เมื่อกดค้นหา, เราจะ "แทนที่" ข้อมูลทั้งหมดด้วยผลลัพธ์ใหม่
     setRecords(data);
     setLoading(false);
   };
@@ -86,6 +169,7 @@ export default function Search() {
     const f = { start: "", end: "", direction: "all", query: "" };
     setFilters(f);
     const data = await fetchFilteredEvents(f);
+    // แทนที่ข้อมูลทั้งหมดด้วยผลลัพธ์ใหม่
     setRecords(data);
     setLoading(false);
   };
@@ -101,16 +185,11 @@ export default function Search() {
     await downloadCsv(`${API_BASE}/export/events?${params.toString()}`);
   };
 
-  const ws = new WebSocket("ws://127.0.0.1:8000/ws/events");
-
-  ws.onmessage = (ev) => {
-    const data = JSON.parse(ev.data);
-    // อัปเดต UI แบบ real-time
-    setRawEvents((prev) => [data, ...prev]);
-  };
+  // ===== DELETED: โค้ด WS ที่ผิด 7 บรรทัดตรงนี้ถูกลบไปแล้ว =====
 
   return (
-    <div class="pt-0 bg-gradient-to-br from-white to-blue-400">
+    // ===== MODIFIED: แก้ไข class (อาจจะพิมพ์ผิด) =====
+    <div className="pt-0 bg-gradient-to-br from-white to-blue-400 min-h-screen">
       <div className="max-w-7xl mx-auto px-6 py-6">
         {/* แผงฟิลเตอร์ */}
         <div className="bg-slate-200/60 rounded-xl p-6">

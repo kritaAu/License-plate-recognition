@@ -78,6 +78,15 @@ class EventIn(BaseModel):
     vehicle_id: int | None = None
     direction: str | None = None
 
+    @field_validator("datetime")
+    @classmethod
+    # ตรวจสอบว่าถ้าเวลาที่ส่งมาเป็น 'naive' (ไม่มี timezone) ให้ 'assume' ว่าเป็นเวลา Bangkok (BKK)
+    def localize_datetime(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            # BKK ถูก define ไว้ด้านบนของไฟล์แล้ว (BKK = get_bkk_tz())
+            return v.replace(tzinfo=BKK)
+        return v
+
 
 # Model สำหรับสร้าง Member ใหม่
 class MemberCreate(BaseModel):
