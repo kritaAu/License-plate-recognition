@@ -413,17 +413,11 @@ def delete_member(member_id: int):
 
 
 # =====
-<<<<<<< Updated upstream
 # ROUTES: EVENTS
 # =====
 
 
 # ดึงข้อมูล Event ทั้งหมด รองรับการกรอง (Filter)
-=======
-# Endpoint หน้า Search/Home ดึงข้อมูล Event ทั้งหมด รองรับการกรอง (Filter) ตามวันที่, ทิศทาง, และป้ายทะเบียน
-BKK = timezone(timedelta(hours=7))   # เลี่ยงปัญหา ZoneInfo บน Windows
-
->>>>>>> Stashed changes
 @app.get("/events")
 def list_events(
     start_date: str | None = Query(None, description="YYYY-MM-DD (local)"),
@@ -435,7 +429,6 @@ def list_events(
     q = supabase.table("Event").select("*")
 
     # ----- กรองช่วงวันแบบ Local แล้วแปลงเป็น UTC ก่อนยิงเข้า DB -----
-    # ข้อมูลใน DB ของคุณเก็บเป็น UTC เช่น ...+00:00
     if start_date:
         d = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=BKK)
         start_utc = d.astimezone(timezone.utc)
@@ -450,59 +443,84 @@ def list_events(
     if direction and direction.upper() in ("IN", "OUT"):
         q = q.eq("direction", direction.upper())
 
-    # ----- กรองทะเบียน (contains, ไม่สนตัวพิมพ์) -----
+    # ----- กรองทะเบียน -----
     if plate:
-        # ถ้าใช้ Supabase Python v2: ilike ใช้ได้
         q = q.ilike("plate", f"%{plate}%")
 
-<<<<<<< Updated upstream
-            # ถ้ายังไม่ได้ role → fallback หาโดย plate+province
-            if not role:
-                role = _role_from_plate_province(e.get("plate"), e.get("province"))
-
-            check_status = (
-                "บุคคลภายนอก"
-                if not role or str(role).lower() == "visitor"
-                else "บุคคลภายใน"
-            )
-
-            direction_en = (e.get("direction") or "").upper()
-            direction_th = dir_th.get(direction_en, "ไม่ทราบ")
-
-            results.append(
-                {
-                    "time": e.get("datetime"),
-                    "plate": e.get("plate") or "-",
-                    "province": e.get("province") or "-",
-                    "status": direction_th,
-                    "check": check_status,
-                    "imgUrl": e.get("blob") or None,
-                }
-            )
-
-        return results
-    except Exception as ex:
-        raise HTTPException(status_code=500, detail=f"Error fetching events: {str(ex)}")
-=======
     q = q.order("datetime", desc=True).limit(limit)
     res = q.execute().data
 
-    # (เลือก) map field ให้สอดคล้องกับหน้าเว็บ
-    out = []
+    out: list[dict] = []
+
     for r in res:
-        role = (r.get("role") or "").strip()
-        check = "บุคคลภายใน" if role in ("นักศึกษา", "อาจารย์", "เจ้าหน้าที่", "internal", "staff", "employee") else "บุคคลภายนอก"
-        out.append({
-            "datetime": r.get("datetime"),      # เก็บเป็น UTC string ไปก่อน หน้าเว็บจะฟอร์แมตเอง
-            "plate": r.get("plate"),
-            "province": r.get("province"),
-            "direction": r.get("direction"),
-            "role": role,
-            "check": check,
-            "imgUrl": r.get("image") or r.get("imgUrl"),
-        })
+        role_raw = (r.get("role") or "").strip()
+
+        member_name = None
+        member_department = None
+
+        # ถ้ามี vehicle_id ลองไปดึง Member ที่ผูกกับรถคันนี้
+        vehicle_id = r.get("vehicle_id")
+        if vehicle_id:
+            try:
+                v = (
+                    supabase.table("Vehicle")
+                    .select(
+                        "member:Member!Vehicle_member_id_fkey(full_name,name,department,dept,role)"
+                    )
+                    .eq("vehicle_id", vehicle_id)
+                    .limit(1)
+                    .execute()
+                )
+                if v.data:
+                    member = v.data[0].get("member") or {}
+                    # ถ้า role ใน Event ว่าง ใช้ role จาก Member แทน
+                    if not role_raw:
+                        role_raw = (member.get("role") or "").strip()
+
+                    member_name = (
+                        member.get("full_name")
+                        or member.get("name")
+                        or member.get("display_name")
+                    )
+                    member_department = (
+                        member.get("department")
+                        or member.get("dept")
+                        or None
+                    )
+            except Exception as e:
+                # พลาดก็ปล่อยผ่าน แค่ไม่มีชื่อ ไม่ให้ error ทั้ง endpoint
+                print("member lookup error:", e)
+
+        # แยกบุคคลภายใน/ภายนอกจาก role
+        check = (
+            "บุคคลภายใน"
+            if role_raw in ("นักศึกษา", "อาจารย์", "เจ้าหน้าที่", "internal", "staff", "employee")
+            else "บุคคลภายนอก"
+        )
+
+        # รูปภาพ
+        blob = r.get("blob") or r.get("image") or r.get("imgUrl")
+
+        out.append(
+            {
+                "datetime": r.get("datetime"),
+                "plate": r.get("plate"),
+                "province": r.get("province"),
+                "direction": r.get("direction"),
+                "role": role_raw,
+                "check": check,
+                "blob": blob,
+                "imgUrl": blob,
+                "image": blob,
+                # ✅ เพิ่มสองฟิลด์นี้ให้ frontend ใช้
+                "member_name": member_name,
+                "member_department": member_department,
+            }
+        )
+
     return out
->>>>>>> Stashed changes
+
+
 
 
 # สร้าง Event ใหม่, บันทึกลง DB, และ Broadcast ไปยัง WebSocket
@@ -515,31 +533,54 @@ async def create_event(event: EventIn):
         p_can = _canon_plate(plate_raw)
         prov_can = _canon_text(prov_raw)
 
-        # ตรวจสอบ Vehicle ในระบบ พร้อม role
+        # ตรวจสอบ Vehicle ในระบบ พร้อม role + ชื่อ/แผนก ของ Member
         vehicle_data = None
-        role = None
+        role: str | None = None
+        member_name: str | None = None
+        member_department: str | None = None
+
         if p_can and prov_can:
             guess = (
                 supabase.table("Vehicle")
                 .select(
-                    "vehicle_id, plate, province, member_id, member:Member!Vehicle_member_id_fkey(role)"
+                    # ดึงข้อมูล member มามากกว่าตัว role
+                    "vehicle_id, plate, province, member_id, "
+                    "member:Member!Vehicle_member_id_fkey(full_name,name,department,dept,role)"
                 )
                 .ilike("plate", f"%{plate_raw}%")
                 .ilike("province", f"%{prov_raw}%")
                 .limit(20)
                 .execute()
             )
+
             if guess.data:
                 vehicle_data = guess.data[0]
                 member = vehicle_data.get("member") or {}
-                role = member.get("role")
+
+                # role ใช้จาก Member ถ้ามี
+                role = (member.get("role") or "").strip() or None
+
+                # ชื่อ (ลองหลาย field เผื่อ schema ต่างกัน)
+                member_name = (
+                    member.get("full_name")
+                    or member.get("name")
+                    or member.get("display_name")
+                    or None
+                )
+
+                # แผนก (ลองหลาย field เช่น department / dept)
+                member_department = (
+                    member.get("department")
+                    or member.get("dept")
+                    or None
+                )
 
         # ตรวจสอบ direction (ใช้ cam_id เป็น Fallback)
         direction = event.direction or (
             "IN" if event.cam_id == 1 else "OUT" if event.cam_id == 2 else "UNKNOWN"
         )
 
-        # เตรียมข้อมูล (Payload)
+        # เตรียมข้อมูล (Payload) สำหรับบันทึกลง DB
         payload = {
             "datetime": event.datetime.isoformat(),
             "plate": event.plate or None,
@@ -568,6 +609,10 @@ async def create_event(event: EventIn):
             "role": role or "Visitor",
             "image": saved_event.get("blob"),
             "blob": saved_event.get("blob"),  # เผื่อ frontend ใช้ชื่อนี้
+
+            #  เพิ่มข้อมูล member สำหรับบุคคลภายใน
+            "member_name": member_name,
+            "member_department": member_department,
         }
 
         # Broadcast event ใหม่ไปยัง Client แบบ JSON
@@ -580,6 +625,7 @@ async def create_event(event: EventIn):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาด: {str(e)}")
+
 
 
 # =====
@@ -661,31 +707,111 @@ def dashboard_summary(date: str | None = None):
 @app.get("/dashboard/recent")
 def dashboard_recent(limit: int = 50):
     try:
-        response = (
+        # ดึง Event ล่าสุด (ไม่ใช้ Event.id แล้ว)
+        resp = (
             supabase.table("Event")
-            .select(
-                "datetime, plate, province, direction, blob,"
-                "Vehicle!Event_vehicle_id_fkey(member:Member!Vehicle_member_id_fkey(role))"
-            )
+            .select("datetime, plate, province, direction, blob, vehicle_id")
             .order("datetime", desc=True)
             .limit(limit)
             .execute()
         )
 
-        results = []
-        for e in response.data or []:
-            vehicle = e.get("Vehicle") or {}
-            if isinstance(vehicle, list):
-                vehicle = vehicle[0] if vehicle else {}
+        rows = resp.data or []
+        results: list[dict] = []
 
-            # ลองอ่าน role จาก JOIN
-            role = (vehicle.get("member") or {}).get("role")
+        for e in rows:
+            # role ที่อาจจะมีมาจากที่อื่น (ส่วนใหญ่จะว่าง)
+            role_raw = (e.get("role") or "").strip()
 
-            # ถ้าไม่พบ → หา role จากป้าย/จังหวัด
-            if not role:
-                role = _role_from_plate_province(e.get("plate"), e.get("province"))
+            member_name = None
+            member_department = None
 
-            role = role or "Visitor"
+            vehicle_id = e.get("vehicle_id")
+            plate_raw = (e.get("plate") or "").strip()
+            prov_raw = (e.get("province") or "").strip()
+
+            member = None
+
+            # ---------- หา Vehicle + Member ----------
+            try:
+                vehicle_resp = None
+
+                if vehicle_id:
+                  # มี vehicle_id ใช้อันนี้เป็นหลัก
+                  vehicle_resp = (
+                      supabase.table("Vehicle")
+                      .select("member:Member!Vehicle_member_id_fkey(*)")
+                      .eq("vehicle_id", vehicle_id)
+                      .limit(1)
+                      .execute()
+                  )
+                elif plate_raw and prov_raw:
+                  # fallback เก่า ๆ: ป้าย + จังหวัด
+                  vehicle_resp = (
+                      supabase.table("Vehicle")
+                      .select("member:Member!Vehicle_member_id_fkey(*)")
+                      .ilike("plate", f"%{plate_raw}%")
+                      .ilike("province", f"%{prov_raw}%")
+                      .limit(1)
+                      .execute()
+                  )
+
+                if vehicle_resp and vehicle_resp.data:
+                    v = vehicle_resp.data[0]
+                    member = v.get("member") or {}
+
+            except Exception as sub_ex:
+                # log ไว้ดูหลังบ้าน ไม่กระทบ response
+                print("dashboard_recent vehicle/member lookup error:", sub_ex)
+
+            # ---------- หา role ----------
+            if member and not role_raw:
+                role_raw = (member.get("role") or "").strip()
+
+            # ถ้ายังไม่มี -> ใช้ fallback เดิมจากป้าย/จังหวัด
+            if not role_raw:
+                role_raw = _role_from_plate_province(
+                    e.get("plate"), e.get("province")
+                )
+
+            role_raw = role_raw or "Visitor"
+
+            # ---------- สร้างชื่อ + แผนก จาก key ที่มีจริง ----------
+            if member:
+                # ชื่อ
+                first = (
+                    member.get("first_name")
+                    or member.get("firstname")
+                    or ""
+                ).strip()
+                last = (
+                    member.get("last_name")
+                    or member.get("lastname")
+                    or ""
+                ).strip()
+
+                full = (
+                    member.get("full_name")
+                    or member.get("name")
+                    or member.get("display_name")
+                    or ""
+                )
+
+                if not full:
+                    full = (first + " " + last).strip()
+
+                member_name = full or None
+
+                # แผนก / ฝ่าย
+                member_department = (
+                    member.get("department")
+                    or member.get("dept")
+                    or member.get("division")
+                    or None
+                )
+
+            # ---------- รูป ----------
+            blob = e.get("blob") or e.get("image") or e.get("imgUrl")
 
             results.append(
                 {
@@ -693,16 +819,22 @@ def dashboard_recent(limit: int = 50):
                     "plate": e.get("plate") or "-",
                     "province": e.get("province") or "-",
                     "direction": e.get("direction") or "-",
-                    "role": role,
-                    "image": e.get("blob") or None,
+                    "role": role_raw,
+                    "image": blob,
+                    # ให้ frontend เอาไปใช้ใน modal
+                    "member_name": member_name,
+                    "member_department": member_department,
                 }
             )
 
         return {"count": len(results), "data": results}
+
     except Exception as ex:
         raise HTTPException(
             status_code=500, detail=f"Error in dashboard_recent: {str(ex)}"
         )
+
+
 
 
 BKK = get_bkk_tz()
@@ -825,8 +957,6 @@ def export_events(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error exporting events: {str(e)}")
-<<<<<<< Updated upstream
-=======
 
 
 # WEBSOCKET ROUTES
@@ -854,4 +984,3 @@ def login(body: LoginIn):
     if body.username == "admin" and body.password == "1234":
         return {"access_token": "demo-token-admin", "user": {"username": "admin"}}
     raise HTTPException(status_code=401, detail="Invalid credentials")
->>>>>>> Stashed changes

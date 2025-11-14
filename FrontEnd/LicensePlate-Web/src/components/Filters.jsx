@@ -1,10 +1,20 @@
 // src/components/Filters.jsx
-export default function Filters({ filters, setFilters, onApply, onReset, onExport }) {
-  const set = (name) => (e) => setFilters((s) => ({ ...s, [name]: e.target.value }));
+export default function Filters({
+  filters,
+  setFilters,
+  onApply,
+  onReset,
+  onExport,
+}) {
+  const set = (name) => (e) =>
+    setFilters((s) => ({ ...s, [name]: e.target.value }));
 
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); onApply(); }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        onApply();
+      }}
       className="grid gap-4 md:grid-cols-4 items-end"
     >
       <div>
@@ -18,7 +28,9 @@ export default function Filters({ filters, setFilters, onApply, onReset, onExpor
       </div>
 
       <div>
-        <label className="block text-sm text-slate-600 mb-1">วันที่สิ้นสุด</label>
+        <label className="block text-sm text-slate-600 mb-1">
+          วันที่สิ้นสุด
+        </label>
         <input
           type="date"
           value={filters.end}
@@ -41,7 +53,9 @@ export default function Filters({ filters, setFilters, onApply, onReset, onExpor
       </div>
 
       <div>
-        <label className="block text-sm text-slate-600 mb-1">ค้นหาทะเบียน</label>
+        <label className="block text-sm text-slate-600 mb-1">
+          ค้นหาทะเบียน
+        </label>
         <input
           placeholder="เช่น 6ษย9272"
           value={filters.query}
@@ -67,12 +81,14 @@ export default function Filters({ filters, setFilters, onApply, onReset, onExpor
         </button>
 
         <button
-          type="button"
-          onClick={onExport}
-          className="ml-auto rounded-lg bg-rose-100 px-6 py-2 font-medium text-rose-700 hover:bg-rose-200"
-        >
-          Export CSV
-        </button>
+  type="button"
+  onClick={onExport}
+  style={{ borderRadius: "9999px" }}  
+  className="px-5 py-2 bg-pink-200 text-red-700 font-medium shadow-sm hover:bg-pink-300 transition-colors"
+>
+  Export CSV
+</button>
+
       </div>
     </form>
   );

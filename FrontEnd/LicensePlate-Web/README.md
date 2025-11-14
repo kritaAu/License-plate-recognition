@@ -13,3 +13,6 @@ npm i react-router-dom
 
 # Graph
 npm i recharts
+
+# User Admin
+# Pass 1234

@@ -2,9 +2,9 @@
 import { NavLink, useLocation } from "react-router-dom";
 
 const TABS = [
-  { to: "/",        label: "Home"   },
-  { to: "/search",  label: "Search" },
-  { to: "/member",  label: "Member" },
+  { to: "/", label: "Home" },
+  { to: "/search", label: "Search" },
+  { to: "/member", label: "Member" },
   // { to: "/camera",  label: "Camera" },
 ];
 
@@ -23,14 +23,12 @@ export default function Navbar({ onLogout }) {
 
   return (
     <header className="w-full bg-[#12305a] text-white shadow-sm sticky top-0 z-50">
-      
       {/* 1. Desktop Navbar (Layout 2 ส่วน: ซ้าย และ ขวา) */}
       <div className="mx-auto max-w-1xl px-3 sm:px-4 lg:px-6">
-        {/*  ใช้ justify-between เพื่อดัน 2 ส่วนหลักออกจากกัน */}
+        {/* 🌟 ใช้ justify-between เพื่อดัน 2 ส่วนหลักออกจากกัน */}
         <div className="flex h-16 items-stretch justify-between">
-          
-          {/*  ส่วนซ้าย (รวม Brand และ Links)  */}
-          <div className="flex items-stretch"> 
+          {/* 🌟 ส่วนซ้าย (รวม Brand และ Links) 🌟 */}
+          <div className="flex items-stretch">
             {/* Brand */}
             <div className="flex items-center px-2 sm:px-3">
               <span className="text-lg sm:text-xl font-semibold tracking-wide">
@@ -39,7 +37,9 @@ export default function Navbar({ onLogout }) {
             </div>
 
             {/* Tabs (ย้ายมาไว้ข้าง Brand) */}
-            <nav className="hidden md:flex items-stretch ml-4"> {/*  เพิ่ม ml-4 (margin-left) เพื่อเว้นวรรค */}
+            <nav className="hidden md:flex items-stretch ml-4">
+              {" "}
+              {/* 🌟 เพิ่ม ml-4 (margin-left) เพื่อเว้นวรรค */}
               {TABS.map((t, i) => (
                 <NavLink
                   key={t.to}
@@ -62,13 +62,12 @@ export default function Navbar({ onLogout }) {
           </div>
           {/* 🌟 สิ้นสุดส่วนซ้าย 🌟 */}
 
-
           {/* ส่วนขวา: ปุ่ม Log Out (เหมือนเดิม) */}
-          <div className="flex items-center rounded-2xl">
+          <div className="flex items-center">
             <button
               onClick={handleLogout}
-              className="ml-3 rounded-xl bg-[#b11c1b] hover:bg-[#971616] px-5 py-2 text-lg font-semibold shadow"
-              title="Log Out"
+              style={{ borderRadius: "9999px" }} // บังคับให้โค้งสุด ๆ
+              className="ml-3 bg-[#b11c1b] hover:bg-[#971616] px-5 py-2 text-lg font-semibold text-white shadow-md"
             >
               Log Out
             </button>

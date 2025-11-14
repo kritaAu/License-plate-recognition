@@ -108,10 +108,10 @@ export default function Home() {
 
       ws.onmessage = (ev) => {
         try {
-          // ถ้า back-end ส่งข้อความธรรมดา (ไม่ใช่ JSON) จะไม่พัง เพราะอยู่ใน try/catch
           const data =
             typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
           if (!data?.datetime) return;
+          // data จาก WS จะมี member_name / member_department ด้วย (ถ้าเป็นบุคคลภายใน)
           setRawEvents((prev) => [data, ...prev]);
         } catch {
           // ไม่ใช่ JSON -> ข้าม
@@ -143,6 +143,7 @@ export default function Home() {
   const loadRecent = async () => {
     const res = await getRecentEvents();
     const list = Array.isArray(res) ? res : res?.data || [];
+    // list แต่ละตัวควรมี member_name / member_department มาจาก /dashboard/recent แล้ว
     setRawEvents(list);
   };
 
@@ -221,19 +222,15 @@ export default function Home() {
     }
 
     const [y, m, d] = dateStr.split("-").map((n) => parseInt(n, 10));
-    // ใช้ช่วงเวลาเต็มวัน (กันปัญหา timezone)
     const start = new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
     const end = new Date(y, (m || 1) - 1, (d || 1) + 1, 0, 0, 0, 0);
 
     const pad = (n) => String(n).padStart(2, "0");
 
-    // เตรียม bucket 24 ชั่วโมง
     const buckets = Array.from({ length: 24 }, (_, hour) => ({
       label: `${pad(hour)}:00`,
-      // ชื่อที่กราฟใช้
       internal: 0,
       external: 0,
-      // เผื่อไว้ถ้าคุณอยากอ้างอิงชื่อเก่า
       inside: 0,
       outside: 0,
     }));
@@ -286,16 +283,38 @@ export default function Home() {
         dir === "in" ? "เข้า" : dir === "out" ? "ออก" : e.direction || "-";
       const check = isInsideRole(e.role) ? "บุคคลภายใน" : "บุคคลภายนอก";
 
-      // แสดงเวลาเป็น Local (ไทย)
       const formattedTime = formatThaiDateTime(e.datetime);
+
+      // 🔎 ดึงชื่อ + แผนกจาก event (รองรับทั้งจาก /dashboard/recent และ WS)
+      const memberName =
+        e.member_name ||
+        e.driver_name ||
+        e.owner_name ||
+        e.full_name ||
+        e.name ||
+        null;
+
+      const memberDept =
+        e.member_department ||
+        e.department ||
+        e.dept ||
+        null;
 
       return {
         time: formattedTime,
         plate: `${e.plate || "-"}${e.province ? " จ." + e.province : ""}`,
         status,
         check,
-        imgUrl: e.image || e.blob || null, // เผื่อกรณี field ชื่อ blob
-        _raw: e,
+        imgUrl: e.image || e.blob || null,
+        // เก็บชื่อ/แผนกไว้บน record ด้วย เผื่อ component อื่นใช้
+        member_name: memberName,
+        member_department: memberDept,
+        // และย้ำเก็บลง _raw เพื่อให้ RecordsTable modal อ่านได้แน่นอน
+        _raw: {
+          ...e,
+          member_name: memberName,
+          member_department: memberDept,
+        },
       };
     });
 
@@ -376,33 +395,39 @@ export default function Home() {
             </span>
           </div>
 
-          <div className="inline-flex rounded-xl border border-sky-200 bg-white p-1 text-sm">
+          {/* ปุ่มกรองตาม personType */}
+          <div className="inline-flex rounded-xl border border-sky-200 bg-white px-1 text-sm">
             <button
+              type="button"
               onClick={() => setPersonType("all")}
-              className={`px-3 py-1 rounded-lg ${
+              className={`px-3 py-1 !rounded-full ${
                 personType === "all"
                   ? "bg-sky-600 text-white"
-                  : "text-slate-700"
+                  : "text-slate-700 hover:bg-sky-50"
               }`}
             >
               ทั้งหมด
             </button>
+
             <button
+              type="button"
               onClick={() => setPersonType("inside")}
-              className={`px-3 py-1 rounded-lg ${
+              className={`px-3 py-1 !rounded-full ${
                 personType === "inside"
                   ? "bg-sky-600 text-white"
-                  : "text-slate-700"
+                  : "text-slate-700 hover:bg-sky-50"
               }`}
             >
               ภายใน
             </button>
+
             <button
+              type="button"
               onClick={() => setPersonType("outside")}
-              className={`px-3 py-1 rounded-lg ${
+              className={`px-3 py-1 !rounded-full ${
                 personType === "outside"
                   ? "bg-sky-600 text-white"
-                  : "text-slate-700"
+                  : "text-slate-700 hover:bg-sky-50"
               }`}
             >
               ภายนอก
@@ -421,7 +446,6 @@ export default function Home() {
               <div className="mt-2 h-px bg-gradient-to-r from-sky-200 via-indigo-200 to-transparent" />
             </header>
             <div className="pt-2">
-              {/*  ส่งข้อมูลเข้าไป */}
               <WeeklyBarChart data={weeklyInData} color="#b3cde0" />
             </div>
           </section>
