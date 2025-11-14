@@ -1,5 +1,6 @@
 // src/components/RecordsTable.jsx
 import { useMemo, useState, useEffect, useCallback } from "react";
+import { formatThaiDateTime } from "../utils/date";
 
 /** ================== helpers ================== */
 function normalizeDir(v) {
@@ -98,13 +99,12 @@ export default function RecordsTable({ records = [], pageSize = 10 }) {
     setPersonOpen(true);
 
     try {
-      const plateForQuery = basePlateStr(row.plate); // กันกรณีเป็น "xx 1234 จ.กรุงเทพ…"
+      const plateForQuery = basePlateStr(row.plate);
       const url = new URL(`${API}/members`);
       if (plateForQuery) url.searchParams.set("plate", plateForQuery);
       const res = await fetch(url.toString());
       const list = (await res.json()) || [];
 
-      // เลือกแถวที่ตรงทะเบียนที่สุด (ถ้ามี province ก็ช่วยกรอง)
       const normalized = (s) => String(s || "").replace(/\s/g, "");
       let best =
         list.find(
@@ -143,9 +143,14 @@ export default function RecordsTable({ records = [], pageSize = 10 }) {
               const dirRaw = r.direction ?? r.status;
               const isInside = (r.check || "").includes("ภายใน");
 
+              // ✅ ถ้า r.time มีอยู่แล้ว (มาจากหน้า Search ที่ฟอร์แมตแล้ว) ให้ใช้ตรงๆ
+              // ถ้าไม่มี ให้ฟอร์แมตจาก r.datetime
+              const displayTime = r.time || formatThaiDateTime(r.datetime);
+              const imageUrl = r.imgUrl || r.image || null;
+
               return (
-                <tr key={`${r.time}-${idx}`} className="hover:bg-slate-50/70">
-                  <td className="px-3 py-3 align-top whitespace-nowrap">{r.time}</td>
+                <tr key={`${displayTime || r.datetime || idx}-${idx}`} className="hover:bg-slate-50/70">
+                  <td className="px-3 py-3 align-top whitespace-nowrap">{displayTime || "-"}</td>
 
                   <td className="px-3 py-3 align-top">
                     <div className="font-medium">{r.plate || "-"}</div>
@@ -179,17 +184,15 @@ export default function RecordsTable({ records = [], pageSize = 10 }) {
                   </td>
 
                   <td className="px-3 py-2 align-top">
-                    {r.imgUrl ? (
+                    {imageUrl ? (
                       <button
                         type="button"
-                        onClick={() =>
-                          openPreview(r.imgUrl, `${r.plate || "-"} ${r.province || ""}`)
-                        }
+                        onClick={() => openPreview(imageUrl, `${r.plate || "-"} ${r.province || ""}`)}
                         className="group block rounded-lg border border-slate-200 overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                         title="ดูภาพ"
                       >
                         <img
-                          src={r.imgUrl}
+                          src={imageUrl}
                           alt={`ภาพ: ${r.plate || "-"}`}
                           className="h-16 w-24 object-cover group-hover:opacity-90"
                           onError={(e) => {
@@ -242,27 +245,26 @@ export default function RecordsTable({ records = [], pageSize = 10 }) {
           ก่อนหน้า
         </button>
 
-        {getPaginationRange(page, Math.max(1, Math.ceil(records.length / pageSize)), 1).map(
-          (p, i) =>
-            p === "..." ? (
-              <span key={`dots-${i}`} className="inline-flex h-9 items-center px-2 text-slate-400">
-                …
-              </span>
-            ) : (
-              <button
-                key={`p-${p}`}
-                onClick={() => setPage(p)}
-                aria-current={p === page ? "page" : undefined}
-                className={
-                  "inline-flex h-9 min-w-[36px] items-center justify-center rounded-lg border px-2 text-sm transition " +
-                  (p === page
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50")
-                }
-              >
-                {p}
-              </button>
-            )
+        {getPaginationRange(page, Math.max(1, Math.ceil(records.length / pageSize)), 1).map((p, i) =>
+          p === "..." ? (
+            <span key={`dots-${i}`} className="inline-flex h-9 items-center px-2 text-slate-400">
+              …
+            </span>
+          ) : (
+            <button
+              key={`p-${p}`}
+              onClick={() => setPage(p)}
+              aria-current={p === page ? "page" : undefined}
+              className={
+                "inline-flex h-9 min-w-[36px] items-center justify-center rounded-lg border px-2 text-sm transition " +
+                (p === page
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50")
+              }
+            >
+              {p}
+            </button>
+          )
         )}
 
         <button
@@ -311,10 +313,7 @@ export default function RecordsTable({ records = [], pageSize = 10 }) {
           role="dialog"
           aria-modal="true"
         >
-          <div
-            className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-lg font-semibold">ข้อมูลบุคคลภายใน</h3>
               <button className="rounded-md border px-3 py-1 text-sm" onClick={() => setPersonOpen(false)}>
@@ -323,29 +322,40 @@ export default function RecordsTable({ records = [], pageSize = 10 }) {
             </div>
 
             {personLoading && <div className="py-6 text-center text-slate-500">กำลังโหลด…</div>}
-
             {!personLoading && person?._error && (
               <div className="py-6 text-center text-rose-600">เกิดข้อผิดพลาดในการดึงข้อมูล</div>
             )}
-
             {!personLoading && person?._notFound && (
               <div className="py-6 text-center text-slate-600">ไม่พบข้อมูลสมาชิกในระบบสำหรับทะเบียนนี้</div>
             )}
 
             {!personLoading && person && !person._error && !person._notFound && (
               <div className="space-y-2 text-sm">
-                <div><span className="text-slate-500">ชื่อ-นามสกุล:</span> {person.firstname || "-"} {person.lastname || ""}</div>
+                <div>
+                  <span className="text-slate-500">ชื่อ-นามสกุล:</span> {person.firstname || "-"} {person.lastname || ""}
+                </div>
                 {"std_id" in person && (
-                  <div><span className="text-slate-500">รหัสนักศึกษา:</span> {person.std_id ?? "-"}</div>
+                  <div>
+                    <span className="text-slate-500">รหัสนักศึกษา:</span> {person.std_id ?? "-"}
+                  </div>
                 )}
                 {"faculty" in person && (
-                  <div><span className="text-slate-500">คณะ:</span> {person.faculty || "-"}</div>
+                  <div>
+                    <span className="text-slate-500">คณะ:</span> {person.faculty || "-"}
+                  </div>
                 )}
                 {"major" in person && (
-                  <div><span className="text-slate-500">สาขา:</span> {person.major || "-"}</div>
+                  <div>
+                    <span className="text-slate-500">สาขา:</span> {person.major || "-"}
+                  </div>
                 )}
-                <div><span className="text-slate-500">บทบาท:</span> {person.role || "-"}</div>
-                <div><span className="text-slate-500">ทะเบียน/จังหวัด:</span> {person.plate || "-"} {person.province ? `จ.${person.province}` : ""}</div>
+                <div>
+                  <span className="text-slate-500">บทบาท:</span> {person.role || "-"}
+                </div>
+                <div>
+                  <span className="text-slate-500">ทะเบียน/จังหวัด:</span> {person.plate || "-"}{" "}
+                  {person.province ? `จ.${person.province}` : ""}
+                </div>
               </div>
             )}
           </div>

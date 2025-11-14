@@ -1,4 +1,5 @@
 // utils/FetchUtil.js
+import { useAuth } from "../context/AuthContext";
 export async function getData(url, opts = {}) {
   try {
     const res = await fetch(url, opts);
@@ -12,4 +13,14 @@ export async function getData(url, opts = {}) {
     // คืนรูปแบบปลอดภัย ให้หน้าไม่ล้ม
     return { data: [] };
   }
+}
+
+
+export function useApiFetch() {
+  const { token } = useAuth();
+  return (url, options = {}) => {
+    const headers = new Headers(options.headers || {});
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch(url, { ...options, headers });
+  };
 }

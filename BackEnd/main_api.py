@@ -6,6 +6,7 @@ from fastapi import (
     Query,
     WebSocket,
     WebSocketDisconnect,
+    APIRouter
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -13,7 +14,8 @@ from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional, Union, Literal
 from supabase import create_client
 from dotenv import load_dotenv
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
+
 import os
 import io
 import csv
@@ -143,6 +145,7 @@ class MemberUpdate(BaseModel):
     faculty: str | None = None
     major: str | None = None
     role: str | None = None
+
 
 
 # =====
@@ -410,56 +413,49 @@ def delete_member(member_id: int):
 
 
 # =====
+<<<<<<< Updated upstream
 # ROUTES: EVENTS
 # =====
 
 
 # ดึงข้อมูล Event ทั้งหมด รองรับการกรอง (Filter)
+=======
+# Endpoint หน้า Search/Home ดึงข้อมูล Event ทั้งหมด รองรับการกรอง (Filter) ตามวันที่, ทิศทาง, และป้ายทะเบียน
+BKK = timezone(timedelta(hours=7))   # เลี่ยงปัญหา ZoneInfo บน Windows
+
+>>>>>>> Stashed changes
 @app.get("/events")
-def get_events(
-    limit: int = Query(1000, ge=1),
-    start_date: str | None = Query(None, description="YYYY-MM-DD"),
-    end_date: str | None = Query(None, description="YYYY-MM-DD"),
-    direction: str | None = Query(None),
-    query: str | None = Query(None, description="Plate query"),
+def list_events(
+    start_date: str | None = Query(None, description="YYYY-MM-DD (local)"),
+    end_date: str | None = Query(None, description="YYYY-MM-DD (local)"),
+    direction: str | None = Query(None, description="IN|OUT"),
+    plate: str | None = Query(None, description="partial match, case-insensitive"),
+    limit: int = 5000,
 ):
-    try:
-        qb = (
-            supabase.table("Event")
-            .select(
-                "datetime, plate, province, direction, blob, vehicle_id,"
-                "Vehicle!Event_vehicle_id_fkey(member:Member!Vehicle_member_id_fkey(role))"
-            )
-            .order("datetime", desc=True)
-            .limit(limit)
-        )
+    q = supabase.table("Event").select("*")
 
-        # Filters
-        if start_date:
-            qb = qb.gte("datetime", f"{start_date}T00:00:00")
-        if end_date:
-            qb = qb.lte("datetime", f"{end_date}T23:59:59")
-        if direction and direction.lower() != "all":
-            qb = qb.eq("direction", direction.upper())
-        if query:
-            qb = qb.ilike("plate", f"%{query.strip()}%")
+    # ----- กรองช่วงวันแบบ Local แล้วแปลงเป็น UTC ก่อนยิงเข้า DB -----
+    # ข้อมูลใน DB ของคุณเก็บเป็น UTC เช่น ...+00:00
+    if start_date:
+        d = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=BKK)
+        start_utc = d.astimezone(timezone.utc)
+        q = q.gte("datetime", start_utc.isoformat())
 
-        resp = qb.execute()
+    if end_date:
+        d = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=BKK) + timedelta(days=1)
+        end_utc = d.astimezone(timezone.utc)
+        q = q.lt("datetime", end_utc.isoformat())
 
-        # แผนที่ทิศทาง -> ไทย
-        dir_th = {"IN": "เข้า", "OUT": "ออก"}
+    # ----- กรองทิศทาง -----
+    if direction and direction.upper() in ("IN", "OUT"):
+        q = q.eq("direction", direction.upper())
 
-        results = []
-        for e in resp.data or []:
-            # ดึง role จาก join ก่อน
-            vehicle = e.get("Vehicle") or {}
-            if isinstance(vehicle, list):
-                vehicle = vehicle[0] if vehicle else {}
-            member_obj = vehicle.get("member") or {}
-            if isinstance(member_obj, list):
-                member_obj = member_obj[0] if member_obj else {}
-            role = member_obj.get("role")
+    # ----- กรองทะเบียน (contains, ไม่สนตัวพิมพ์) -----
+    if plate:
+        # ถ้าใช้ Supabase Python v2: ilike ใช้ได้
+        q = q.ilike("plate", f"%{plate}%")
 
+<<<<<<< Updated upstream
             # ถ้ายังไม่ได้ role → fallback หาโดย plate+province
             if not role:
                 role = _role_from_plate_province(e.get("plate"), e.get("province"))
@@ -487,6 +483,26 @@ def get_events(
         return results
     except Exception as ex:
         raise HTTPException(status_code=500, detail=f"Error fetching events: {str(ex)}")
+=======
+    q = q.order("datetime", desc=True).limit(limit)
+    res = q.execute().data
+
+    # (เลือก) map field ให้สอดคล้องกับหน้าเว็บ
+    out = []
+    for r in res:
+        role = (r.get("role") or "").strip()
+        check = "บุคคลภายใน" if role in ("นักศึกษา", "อาจารย์", "เจ้าหน้าที่", "internal", "staff", "employee") else "บุคคลภายนอก"
+        out.append({
+            "datetime": r.get("datetime"),      # เก็บเป็น UTC string ไปก่อน หน้าเว็บจะฟอร์แมตเอง
+            "plate": r.get("plate"),
+            "province": r.get("province"),
+            "direction": r.get("direction"),
+            "role": role,
+            "check": check,
+            "imgUrl": r.get("image") or r.get("imgUrl"),
+        })
+    return out
+>>>>>>> Stashed changes
 
 
 # สร้าง Event ใหม่, บันทึกลง DB, และ Broadcast ไปยัง WebSocket
@@ -809,3 +825,33 @@ def export_events(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error exporting events: {str(e)}")
+<<<<<<< Updated upstream
+=======
+
+
+# WEBSOCKET ROUTES
+# =====
+# Endpoint สำหรับ Frontend รับการเชื่อมต่อ WebSocket จาก Client (React) และค้างไว้เพื่อรอรับการ Broadcast
+@app.websocket("/ws/events")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # คอยรับข้อความ (ถ้ามี)
+            data = await websocket.receive_text()
+            print(f"[WS] Received from client: {data}")
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+router = APIRouter(prefix="/auth", tags=["Auth"])
+# Model สำหรับ Login
+class LoginIn(BaseModel):
+    username: str
+    password: str
+@router.post("/login")
+def login(body: LoginIn):
+    # ตัวอย่างตรวจแบบง่าย
+    if body.username == "admin" and body.password == "1234":
+        return {"access_token": "demo-token-admin", "user": {"username": "admin"}}
+    raise HTTPException(status_code=401, detail="Invalid credentials")
+>>>>>>> Stashed changes

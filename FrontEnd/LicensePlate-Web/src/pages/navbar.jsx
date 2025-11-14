@@ -26,10 +26,10 @@ export default function Navbar({ onLogout }) {
       
       {/* 1. Desktop Navbar (Layout 2 ส่วน: ซ้าย และ ขวา) */}
       <div className="mx-auto max-w-1xl px-3 sm:px-4 lg:px-6">
-        {/* 🌟 ใช้ justify-between เพื่อดัน 2 ส่วนหลักออกจากกัน */}
+        {/*  ใช้ justify-between เพื่อดัน 2 ส่วนหลักออกจากกัน */}
         <div className="flex h-16 items-stretch justify-between">
           
-          {/* 🌟 ส่วนซ้าย (รวม Brand และ Links) 🌟 */}
+          {/*  ส่วนซ้าย (รวม Brand และ Links)  */}
           <div className="flex items-stretch"> 
             {/* Brand */}
             <div className="flex items-center px-2 sm:px-3">
@@ -39,7 +39,7 @@ export default function Navbar({ onLogout }) {
             </div>
 
             {/* Tabs (ย้ายมาไว้ข้าง Brand) */}
-            <nav className="hidden md:flex items-stretch ml-4"> {/* 🌟 เพิ่ม ml-4 (margin-left) เพื่อเว้นวรรค */}
+            <nav className="hidden md:flex items-stretch ml-4"> {/*  เพิ่ม ml-4 (margin-left) เพื่อเว้นวรรค */}
               {TABS.map((t, i) => (
                 <NavLink
                   key={t.to}
@@ -64,7 +64,7 @@ export default function Navbar({ onLogout }) {
 
 
           {/* ส่วนขวา: ปุ่ม Log Out (เหมือนเดิม) */}
-          <div className="flex items-center">
+          <div className="flex items-center rounded-2xl">
             <button
               onClick={handleLogout}
               className="ml-3 rounded-xl bg-[#b11c1b] hover:bg-[#971616] px-5 py-2 text-lg font-semibold shadow"
