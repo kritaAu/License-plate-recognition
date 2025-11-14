@@ -68,9 +68,8 @@ app.add_middleware(
 # =====
 
 
+# Model สำหรับรับข้อมูล Event จาก Worker
 class EventIn(BaseModel):
-    """Model สำหรับรับข้อมูล Event จาก Worker"""
-
     datetime: datetime
     plate: str | None = None
     province: str | None = None
