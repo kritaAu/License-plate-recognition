@@ -68,7 +68,8 @@ class MemberCreate(BaseModel):
     faculty: Optional[str] = None
     major: Optional[str] = None
     role: Literal["นักศึกษา", "อาจารย์", "เจ้าหน้าที่", "อื่น ๆ", "อื่นๆ"] = "นักศึกษา"
-  # แปลง std_id ที่เป็นสตริงตัวเลขให้เป็น int อัตโนมัติ
+
+    # แปลง std_id ที่เป็นสตริงตัวเลขให้เป็น int อัตโนมัติ
     @field_validator("std_id")
     @classmethod
     def normalize_std_id(cls, v):
@@ -96,6 +97,7 @@ class MemberCreate(BaseModel):
             self.faculty = None
             self.major = None
         return self
+
 
 # Model กำหนดโครงสร้างข้อมูล Vehicle สำหรับการสร้างรถใหม่
 class VehicleCreate(BaseModel):
@@ -242,7 +244,9 @@ def register_member_with_vehicle(payload: RegisterRequest):
 
         if not v_res.data:
             supabase.table("Member").delete().eq("member_id", member_id).execute()
-            raise HTTPException(status_code=400, detail="เพิ่มข้อมูลรถไม่สำเร็จ (Member ถูก Rollback)")
+            raise HTTPException(
+                status_code=400, detail="เพิ่มข้อมูลรถไม่สำเร็จ (Member ถูก Rollback)"
+            )
 
         vehicle = v_res.data[0]
         row = {
@@ -338,11 +342,12 @@ def _role_from_plate_province(plate: str | None, province: str | None):
             .execute()
         )
         if res.data:
-            member = (res.data[0].get("member") or {})
+            member = res.data[0].get("member") or {}
             return member.get("role")
     except Exception:
         pass
     return None
+
 
 @app.get("/events")
 def get_events(
@@ -379,7 +384,7 @@ def get_events(
         dir_th = {"IN": "เข้า", "OUT": "ออก"}
 
         results = []
-        for e in (resp.data or []):
+        for e in resp.data or []:
             # ดึง role จาก join ก่อน
             vehicle = e.get("Vehicle") or {}
             if isinstance(vehicle, list):
@@ -393,7 +398,11 @@ def get_events(
             if not role:
                 role = _role_from_plate_province(e.get("plate"), e.get("province"))
 
-            check_status = "บุคคลภายนอก" if not role or str(role).lower() == "visitor" else "บุคคลภายใน"
+            check_status = (
+                "บุคคลภายนอก"
+                if not role or str(role).lower() == "visitor"
+                else "บุคคลภายใน"
+            )
 
             direction_en = (e.get("direction") or "").upper()
             direction_th = dir_th.get(direction_en, "ไม่ทราบ")
@@ -403,8 +412,8 @@ def get_events(
                     "time": e.get("datetime"),
                     "plate": e.get("plate") or "-",
                     "province": e.get("province") or "-",
-                    "status": direction_th,      # ทิศทางเป็นไทย
-                    "check": check_status,       # คนใน/คนนอก
+                    "status": direction_th,  # ทิศทางเป็นไทย
+                    "check": check_status,  # คนใน/คนนอก
                     "imgUrl": e.get("blob") or None,
                 }
             )
@@ -414,16 +423,15 @@ def get_events(
         raise HTTPException(status_code=500, detail=f"Error fetching events: {str(ex)}")
 
 
-
 # Endpoint สำหรับ batch_process สร้าง Event ใหม่, บันทึกลง DB, และ Broadcast ไปยัง WebSocket
 @app.post("/events")
 async def create_event(event: EventIn):
     try:
         # --- Normalize ค่าที่เข้ามา ---
         plate_raw = (event.plate or "").strip()
-        prov_raw  = (event.province or "").strip()
-        p_can     = _canon_plate(plate_raw)
-        prov_can  = _canon_text(prov_raw)
+        prov_raw = (event.province or "").strip()
+        p_can = _canon_plate(plate_raw)
+        prov_can = _canon_text(prov_raw)
 
         # --- ตรวจสอบ Vehicle ในระบบ (แบบ normalize) ---
         vehicle_data = None
@@ -431,14 +439,13 @@ async def create_event(event: EventIn):
             guess = (
                 supabase.table("Vehicle")
                 .select("vehicle_id, plate, province, member_id")
-                .ilike("plate",    f"%{plate_raw}%")   # กรองหยาบ
+                .ilike("plate", f"%{plate_raw}%")  # กรองหยาบ
                 .ilike("province", f"%{prov_raw}%")
                 .limit(20)
                 .execute()
-            
             )
-            if vehicle_check.data:
-                vehicle_data = vehicle_check.data[0]
+            if guess.data:
+                vehicle_data = guess.data[0]
 
         # ตรวจสอบ direction (ใช้ cam_id เป็น Fallback)
         direction = event.direction or (
@@ -606,7 +613,6 @@ def dashboard_recent(limit: int = 50):
         raise HTTPException(
             status_code=500, detail=f"Error in dashboard_recent: {str(ex)}"
         )
-
 
 
 # Endpoint หน้า Home - กราฟรายวัน ดึงสถิติรายชั่วโมง (เข้า/ออก) สำหรับวันที่ระบุ
