@@ -9,7 +9,9 @@ import { getRecentEvents } from "../services/dashboardApi";
 import { formatThaiDateTime } from "../utils/date";
 
 // ===== สร้าง WS_URL จาก env หรือ fallback =====
-const API = (import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+const API = (
+  import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+).replace(/\/$/, "");
 const WS_URL =
   (import.meta.env?.VITE_WS_URL || API.replace(/^http/i, "ws")) + "/ws/events";
 
@@ -26,7 +28,9 @@ function isInsideRole(role) {
 const pad2 = (n) => String(n).padStart(2, "0");
 function todayLocalStr() {
   const now = new Date();
-  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(
+    now.getDate()
+  )}`;
 }
 
 export default function Home() {
@@ -105,7 +109,8 @@ export default function Home() {
       ws.onmessage = (ev) => {
         try {
           // ถ้า back-end ส่งข้อความธรรมดา (ไม่ใช่ JSON) จะไม่พัง เพราะอยู่ใน try/catch
-          const data = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
+          const data =
+            typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
           if (!data?.datetime) return;
           setRawEvents((prev) => [data, ...prev]);
         } catch {
@@ -143,7 +148,15 @@ export default function Home() {
 
   // ===== Helper: รายสัปดาห์ =====
   const startOfWeek = (date) => {
-    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+    const d = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      0,
+      0,
+      0,
+      0
+    );
     const day = (d.getDay() + 6) % 7; // จันทร์=0
     d.setDate(d.getDate() - day);
     d.setHours(0, 0, 0, 0);
@@ -158,10 +171,26 @@ export default function Home() {
     const today = new Date();
     const thisMon = startOfWeek(today);
     return [
-      { label: "3 สัปดาห์ก่อน", start: addDays(thisMon, -21), end: addDays(thisMon, -14) },
-      { label: "2 สัปดาห์ก่อน", start: addDays(thisMon, -14), end: addDays(thisMon, -7) },
-      { label: "สัปดาห์ก่อน",   start: addDays(thisMon, -7),  end: addDays(thisMon, 0) },
-      { label: "สัปดาห์นี้",     start: addDays(thisMon, 0),   end: addDays(thisMon, 7) },
+      {
+        label: "3 สัปดาห์ก่อน",
+        start: addDays(thisMon, -21),
+        end: addDays(thisMon, -14),
+      },
+      {
+        label: "2 สัปดาห์ก่อน",
+        start: addDays(thisMon, -14),
+        end: addDays(thisMon, -7),
+      },
+      {
+        label: "สัปดาห์ก่อน",
+        start: addDays(thisMon, -7),
+        end: addDays(thisMon, 0),
+      },
+      {
+        label: "สัปดาห์นี้",
+        start: addDays(thisMon, 0),
+        end: addDays(thisMon, 7),
+      },
     ];
   };
   const buildWeeklyInData = (events) => {
@@ -184,51 +213,50 @@ export default function Home() {
     return out;
   };
 
- // ===== Helper: รายวัน =====
-const buildDailySeries = (events, dateStr) => {
-  if (!Array.isArray(events) || !dateStr) {
-    setDailySeries([]);
-    return;
-  }
-
-  const [y, m, d] = dateStr.split("-").map((n) => parseInt(n, 10));
-  // ใช้ช่วงเวลาเต็มวัน (กันปัญหา timezone)
-  const start = new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
-  const end   = new Date(y, (m || 1) - 1, (d || 1) + 1, 0, 0, 0, 0);
-
-  const pad = (n) => String(n).padStart(2, "0");
-
-  // เตรียม bucket 24 ชั่วโมง
-  const buckets = Array.from({ length: 24 }, (_, hour) => ({
-    label: `${pad(hour)}:00`,
-    // ชื่อที่กราฟใช้
-    internal: 0,
-    external: 0,
-    // เผื่อไว้ถ้าคุณอยากอ้างอิงชื่อเก่า
-    inside: 0,
-    outside: 0,
-  }));
-
-  for (const ev of events) {
-    const dt = new Date(ev.datetime);
-    if (Number.isNaN(+dt)) continue;
-    if (!(dt >= start && dt < end)) continue;
-
-    const h = dt.getHours();
-    const isInternal = isInsideRole(ev.role);
-
-    if (isInternal) {
-      buckets[h].internal += 1;
-      buckets[h].inside   += 1;
-    } else {
-      buckets[h].external += 1;
-      buckets[h].outside  += 1;
+  // ===== Helper: รายวัน =====
+  const buildDailySeries = (events, dateStr) => {
+    if (!Array.isArray(events) || !dateStr) {
+      setDailySeries([]);
+      return;
     }
-  }
 
-  setDailySeries(buckets);
-};
+    const [y, m, d] = dateStr.split("-").map((n) => parseInt(n, 10));
+    // ใช้ช่วงเวลาเต็มวัน (กันปัญหา timezone)
+    const start = new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
+    const end = new Date(y, (m || 1) - 1, (d || 1) + 1, 0, 0, 0, 0);
 
+    const pad = (n) => String(n).padStart(2, "0");
+
+    // เตรียม bucket 24 ชั่วโมง
+    const buckets = Array.from({ length: 24 }, (_, hour) => ({
+      label: `${pad(hour)}:00`,
+      // ชื่อที่กราฟใช้
+      internal: 0,
+      external: 0,
+      // เผื่อไว้ถ้าคุณอยากอ้างอิงชื่อเก่า
+      inside: 0,
+      outside: 0,
+    }));
+
+    for (const ev of events) {
+      const dt = new Date(ev.datetime);
+      if (Number.isNaN(+dt)) continue;
+      if (!(dt >= start && dt < end)) continue;
+
+      const h = dt.getHours();
+      const isInternal = isInsideRole(ev.role);
+
+      if (isInternal) {
+        buckets[h].internal += 1;
+        buckets[h].inside += 1;
+      } else {
+        buckets[h].external += 1;
+        buckets[h].outside += 1;
+      }
+    }
+
+    setDailySeries(buckets);
+  };
 
   // ===== Helper: ตาราง + การ์ดสถิติของวัน =====
   const rebuildRecordsAndStatsForDay = (events, dateStr) => {
@@ -254,7 +282,8 @@ const buildDailySeries = (events, dateStr) => {
 
     const mapped = filtered.map((e) => {
       const dir = (e.direction || "").toLowerCase();
-      const status = dir === "in" ? "เข้า" : dir === "out" ? "ออก" : e.direction || "-";
+      const status =
+        dir === "in" ? "เข้า" : dir === "out" ? "ออก" : e.direction || "-";
       const check = isInsideRole(e.role) ? "บุคคลภายใน" : "บุคคลภายนอก";
 
       // แสดงเวลาเป็น Local (ไทย)
@@ -272,10 +301,21 @@ const buildDailySeries = (events, dateStr) => {
 
     setRecordsRawForDay(mapped);
 
-    const inCount = filtered.filter((x) => (x.direction || "").toLowerCase() === "in").length;
-    const outCount = filtered.filter((x) => (x.direction || "").toLowerCase() === "out").length;
-    const unknownCount = filtered.filter((x) => !x.plate || x.plate === "-").length;
-    setStats({ total: filtered.length, in: inCount, out: outCount, unknown: unknownCount });
+    const inCount = filtered.filter(
+      (x) => (x.direction || "").toLowerCase() === "in"
+    ).length;
+    const outCount = filtered.filter(
+      (x) => (x.direction || "").toLowerCase() === "out"
+    ).length;
+    const unknownCount = filtered.filter(
+      (x) => !x.plate || x.plate === "-"
+    ).length;
+    setStats({
+      total: filtered.length,
+      in: inCount,
+      out: outCount,
+      unknown: unknownCount,
+    });
 
     const insideCount = filtered.filter((x) => isInsideRole(x.role)).length;
     const outsideCount = filtered.length - insideCount;
@@ -284,8 +324,21 @@ const buildDailySeries = (events, dateStr) => {
 
   const handleApplyFilters = () => loadRecent();
   const handleResetFilters = () => {
-    setFilters({ start: "2025-08-01", end: "2025-08-09", direction: "all", query: "" });
+    setFilters({
+      start: "2025-08-01",
+      end: "2025-08-09",
+      direction: "all",
+      query: "",
+    });
     loadRecent();
+  };
+
+  const ws = new WebSocket("ws://127.0.0.1:8000/ws/events");
+
+  ws.onmessage = (ev) => {
+    const data = JSON.parse(ev.data);
+    // อัปเดต UI แบบ real-time
+    setRawEvents((prev) => [data, ...prev]);
   };
 
   return (
@@ -334,19 +387,31 @@ const buildDailySeries = (events, dateStr) => {
           <div className="inline-flex rounded-xl border border-sky-200 bg-white p-1 text-sm">
             <button
               onClick={() => setPersonType("all")}
-              className={`px-3 py-1 rounded-lg ${personType === "all" ? "bg-sky-600 text-white" : "text-slate-700"}`}
+              className={`px-3 py-1 rounded-lg ${
+                personType === "all"
+                  ? "bg-sky-600 text-white"
+                  : "text-slate-700"
+              }`}
             >
               ทั้งหมด
             </button>
             <button
               onClick={() => setPersonType("inside")}
-              className={`px-3 py-1 rounded-lg ${personType === "inside" ? "bg-sky-600 text-white" : "text-slate-700"}`}
+              className={`px-3 py-1 rounded-lg ${
+                personType === "inside"
+                  ? "bg-sky-600 text-white"
+                  : "text-slate-700"
+              }`}
             >
               ภายใน
             </button>
             <button
               onClick={() => setPersonType("outside")}
-              className={`px-3 py-1 rounded-lg ${personType === "outside" ? "bg-sky-600 text-white" : "text-slate-700"}`}
+              className={`px-3 py-1 rounded-lg ${
+                personType === "outside"
+                  ? "bg-sky-600 text-white"
+                  : "text-slate-700"
+              }`}
             >
               ภายนอก
             </button>
@@ -389,8 +454,7 @@ const buildDailySeries = (events, dateStr) => {
               </label>
             </header>
             <div className="pt-2">
-              
-               <DailyLineChart data={dailySeries} height={260} />
+              <DailyLineChart data={dailySeries} height={260} />
             </div>
           </section>
         </div>
@@ -401,7 +465,13 @@ const buildDailySeries = (events, dateStr) => {
             <h3 className="text-lg font-semibold text-indigo-900 tracking-tight">
               รายการล่าสุด
               <span className="ml-2 text-sm font-normal text-slate-500">
-                เฉพาะ {dailyDate} ({personType === "all" ? "ทั้งหมด" : personType === "inside" ? "ภายใน" : "ภายนอก"})
+                เฉพาะ {dailyDate} (
+                {personType === "all"
+                  ? "ทั้งหมด"
+                  : personType === "inside"
+                  ? "ภายใน"
+                  : "ภายนอก"}
+                )
               </span>
             </h3>
             <span className="inline-flex items-center rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">

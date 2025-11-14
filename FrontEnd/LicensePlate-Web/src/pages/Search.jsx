@@ -101,6 +101,14 @@ export default function Search() {
     await downloadCsv(`${API_BASE}/export/events?${params.toString()}`);
   };
 
+  const ws = new WebSocket("ws://127.0.0.1:8000/ws/events");
+
+  ws.onmessage = (ev) => {
+    const data = JSON.parse(ev.data);
+    // อัปเดต UI แบบ real-time
+    setRawEvents((prev) => [data, ...prev]);
+  };
+
   return (
     <div class="pt-0 bg-gradient-to-br from-white to-blue-400">
       <div className="max-w-7xl mx-auto px-6 py-6">
