@@ -424,35 +424,53 @@ def get_events(
 
 
 # Endpoint สำหรับ batch_process สร้าง Event ใหม่, บันทึกลง DB, และ Broadcast ไปยัง WebSocket
+def normalize_plate(s: str | None) -> str | None:
+    # ตัดช่องว่างทั้งหมดออก (กันเคส "1ลบ521" vs "1ลบ 521")
+    return "".join(str(s or "").split()) or None
+
 @app.post("/events")
 async def create_event(event: EventIn):
     try:
-        # --- Normalize ค่าที่เข้ามา ---
-        plate_raw = (event.plate or "").strip()
-        prov_raw = (event.province or "").strip()
-        p_can = _canon_plate(plate_raw)
-        prov_can = _canon_text(prov_raw)
-
-        # --- ตรวจสอบ Vehicle ในระบบ (แบบ normalize) ---
         vehicle_data = None
-        if p_can and prov_can:
-            guess = (
-                supabase.table("Vehicle")
-                .select("vehicle_id, plate, province, member_id")
-                .ilike("plate", f"%{plate_raw}%")  # กรองหยาบ
-                .ilike("province", f"%{prov_raw}%")
-                .limit(20)
-                .execute()
-            )
-            if guess.data:
-                vehicle_data = guess.data[0]
 
-        # ตรวจสอบ direction (ใช้ cam_id เป็น Fallback)
+        # --- ตรวจสอบ Vehicle ในระบบ: ยืดหยุ่นขึ้น ---
+        plate_norm = normalize_plate(event.plate)
+        prov = (event.province or "").strip()
+
+        if plate_norm:
+            # 1) พยายาม exact match ก่อน (ถ้ามี province)
+            if prov:
+                exact = (
+                    supabase.table("Vehicle")
+                    .select("vehicle_id, plate, province, member_id")
+                    .eq("plate", (event.plate or "").strip())
+                    .eq("province", prov)
+                    .limit(1)
+                    .execute()
+                )
+                if exact.data:
+                    vehicle_data = exact.data[0]
+
+            # 2) ถ้ายังไม่เจอ -> ค้นแบบคลุมเครือ: plate ไม่สนช่องว่าง / province ไม่บังคับ
+            if not vehicle_data:
+                like_q = (
+                    supabase.table("Vehicle")
+                    .select("vehicle_id, plate, province, member_id")
+                    # ค้นหา plate แบบ ilike ด้วย plate ที่ตัดช่องว่างแล้ว
+                    .ilike("plate", f"%{plate_norm}%")
+                )
+                if prov:
+                    like_q = like_q.ilike("province", f"%{prov}%")
+                like_res = like_q.limit(1).execute()
+                if like_res.data:
+                    vehicle_data = like_res.data[0]
+
+        # --- ตรวจสอบ direction (fallback ตามเดิม) ---
         direction = event.direction or (
             "IN" if event.cam_id == 1 else "OUT" if event.cam_id == 2 else "UNKNOWN"
         )
 
-        # เตรียมข้อมูล (Payload)
+        # --- เตรียม payload และบันทึก ---
         payload = {
             "datetime": event.datetime.isoformat(),
             "plate": event.plate or None,
@@ -463,12 +481,11 @@ async def create_event(event: EventIn):
             "vehicle_id": vehicle_data["vehicle_id"] if vehicle_data else None,
         }
 
-        # บันทึกลง Supabase
         response = supabase.table("Event").insert(payload).execute()
         if not response.data:
             raise HTTPException(status_code=400, detail="เพิ่มข้อมูล Event ไม่สำเร็จ")
 
-        # * Broadcast event ใหม่ไปยัง Client (ไป Frontend)
+        # แจ้ง realtime ไปหน้าเว็บตามเดิม
         message = f"Event ใหม่: {event.plate or 'ไม่ทราบทะเบียน'} ({direction})"
         await manager.broadcast(message)
 
