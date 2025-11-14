@@ -5,7 +5,9 @@ import RecordsTable from "../components/RecordsTable";
 import { formatThaiDateTime } from "../utils/date";
 import { downloadCsv } from "../utils/downloadCsv";
 
-const API_BASE = (import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+const API_BASE = (
+  import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+).replace(/\/$/, "");
 
 // แปลงทิศทางเป็นภาษาไทย
 const toThaiDirection = (v) => {
@@ -51,8 +53,8 @@ const fetchFilteredEvents = async (currentFilters) => {
 
 export default function Search() {
   const [filters, setFilters] = useState({
-    start: "",   // เริ่มต้นค่าว่าง
-    end: "",     // เริ่มต้นค่าว่าง
+    start: "", // เริ่มต้นค่าว่าง
+    end: "", // เริ่มต้นค่าว่าง
     direction: "all",
     query: "",
   });
@@ -100,34 +102,42 @@ export default function Search() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-6 bg-gradient-to-tr from-white to-blue-400">
-      {/* แผงฟิลเตอร์ */}
-      <div className="bg-slate-200/60 rounded-xl p-6">
-        <Filters
-          filters={filters}
-          setFilters={setFilters}
-          onApply={onApply}
-          onReset={onReset}
-          onExport={onExport}
-        />
-      </div>
-
-      {/* ตารางผลลัพธ์ */}
-      <section className="mt-6 bg-white rounded-2xl border border-slate-100 shadow p-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold">รายการล่าสุด</h3>
-          <span className="text-sm text-slate-600">Items {records.length} items</span>
+    <div class="pt-0 bg-gradient-to-br from-white to-blue-400">
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        {/* แผงฟิลเตอร์ */}
+        <div className="bg-slate-200/60 rounded-xl p-6">
+          <Filters
+            filters={filters}
+            setFilters={setFilters}
+            onApply={onApply}
+            onReset={onReset}
+            onExport={onExport}
+          />
         </div>
 
-        <RecordsTable records={records} pageSize={10} />
+        {/* ตารางผลลัพธ์ */}
+        <section className="mt-6 bg-white rounded-2xl border border-slate-100 shadow p-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold">รายการล่าสุด</h3>
+            <span className="text-sm text-slate-600">
+              Items {records.length} items
+            </span>
+          </div>
 
-        {loading && (
-          <div className="py-6 text-center text-sm text-slate-600">กำลังโหลด...</div>
-        )}
-        {!loading && records.length === 0 && (
-          <div className="py-6 text-center text-sm text-slate-600">ไม่พบข้อมูล</div>
-        )}
-      </section>
+          <RecordsTable records={records} pageSize={10} />
+
+          {loading && (
+            <div className="py-6 text-center text-sm text-slate-600">
+              กำลังโหลด...
+            </div>
+          )}
+          {!loading && records.length === 0 && (
+            <div className="py-6 text-center text-sm text-slate-600">
+              ไม่พบข้อมูล
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
