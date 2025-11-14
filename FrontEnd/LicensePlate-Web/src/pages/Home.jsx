@@ -333,14 +333,6 @@ export default function Home() {
     loadRecent();
   };
 
-  const ws = new WebSocket("ws://127.0.0.1:8000/ws/events");
-
-  ws.onmessage = (ev) => {
-    const data = JSON.parse(ev.data);
-    // อัปเดต UI แบบ real-time
-    setRawEvents((prev) => [data, ...prev]);
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-white to-blue-400">
       <div className="mx-auto max-w-5xl px-3" />
