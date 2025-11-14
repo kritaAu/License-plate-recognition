@@ -20,6 +20,14 @@ import csv
 from utils import upload_image_to_storage
 
 
+# =====
+# CONFIGURATION & INITIALIZATION
+# =====
+
+# =====
+# CONFIGURATION & INITIALIZATION
+# =====
+
 try:
     from zoneinfo import ZoneInfo
 except Exception:
@@ -60,8 +68,11 @@ app.add_middleware(
 )
 
 
-# PYDANTIC MODELS (ตัวตรวจสอบข้อมูล)
 # =====
+# PYDANTIC MODELS
+# =====
+
+
 # Model กำหนดโครงสร้างข้อมูล Event ที่รับมาจาก Worker
 class EventIn(BaseModel):
     datetime: datetime
@@ -134,6 +145,7 @@ class MemberUpdate(BaseModel):
     role: str | None = None
 
 
+# =====
 # WEBSOCKET MANAGER
 # =====
 # Class คลาสสำหรับจัดการการเชื่อมต่อ WebSocket ทั้งหมด
@@ -167,6 +179,51 @@ class ConnectionManager:
 
 # สร้าง Instance ของ Manager เพื่อใช้งานจริง
 manager = ConnectionManager()
+
+
+# =====
+# HELPER FUNCTIONS
+# =====
+
+
+# หา role จากป้าย/จังหวัด กรณี event ไม่มี vehicle_id หรือ JOIN ไม่เจอ
+def _role_from_plate_province(plate: str | None, province: str | None):
+    if not plate or not province:
+        return None
+    try:
+        res = (
+            supabase.table("Vehicle")
+            .select("member:Member!Vehicle_member_id_fkey(role)")
+            .ilike("plate", str(plate).strip())
+            .ilike("province", str(province).strip())
+            .limit(1)
+            .execute()
+        )
+        if res.data:
+            member = res.data[0].get("member") or {}
+            return member.get("role")
+    except Exception:
+        pass
+    return None
+
+
+# Endpoint สำหรับ batch_process สร้าง Event ใหม่, บันทึกลง DB, และ Broadcast ไปยัง WebSocket
+def normalize_plate(s: str | None) -> str | None:
+    # ตัดช่องว่างทั้งหมดออก (กันเคส "1ลบ521" vs "1ลบ 521")
+    return "".join(str(s or "").split()) or None
+
+
+# =====
+# API ROUTES (HTTP)
+# =====
+
+
+# HEALTH CHECK
+# =====
+# Endpoint ตรวจสอบว่า API ทำงานอยู่
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "API is running"}
 
 
 # ROUTES: MEMBERS (จัดการข้อมูลสมาชิก)
@@ -341,27 +398,6 @@ def delete_member(member_id: int):
 # ROUTES: EVENTS (จัดการเหตุการณ์)
 # =====
 # Endpoint หน้า Search/Home ดึงข้อมูล Event ทั้งหมด รองรับการกรอง (Filter) ตามวันที่, ทิศทาง, และป้ายทะเบียน
-# หา role จากป้าย/จังหวัด กรณี event ไม่มี vehicle_id หรือ JOIN ไม่เจอ
-def _role_from_plate_province(plate: str | None, province: str | None):
-    if not plate or not province:
-        return None
-    try:
-        res = (
-            supabase.table("Vehicle")
-            .select("member:Member!Vehicle_member_id_fkey(role)")
-            .ilike("plate", str(plate).strip())
-            .ilike("province", str(province).strip())
-            .limit(1)
-            .execute()
-        )
-        if res.data:
-            member = res.data[0].get("member") or {}
-            return member.get("role")
-    except Exception:
-        pass
-    return None
-
-
 @app.get("/events")
 def get_events(
     limit: int = Query(1000, ge=1),
@@ -437,6 +473,10 @@ def get_events(
 
 
 # Endpoint สำหรับ batch_process สร้าง Event ใหม่, บันทึกลง DB, และ Broadcast ไปยัง WebSocket
+def normalize_plate(s: str | None) -> str | None:
+    # ตัดช่องว่างทั้งหมดออก (กันเคส "1ลบ521" vs "1ลบ 521")
+    return "".join(str(s or "").split()) or None
+
 @app.post("/events")
 async def create_event(event: EventIn):
     try:
@@ -494,20 +534,7 @@ async def create_event(event: EventIn):
         raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาด: {str(e)}")
 
 
-# Endpoint สำหรับ Frontend รับการเชื่อมต่อ WebSocket จาก Client (React) และค้างไว้เพื่อรอรับการ Broadcast
-@app.websocket("/ws/events")
-async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
-    try:
-        while True:
-            # คอยรับข้อความ (ถ้ามี)
-            data = await websocket.receive_text()
-            print(f"[WS] Received from client: {data}")
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-
-
-#  8. ROUTES: CHECK PLATE
+# ROUTES: CHECK PLATE
 # ===
 # Endpoint สำหรับ batch_process ตรวจสอบว่าป้ายทะเบียนนี้มีในระบบ (ตาราง Vehicle) หรือไม่
 @app.get("/check_plate")
@@ -541,7 +568,7 @@ def check_plate(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#  9. ROUTES: DASHBOARD
+# ROUTES: DASHBOARD
 # =====
 # Endpoint หน้า Home ดึงข้อมูล Stats Cards (ทั้งหมด, เข้า, ออก, ไม่รู้จัก) ของวันที่เลือก
 @app.get("/dashboard/summary")
@@ -675,63 +702,7 @@ def dashboard_daily(date: str = Query(..., description="Date in YYYY-MM-DD forma
         raise HTTPException(status_code=500, detail=f"Error in dashboard_daily: {str(ex)}")
 
 
-# Endpoint หน้า Home - กราฟรายเดือน ดึงสถิติ (เข้า/ออก) สำหรับปีที่ระบุ
-@app.get("/dashboard/monthly", tags=["Dashboard"])
-def dashboard_monthly(
-    # รับค่าปี (ถ้าไม่ส่งมา ให้ใช้ปีปัจจุบัน)
-    year: int = Query(
-        datetime.now().year, description="Year to get stats for (e.g., 2025)"
-    )
-):
-
-    # ดึงสถิติรายเดือน (เข้า/ออก) สำหรับปีที่ระบุ (เรียกใช้ SQL Function 'get_monthly_stats' ที่เราสร้างไว้ในขั้นตอนที่ 1)
-    try:
-        # 1. สร้าง Map เพื่อแปลงเลขเดือน (1-12) เป็นชื่อย่อ
-        month_map = {
-            1: "Jan",
-            2: "Feb",
-            3: "Mar",
-            4: "Apr",
-            5: "May",
-            6: "Jun",
-            7: "Jul",
-            8: "Aug",
-            9: "Sep",
-            10: "Oct",
-            11: "Nov",
-            12: "Dec",
-        }
-
-        # เรียก RPC (Remote Procedure Call) ไปยังฟังก์ชัน SQL โดยส่ง parameter '{"_year": year}' เข้าไป
-        response = supabase.rpc("get_monthly_stats", {"_year": year}).execute()
-
-        if not response.data:
-            # ถ้า RPC ล้มเหลว หรือไม่มีข้อมูล
-            return [
-                {"month": month_map[m], "inside": 0, "outside": 0} for m in range(1, 13)
-            ]
-
-        # Map ผลลัพธ์ (ที่ได้เป็น {month_num: 1, ...}) เป็น Format ที่ Frontend ต้องการ
-        results = []
-        for row in response.data:
-            month_name = month_map.get(row["month_num"], "Unknown")
-            results.append(
-                {
-                    "month": month_name,
-                    "inside": row.get("inside", 0),
-                    "outside": row.get("outside", 0),
-                }
-            )
-
-        return results
-
-    except Exception as ex:
-        raise HTTPException(
-            status_code=500, detail=f"Error in dashboard_monthly: {str(ex)}"
-        )
-
-
-#  10. ROUTES: UPLOAD IMAGE
+# ROUTES: UPLOAD IMAGE
 # =====
 # Endpoint สำหรับ batch_process อัปโหลดไฟล์ภาพ (blob) ไปยัง Storage
 @app.post("/upload")
@@ -744,7 +715,7 @@ async def upload_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#  11. ROUTES: EXPORT CSV
+# ROUTES: EXPORT CSV
 # =====
 # Endpoint หน้า Search Export ข้อมูล CSV ตาม Filter ที่เลือก
 @app.get("/export/events")
@@ -796,9 +767,16 @@ def export_events(
         raise HTTPException(status_code=500, detail=f"Error exporting events: {str(e)}")
 
 
-# HEALTH CHECK
+# WEBSOCKET ROUTES
 # =====
-# Endpoint ตรวจสอบว่า API ทำงานอยู่
-@app.get("/")
-def root():
-    return {"status": "ok", "message": "API is running"}
+# Endpoint สำหรับ Frontend รับการเชื่อมต่อ WebSocket จาก Client (React) และค้างไว้เพื่อรอรับการ Broadcast
+@app.websocket("/ws/events")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # คอยรับข้อความ (ถ้ามี)
+            data = await websocket.receive_text()
+            print(f"[WS] Received from client: {data}")
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
