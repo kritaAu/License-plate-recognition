@@ -1,19 +1,19 @@
 export default function StatsCards({ stats }) {
   return (
     <div className="grid grid-cols-4 gap-4 mb-6">
-      <div className="bg-[#b3cde0] rounded-lg shadow-sm p-6">
+      <div className="bg-[#b7b3e0] rounded-lg shadow-sm p-6 border-1 border-[#272355]">
         <p className="text-sm text-gray-600 mb-2">ทั้งหมด</p>
         <h2 className="text-4xl font-bold text-gray-800">{stats.total}</h2>
       </div>
-      <div className="bg-[#b3cde0] rounded-lg shadow-sm p-6">
+      <div className="bg-[#b3e0ba] rounded-lg shadow-sm p-6 border-1 border-[#23552e]">
         <p className="text-sm text-gray-600 mb-2">เข้า (in)</p>
         <h2 className="text-4xl font-bold text-gray-800">{stats.in}</h2>
       </div>
-      <div className="bg-[#b3cde0] rounded-lg shadow-sm p-6">
+      <div className="bg-[#e0b3b3] rounded-lg shadow-sm p-6 border-1 border-[#552323]">
         <p className="text-sm text-gray-600 mb-2">ออก (out)</p>
         <h2 className="text-4xl font-bold text-gray-800">{stats.out}</h2>
       </div>
-      <div className="bg-[#b3cde0] rounded-lg shadow-sm p-6">
+      <div className="bg-[#dee0b3] rounded-lg shadow-sm p-6 border-1 border-[#555523]">
         <p className="text-sm text-gray-600 mb-2">ป้ายไม่รู้จัก</p>
         <h2 className="text-4xl font-bold text-gray-800">{stats.unknown}</h2>
       </div>

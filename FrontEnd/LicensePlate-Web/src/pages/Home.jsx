@@ -6,7 +6,7 @@ import DailyLineChart from "../components/DailyLineChart";
 import RecordsTable from "../components/RecordsTable";
 import WeeklyBarChart from "../components/WeeklyBarChart";
 import { getRecentEvents } from "../services/dashboardApi";
-import { formatThaiDateTime } from "../utils/date"; // 👈 ใช้ฟังก์ชันฟอร์แมตแบบ Local
+import { formatThaiDateTime } from "../utils/date";
 
 // ===== สร้าง WS_URL จาก env หรือ fallback =====
 const API = (import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
@@ -48,7 +48,7 @@ export default function Home() {
   const [recordsRawForDay, setRecordsRawForDay] = useState([]);
 
   // รายวัน
-  const [dailyDate, setDailyDate] = useState(todayLocalStr()); // 👈 ใช้ Local
+  const [dailyDate, setDailyDate] = useState(todayLocalStr());
   const [dailySeries, setDailySeries] = useState([]);
   const [rawEvents, setRawEvents] = useState([]);
 
@@ -104,10 +104,13 @@ export default function Home() {
 
       ws.onmessage = (ev) => {
         try {
+          // ถ้า back-end ส่งข้อความธรรมดา (ไม่ใช่ JSON) จะไม่พัง เพราะอยู่ใน try/catch
           const data = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
           if (!data?.datetime) return;
           setRawEvents((prev) => [data, ...prev]);
-        } catch {}
+        } catch {
+          // ไม่ใช่ JSON -> ข้าม
+        }
       };
 
       ws.onerror = () => {
@@ -181,49 +184,51 @@ export default function Home() {
     return out;
   };
 
-  // ===== Helper: รายวัน =====
-  const buildDailySeries = (events, dateStr) => {
-    if (!Array.isArray(events) || !dateStr) {
-      setDailySeries([]);
-      return;
+ // ===== Helper: รายวัน =====
+const buildDailySeries = (events, dateStr) => {
+  if (!Array.isArray(events) || !dateStr) {
+    setDailySeries([]);
+    return;
+  }
+
+  const [y, m, d] = dateStr.split("-").map((n) => parseInt(n, 10));
+  // ใช้ช่วงเวลาเต็มวัน (กันปัญหา timezone)
+  const start = new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
+  const end   = new Date(y, (m || 1) - 1, (d || 1) + 1, 0, 0, 0, 0);
+
+  const pad = (n) => String(n).padStart(2, "0");
+
+  // เตรียม bucket 24 ชั่วโมง
+  const buckets = Array.from({ length: 24 }, (_, hour) => ({
+    label: `${pad(hour)}:00`,
+    // ชื่อที่กราฟใช้
+    internal: 0,
+    external: 0,
+    // เผื่อไว้ถ้าคุณอยากอ้างอิงชื่อเก่า
+    inside: 0,
+    outside: 0,
+  }));
+
+  for (const ev of events) {
+    const dt = new Date(ev.datetime);
+    if (Number.isNaN(+dt)) continue;
+    if (!(dt >= start && dt < end)) continue;
+
+    const h = dt.getHours();
+    const isInternal = isInsideRole(ev.role);
+
+    if (isInternal) {
+      buckets[h].internal += 1;
+      buckets[h].inside   += 1;
+    } else {
+      buckets[h].external += 1;
+      buckets[h].outside  += 1;
     }
-    const [y, m, d] = dateStr.split("-").map((n) => parseInt(n, 10));
-    const day = new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
+  }
 
-    const pad = (n) => String(n).padStart(2, "0");
-    const keyOf = (dt) =>
-      `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}`;
+  setDailySeries(buckets);
+};
 
-    const hours = Array.from({ length: 24 }, (_, h) =>
-      new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, 0, 0, 0)
-    );
-    const buckets = new Map(
-      hours.map((h) => [keyOf(h), { inside: 0, outside: 0, label: `${pad(h.getHours())}:00` }])
-    );
-
-    for (const x of events) {
-      const dt = new Date(x.datetime);
-      if (isNaN(dt)) continue;
-
-      const sameDay =
-        dt.getFullYear() === day.getFullYear() &&
-        dt.getMonth() === day.getMonth() &&
-        dt.getDate() === day.getDate();
-      if (!sameDay) continue;
-
-      if ((x.direction || "").toLowerCase() !== "in") continue; // นับเฉพาะเข้า
-
-      const k = keyOf(dt);
-      const b = buckets.get(k);
-      if (!b) continue;
-
-      const inside = isInsideRole(x.role);
-      if (inside) b.inside += 1;
-      else b.outside += 1;
-    }
-
-    setDailySeries(Array.from(buckets.values()));
-  };
 
   // ===== Helper: ตาราง + การ์ดสถิติของวัน =====
   const rebuildRecordsAndStatsForDay = (events, dateStr) => {
@@ -252,7 +257,7 @@ export default function Home() {
       const status = dir === "in" ? "เข้า" : dir === "out" ? "ออก" : e.direction || "-";
       const check = isInsideRole(e.role) ? "บุคคลภายใน" : "บุคคลภายนอก";
 
-      // 👇 ใช้ฟังก์ชันที่แสดง Local time ให้ตรงกับกราฟ
+      // แสดงเวลาเป็น Local (ไทย)
       const formattedTime = formatThaiDateTime(e.datetime);
 
       return {
@@ -260,7 +265,7 @@ export default function Home() {
         plate: `${e.plate || "-"}${e.province ? " จ." + e.province : ""}`,
         status,
         check,
-        imgUrl: e.image || null,
+        imgUrl: e.image || e.blob || null, // เผื่อกรณี field ชื่อ blob
         _raw: e,
       };
     });
@@ -359,7 +364,8 @@ export default function Home() {
               <div className="mt-2 h-px bg-gradient-to-r from-sky-200 via-indigo-200 to-transparent" />
             </header>
             <div className="pt-2">
-              <WeeklyBarChart data={weeklyInData} />
+              {/*  ส่งข้อมูลเข้าไป */}
+              <WeeklyBarChart data={weeklyInData} color="#b3cde0" />
             </div>
           </section>
 
@@ -383,7 +389,8 @@ export default function Home() {
               </label>
             </header>
             <div className="pt-2">
-              <DailyLineChart series={dailySeries} />
+              
+               <DailyLineChart data={dailySeries} height={260} />
             </div>
           </section>
         </div>

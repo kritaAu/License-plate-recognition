@@ -1,68 +1,51 @@
-export default function WeeklyBarChart({ data = [] }) {
-  // data: [{ label: '3 สัปดาห์ก่อน', count: 12 }, ... ]
-  const width = 640;
-  const height = 240;
-  const padding = { top: 28, right: 24, bottom: 40, left: 24 };
+// src/components/WeeklyBarChart.jsx
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from "recharts";
 
-  const innerW = width - padding.left - padding.right;
-  const innerH = height - padding.top - padding.bottom;
+function EmptyState({ text = "ยังไม่มีข้อมูลในช่วงที่เลือก" }) {
+  return (
+    <div className="h-40 flex items-center justify-center text-slate-500 text-sm">
+      {text}
+    </div>
+  );
+}
 
-  const max = Math.max(1, ...data.map(d => d.count || 0));
-  const barGap = 16;
-  const barW = Math.max(12, Math.floor((innerW - barGap * (data.length - 1)) / data.length));
-
-  const getX = (i) => padding.left + i * (barW + barGap);
-  const getY = (count) => padding.top + innerH - (count / max) * innerH;
+export default function WeeklyBarChart({ data = [], height = 280 }) {
+  const safe = Array.isArray(data) ? data : [];
+  const noData = safe.length === 0 || safe.every(d => (d.count ?? 0) === 0);
+  if (noData) return <EmptyState />;
 
   return (
-    <div className="relative">
-      <svg width="100%" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="กราฟแท่งรายสัปดาห์">
-        {/* แกน X */}
-        <line
-          x1={padding.left}
-          y1={padding.top + innerH}
-          x2={padding.left + innerW}
-          y2={padding.top + innerH}
-          stroke="#e2e8f0"
-        />
+    <div style={{ width: "100%", height }}>
+      <ResponsiveContainer>
+        <BarChart data={safe} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+          {/* ไล่เฉดสีของแท่ง */}
+          <defs>
+            <linearGradient id="barFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#60a5fa" />   {/* sky-400 */}
+              <stop offset="100%" stopColor="#2563eb" /> {/* indigo-600 */}
+            </linearGradient>
+            <linearGradient id="barFillActive" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#22d3ee" />  {/* cyan-400 */}
+              <stop offset="100%" stopColor="#6366f1" />{/* indigo-500 */}
+            </linearGradient>
+          </defs>
 
-        {/* แท่ง */}
-        {data.map((d, i) => {
-          const x = getX(i);
-          const y = getY(d.count);
-          const h = padding.top + innerH - y;
-          return (
-            <g key={i}>
-              <rect
-                x={x}
-                y={y}
-                width={barW}
-                height={h}
-                rx="8"
-                className="fill-sky-500/90 hover:fill-sky-600 transition-colors"
-              />
-              {/* value */}
-              <text
-                x={x + barW / 2}
-                y={y - 6}
-                textAnchor="middle"
-                className="fill-slate-700 text-[12px] font-medium"
-              >
-                {d.count ?? 0}
-              </text>
-              {/* label */}
-              <text
-                x={x + barW / 2}
-                y={padding.top + innerH + 16}
-                textAnchor="middle"
-                className="fill-slate-600 text-[12px]"
-              >
-                {d.label}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="label" />
+          <YAxis allowDecimals={false} />
+          <Tooltip formatter={(v) => [v, "รถเข้า"]} />
+
+          <Bar
+            dataKey="count"
+            name="รถเข้า"
+            fill="url(#barFill)"
+            radius={[8, 8, 0, 0]}
+            activeBar={{ fill: "url(#barFillActive)" }}
+          />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }

@@ -559,9 +559,9 @@ def dashboard_summary(date: str | None = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Endpoint สำหรับหน้า Home ดึง Event ล่าสุด 10 รายการ (พร้อม Role คนนอกหรือคนใน)
+# Endpoint สำหรับหน้า Home ดึง Event ล่าสุด 50 รายการ (พร้อม Role คนนอกหรือคนใน)
 @app.get("/dashboard/recent")
-def dashboard_recent(limit: int = 10):
+def dashboard_recent(limit: int = 50):
     try:
         # (N+1 Query Fix) Join เพื่อดึง Role มาใน Query เดียว
         response = (

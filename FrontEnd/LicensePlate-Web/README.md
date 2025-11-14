@@ -10,3 +10,6 @@ npm install tailwindcss @tailwindcss/vite
 
 # react-router
 npm i react-router-dom
+
+# Graph
+npm i recharts
