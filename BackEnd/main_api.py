@@ -310,7 +310,8 @@ def _role_from_plate_province(plate: str | None, province: str | None):
 @app.post("/api/auth/login", response_model=LoginResponse)
 def login(request: LoginRequest):
     """Endpoint สำหรับ Login (Admin เท่านั้น)"""
-    user = authenticate_user(request.username, request.password)
+    safe_password = request.password[:72]
+    user = authenticate_user(request.username, safe_password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
