@@ -21,8 +21,9 @@ from passlib.context import CryptContext
 import os
 import io
 import csv
-from datetime import datetime, timedelta, timezone
+import json
 import jwt
+from datetime import datetime, timedelta, timezone
 
 from supabase import create_client
 from dotenv import load_dotenv
@@ -361,7 +362,8 @@ def get_members(
     """ดึงข้อมูลสมาชิกทั้งหมด (พร้อม Filter)"""
     try:
         query_builder = supabase.table("Member").select(
-            "member_id, firstname, lastname, std_id, faculty, major, role, Vehicle(plate, province)"
+            "member_id, firstname, lastname, std_id, faculty, major, role, "
+            "Vehicle(plate, province)"
         )
         if firstname:
             query_builder = query_builder.ilike("firstname", f"%{firstname.strip()}%")
@@ -494,17 +496,19 @@ def get_events(
     direction: str | None = Query(None),
     query: str | None = Query(None, description="Plate query"),
 ):
-    """ดึงข้อมูล Event ทั้งหมด รองรับการกรอง (Filter)"""
+    """ดึงข้อมูล Event ทั้งหมด - ใช้ JOIN เดียวเท่านั้น (No Extra Queries!)"""
     try:
+        # Query พร้อม JOIN ครั้งเดียว - ดึงทุกอย่างมาเลย!
         qb = (
             supabase.table("Event")
             .select(
-                "datetime, plate, province, direction, blob, vehicle_id,"
+                "datetime, plate, province, direction, blob, vehicle_id, "
                 "Vehicle!Event_vehicle_id_fkey(member:Member!Vehicle_member_id_fkey(role))"
             )
             .order("datetime", desc=True)
             .limit(limit)
         )
+
         if start_date:
             qb = qb.gte("datetime", f"{start_date}T00:00:00")
         if end_date:
@@ -515,20 +519,24 @@ def get_events(
             qb = qb.ilike("plate", f"%{query.strip()}%")
 
         resp = qb.execute()
+
+        # ไม่มี extra queries อีกแล้ว! แค่ประมวลผลข้อมูลที่ได้มา
         dir_th = {"IN": "เข้า", "OUT": "ออก"}
         results = []
 
         for e in resp.data or []:
+            # ดึง role จาก JOIN ที่ query มาแล้ว
             vehicle = e.get("Vehicle") or {}
             if isinstance(vehicle, list):
                 vehicle = vehicle[0] if vehicle else {}
             member_obj = vehicle.get("member") or {}
             if isinstance(member_obj, list):
                 member_obj = member_obj[0] if member_obj else {}
+
             role = member_obj.get("role")
 
-            if not role:
-                role = _role_from_plate_province(e.get("plate"), e.get("province"))
+            # ถ้าไม่มี vehicle_id (plates ที่ไม่ได้ลงทะเบียน) = ไม่มี role = ภายนอก
+            # ไม่ต้อง query เพิ่ม เพราะถ้าไม่มีก็แสดงว่าไม่ใช่สมาชิก
 
             check_status = (
                 "บุคคลภายนอก"
@@ -548,8 +556,12 @@ def get_events(
                     "imgUrl": e.get("blob") or None,
                 }
             )
+
+        logger.info(f"Returned {len(results)} events")
         return results
+
     except Exception as ex:
+        logger.error(f"Error fetching events: {str(ex)}")
         raise HTTPException(status_code=500, detail=f"Error fetching events: {str(ex)}")
 
 
@@ -568,7 +580,8 @@ async def create_event(event: EventIn):
             guess = (
                 supabase.table("Vehicle")
                 .select(
-                    "vehicle_id, plate, province, member_id, member:Member!Vehicle_member_id_fkey(role)"
+                    "vehicle_id, plate, province, member_id, "
+                    "member:Member!Vehicle_member_id_fkey(role)"
                 )
                 .ilike("plate", f"%{plate_raw}%")
                 .ilike("province", f"%{prov_raw}%")
@@ -609,8 +622,6 @@ async def create_event(event: EventIn):
             "image": saved_event.get("blob"),
             "blob": saved_event.get("blob"),
         }
-
-        import json
 
         await manager.broadcast(json.dumps(ws_payload))
 
@@ -665,7 +676,7 @@ def dashboard_recent(limit: int = 50):
         response = (
             supabase.table("Event")
             .select(
-                "datetime, plate, province, direction, blob,"
+                "datetime, plate, province, direction, blob, "
                 "Vehicle!Event_vehicle_id_fkey(member:Member!Vehicle_member_id_fkey(role))"
             )
             .order("datetime", desc=True)

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // ⬅️ เพิ่มบรรทัดนี้
+import { useNavigate } from "react-router-dom";
 
 const API =
   (typeof window !== "undefined" && window.VITE_API_BASE_URL) ||
@@ -23,8 +23,29 @@ const AuthService = {
   },
 };
 
+// ===== ฟังก์ชันเดียวกับ Home.jsx =====
+function getDirectionCode(ev = {}) {
+  const rawDir = (ev.direction ?? "").toString().trim().toUpperCase();
+  const statusStr = (ev.status ?? "").toString();
+
+  if (rawDir === "IN" || statusStr.includes("เข้า")) return "IN";
+  if (rawDir === "OUT" || statusStr.includes("ออก")) return "OUT";
+  return "UNKNOWN";
+}
+
+const pad2 = (n) => String(n).padStart(2, "0");
+function todayLocalStr() {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(
+    now.getDate()
+  )}`;
+}
+function dateToYMD(d) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
 export default function LoginPage() {
-  const navigate = useNavigate(); // ⬅️ เพิ่มบรรทัดนี้
+  const navigate = useNavigate();
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState("");
@@ -35,15 +56,13 @@ export default function LoginPage() {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
-    // ตรวจสอบว่า login แล้วหรือยัง
     if (AuthService.isAuthenticated()) {
       setIsLoggedIn(true);
     }
 
-    // ดึงสถิติวันนี้
-    fetchTodayStats();
+    // ดึงข้อมูลวันนี้แบบเดียวกับ Home
+    fetchTodayStatsFromEvents();
 
-    // อัพเดทเวลาทุก 1 วินาที
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
@@ -51,14 +70,51 @@ export default function LoginPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const fetchTodayStats = async () => {
+  // ✅ ใช้วิธีเดียวกับ Home.jsx
+  const fetchTodayStatsFromEvents = async () => {
     try {
-      const today = new Date().toISOString().split("T")[0];
-      const res = await fetch(`${API}/dashboard/summary?date=${today}`);
+      const today = new Date();
+      const todayStr = dateToYMD(today);
+
+      const params = new URLSearchParams();
+      params.set("start_date", todayStr);
+      params.set("end_date", todayStr);
+      params.set("limit", "10000");
+
+      const res = await fetch(`${API}/events?${params.toString()}`, {
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        throw new Error(`API error: ${res.status}`);
+      }
+
       const data = await res.json();
-      setTodayStats({ in: data.in || 0, out: data.out || 0 });
+      const list = Array.isArray(data) ? data : data?.data || [];
+
+      // กรองเฉพาะวันนี้
+      const filtered = list.filter((e) => {
+        const dt = new Date(e.datetime || e.time);
+        if (isNaN(dt)) return false;
+        return (
+          dt.getFullYear() === today.getFullYear() &&
+          dt.getMonth() === today.getMonth() &&
+          dt.getDate() === today.getDate()
+        );
+      });
+
+      // นับ IN/OUT
+      const inCount = filtered.filter(
+        (x) => getDirectionCode(x) === "IN"
+      ).length;
+      const outCount = filtered.filter(
+        (x) => getDirectionCode(x) === "OUT"
+      ).length;
+
+      setTodayStats({ in: inCount, out: outCount });
     } catch (err) {
       console.error("Error fetching stats:", err);
+      setTodayStats({ in: 0, out: 0 });
     }
   };
 
@@ -80,11 +136,9 @@ export default function LoginPage() {
         throw new Error(data.detail || "เข้าสู่ระบบไม่สำเร็จ");
       }
 
-      // บันทึก token และข้อมูล user
       AuthService.setToken(data.access_token);
       AuthService.setUser(data.user);
 
-      // ⬇️ เพิ่มส่วนนี้: Redirect ไปหน้า Home
       navigate("/", { replace: true });
     } catch (err) {
       setError(err.message);
@@ -92,8 +146,6 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
-
-  // ... (ส่วนที่เหลือเหมือนเดิม)
 
   const handleLogout = () => {
     AuthService.logout();
@@ -179,6 +231,7 @@ export default function LoginPage() {
                 </div>
               </div>
             </div>
+
             <div className="md:col-span-2 bg-white/80 backdrop-blur rounded-2xl p-6 shadow-lg">
               <div className="flex items-center justify-center gap-3">
                 <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
@@ -187,6 +240,7 @@ export default function LoginPage() {
                 </span>
               </div>
             </div>
+
             <div className="md:col-span-2 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-2xl p-8 shadow-lg">
               <h3 className="text-xl font-semibold text-gray-800 mb-4 text-center">
                 เมนูด่วน
@@ -296,15 +350,6 @@ export default function LoginPage() {
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-red-400/50">
               <p className="text-sm text-red-300 mb-2 font-medium">ออก (Out)</p>
               <p className="text-5xl font-bold text-white">{todayStats.out}</p>
-            </div>
-          </div>
-
-          <div className="mt-8 text-center">
-            <div className="inline-flex items-center gap-2 bg-slate-700 rounded-full px-4 py-2">
-              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-sm font-medium text-green-300">
-                ระบบทำงานปกติ
-              </span>
             </div>
           </div>
         </div>
