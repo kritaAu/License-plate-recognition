@@ -1,222 +1,178 @@
 // src/components/RecordsTable.jsx
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 
-/** ================== helpers ================== */
-function normalizeDir(v) {
-  const s = String(v ?? "").trim().toLowerCase();
-  if (s === "in" || s === "เข้า") return "IN";
-  if (s === "out" || s === "ออก") return "OUT";
-  return "";
+// helper ดึง URL รูปจาก record
+function getImageUrl(rec = {}) {
+  return (
+    rec.imgUrl ||
+    rec.image ||
+    rec.blob ||
+    rec._raw?.imgUrl ||
+    rec._raw?.image ||
+    rec._raw?.blob ||
+    null
+  );
 }
-function dirLabel(v) {
-  const n = normalizeDir(v);
-  if (n === "IN") return "เข้า";
-  if (n === "OUT") return "ออก";
-  return "ไม่ทราบ";
+
+// helper ดูทิศทาง
+function getDirection(rec = {}) {
+  const raw = (rec._raw?.direction || rec.direction || "")
+    .toString()
+    .toUpperCase();
+  const status = rec.status || "";
+  if (raw === "IN" || status.includes("เข้า")) return "IN";
+  if (raw === "OUT" || status.includes("ออก")) return "OUT";
+  return "UNKNOWN";
 }
-function dirBadgeClass(v) {
-  const n = normalizeDir(v);
-  if (n === "IN") return "bg-emerald-100 text-emerald-800";
-  if (n === "OUT") return "bg-slate-100 text-slate-700";
-  return "bg-gray-100 text-gray-700";
-}
-function personBadgeClass(text) {
-  return (text || "").includes("ภายใน")
-    ? "bg-emerald-100 text-emerald-800"
-    : "bg-rose-100 text-rose-700";
-}
-/** ตัด “จ.จังหวัด” ออกจากข้อความทะเบียนที่รวมจังหวัดมาในสตริงเดียว */
-function basePlateStr(plateStr) {
-  if (!plateStr) return "";
-  const s = String(plateStr).replace(/\s{2,}/g, " ").trim();
-  const i = s.indexOf("จ.");
-  return i >= 0 ? s.slice(0, i).trim() : s;
-}
-/** เพจจิ้งแบบมี … */
-function getPaginationRange(current, totalPages, siblings = 1) {
-  const totalNumbers = siblings * 2 + 5;
-  if (totalPages <= totalNumbers) {
-    return Array.from({ length: totalPages }, (_, i) => i + 1);
+
+// helper label/สีสำหรับทิศทาง
+function getDirectionUI(rec = {}) {
+  const dir = getDirection(rec);
+  if (dir === "IN") {
+    return {
+      label: "เข้า (In)",
+      chipClass: "bg-green-100 text-green-700",
+      cardBg: "bg-sky-500",
+    };
   }
-  const left = Math.max(2, current - siblings);
-  const right = Math.min(totalPages - 1, current + siblings);
-  const showLeftDots = left > 2;
-  const showRightDots = right < totalPages - 1;
-  const range = [1];
-  if (showLeftDots) range.push("...");
-  for (let i = left; i <= right; i++) range.push(i);
-  if (showRightDots) range.push("...");
-  range.push(totalPages);
-  return range;
+  if (dir === "OUT") {
+    return {
+      label: "ออก (Out)",
+      chipClass: "bg-rose-100 text-rose-700",
+      cardBg: "bg-rose-500",
+    };
+  }
+  return {
+    label: "ไม่ทราบ",
+    chipClass: "bg-slate-100 text-slate-600",
+    cardBg: "bg-slate-400",
+  };
 }
 
-/** ================== component ================== */
-const API = (import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+// helper label/สีสำหรับคนใน/คนนอก
+function getPersonUI(rec = {}) {
+  const check = rec.check || "";
+  const isInside = check.includes("ภายใน");
+  return {
+    label: isInside ? "บุคคลในระบบ" : "บุคคลภายนอก",
+    chipClass: isInside
+      ? "bg-indigo-100 text-indigo-700"
+      : "bg-slate-100 text-slate-700",
+  };
+}
 
-export default function RecordsTable({ records = [], pageSize = 10 }) {
-  const [page, setPage] = useState(1);
+export default function RecordsTable({ records = [] }) {
+  const [selected, setSelected] = useState(null);
 
-  // preview image
-  const [previewSrc, setPreviewSrc] = useState(null);
-  const [previewAlt, setPreviewAlt] = useState("");
+  const openDetail = (rec) => {
+    setSelected(rec);
+  };
 
-  // modal: person info
-  const [personOpen, setPersonOpen] = useState(false);
-  const [personLoading, setPersonLoading] = useState(false);
-  const [person, setPerson] = useState(null); // {firstname, lastname, std_id, faculty, major, role, plate, province}
-
-  const pageCount = Math.max(1, Math.ceil(records.length / pageSize));
-
-  useEffect(() => {
-    if (page > pageCount) setPage(1);
-  }, [records, page, pageCount]);
-
-  const current = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return records.slice(start, start + pageSize);
-  }, [records, page, pageSize]);
-
-  const openPreview = useCallback((src, alt = "") => {
-    if (!src) return;
-    setPreviewSrc(src);
-    setPreviewAlt(alt);
-  }, []);
-  const closePreview = useCallback(() => {
-    setPreviewSrc(null);
-    setPreviewAlt("");
-  }, []);
-  useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && closePreview();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [closePreview]);
-
-  /** ดึงข้อมูลสมาชิกจากทะเบียน (เฉพาะบุคคลภายใน) */
-  async function openPersonInfo(row) {
-    setPerson(null);
-    setPersonLoading(true);
-    setPersonOpen(true);
-
-    try {
-      const plateForQuery = basePlateStr(row.plate); // กันกรณีเป็น "xx 1234 จ.กรุงเทพ…"
-      const url = new URL(`${API}/members`);
-      if (plateForQuery) url.searchParams.set("plate", plateForQuery);
-      const res = await fetch(url.toString());
-      const list = (await res.json()) || [];
-
-      // เลือกแถวที่ตรงทะเบียนที่สุด (ถ้ามี province ก็ช่วยกรอง)
-      const normalized = (s) => String(s || "").replace(/\s/g, "");
-      let best =
-        list.find(
-          (m) =>
-            normalized(m.plate) === normalized(plateForQuery) &&
-            (!row.province || normalized(m.province) === normalized(row.province))
-        ) || list[0];
-
-      if (!best) {
-        setPerson({ _notFound: true, plate: row.plate, province: row.province });
-      } else {
-        setPerson(best);
-      }
-    } catch (e) {
-      setPerson({ _error: true });
-    } finally {
-      setPersonLoading(false);
-    }
-  }
+  const closeDetail = () => {
+    setSelected(null);
+  };
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl ring-1 ring-slate-200">
-        <table className="w-full text-left">
+      {/* ตารางรายการ */}
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-slate-100 text-sm">
           <thead className="bg-slate-50">
-            <tr>
-              <th className="px-3 py-3">เวลา</th>
-              <th className="px-3 py-3">ทะเบียน</th>
-              <th className="px-3 py-3">ทิศทาง</th>
-              <th className="px-3 py-3">สถานะ</th>
-              <th className="px-3 py-3">ภาพ</th>
+            <tr className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left">เวลา</th>
+              <th className="px-4 py-3 text-left">ทะเบียน</th>
+              <th className="px-4 py-3 text-center">ทิศทาง</th>
+              <th className="px-4 py-3 text-center">สถานะ</th>
+              <th className="px-4 py-3 text-center">ภาพ</th>
             </tr>
           </thead>
-          <tbody className="divide-y">
-            {current.map((r, idx) => {
-              const dirRaw = r.direction ?? r.status;
-              const isInside = (r.check || "").includes("ภายใน");
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {records.map((rec, idx) => {
+              const imgUrl = getImageUrl(rec);
+              const personInside = (rec.check || "").includes("ภายใน");
+              const dir = getDirection(rec);
 
               return (
-                <tr key={`${r.time}-${idx}`} className="hover:bg-slate-50/70">
-                  <td className="px-3 py-3 align-top whitespace-nowrap">{r.time}</td>
-
-                  <td className="px-3 py-3 align-top">
-                    <div className="font-medium">{r.plate || "-"}</div>
-                    <div className="text-xs text-slate-500">{r.province || "-"}</div>
+                <tr
+                  key={rec.id || rec._raw?.id || `${rec.time}-${idx}`}
+                  onClick={() => openDetail(rec)}
+                  className="cursor-pointer hover:bg-sky-50/70 transition-colors"
+                >
+                  {/* เวลา */}
+                  <td className="px-4 py-3 whitespace-nowrap text-slate-800">
+                    {rec.time || "-"}
                   </td>
 
-                  <td className="px-3 py-3 align-top">
+                  {/* ทะเบียน + จังหวัด (ถ้ามี) */}
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-slate-900">
+                        {rec.plate || "-"}
+                      </span>
+                      {rec._raw?.province || rec.province ? (
+                        <span className="text-xs text-slate-500">
+                          {rec._raw?.province || rec.province}
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
+
+                  {/* ทิศทาง */}
+                  <td className="px-4 py-3 text-center">
                     <span
-                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${dirBadgeClass(
-                        dirRaw
-                      )}`}
+                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+                        dir === "IN"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : dir === "OUT"
+                          ? "bg-slate-50 text-slate-700"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
                     >
-                      {dirLabel(dirRaw)}
+                      {rec.status ||
+                        (dir === "IN" ? "เข้า" : dir === "OUT" ? "ออก" : "-")}
                     </span>
                   </td>
 
-                  <td className="px-3 py-3 align-top">
-                    <button
-                      type="button"
-                      disabled={!isInside}
-                      title={isInside ? "ดูข้อมูลบุคคลภายใน" : undefined}
-                      onClick={() => isInside && openPersonInfo(r)}
-                      className={
-                        "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium " +
-                        personBadgeClass(r.check) +
-                        (isInside ? " hover:ring-2 hover:ring-emerald-300 transition" : " cursor-default")
-                      }
+                  {/* สถานะ (คนใน/คนนอก) */}
+                  <td className="px-4 py-3 text-center">
+                    <span
+                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+                        personInside
+                          ? "bg-indigo-50 text-indigo-700"
+                          : "bg-rose-50 text-rose-700"
+                      }`}
                     >
-                      {r.check || "-"}
-                    </button>
+                      {rec.check ||
+                        (personInside ? "บุคคลภายใน" : "บุคคลภายนอก")}
+                    </span>
                   </td>
 
-                  <td className="px-3 py-2 align-top">
-                    {r.imgUrl ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openPreview(r.imgUrl, `${r.plate || "-"} ${r.province || ""}`)
-                        }
-                        className="group block rounded-lg border border-slate-200 overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                        title="ดูภาพ"
-                      >
+                  {/* ภาพ (thumbnail หรือข้อความ) */}
+                  <td className="px-4 py-3 text-center">
+                    {imgUrl ? (
+                      <div className="inline-flex h-12 w-16 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                        {/* eslint-disable-next-line jsx-a11y/alt-text */}
                         <img
-                          src={r.imgUrl}
-                          alt={`ภาพ: ${r.plate || "-"}`}
-                          className="h-16 w-24 object-cover group-hover:opacity-90"
-                          onError={(e) => {
-                            e.currentTarget.onerror = null;
-                            e.currentTarget.replaceWith(
-                              Object.assign(document.createElement("div"), {
-                                className:
-                                  "h-16 w-24 flex items-center justify-center text-xs text-slate-500 bg-slate-100",
-                                innerText: "โหลดภาพไม่ได้",
-                              })
-                            );
-                          }}
+                          src={imgUrl}
+                          alt="ภาพจากกล้อง"
+                          className="h-full w-full object-cover"
+                          loading="lazy"
                         />
-                      </button>
+                      </div>
                     ) : (
-                      <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
-                        ไม่มีภาพ
-                      </span>
+                      <span className="text-xs text-slate-400">ไม่มีภาพ</span>
                     )}
                   </td>
                 </tr>
               );
             })}
 
-            {current.length === 0 && (
+            {records.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                <td
+                  colSpan={5}
+                  className="px-4 py-6 text-center text-sm text-slate-500"
+                >
                   ไม่พบข้อมูล
                 </td>
               </tr>
@@ -225,129 +181,160 @@ export default function RecordsTable({ records = [], pageSize = 10 }) {
         </table>
       </div>
 
-      {/* Pagination */}
-      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-        <button
-          className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 disabled:opacity-50"
-          disabled={page === 1}
-          onClick={() => setPage(1)}
-        >
-          หน้าแรก
-        </button>
-        <button
-          className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 disabled:opacity-50"
-          disabled={page === 1}
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-        >
-          ก่อนหน้า
-        </button>
-
-        {getPaginationRange(page, Math.max(1, Math.ceil(records.length / pageSize)), 1).map(
-          (p, i) =>
-            p === "..." ? (
-              <span key={`dots-${i}`} className="inline-flex h-9 items-center px-2 text-slate-400">
-                …
-              </span>
-            ) : (
-              <button
-                key={`p-${p}`}
-                onClick={() => setPage(p)}
-                aria-current={p === page ? "page" : undefined}
-                className={
-                  "inline-flex h-9 min-w-[36px] items-center justify-center rounded-lg border px-2 text-sm transition " +
-                  (p === page
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50")
-                }
-              >
-                {p}
-              </button>
-            )
-        )}
-
-        <button
-          className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 disabled:opacity-50"
-          disabled={page >= Math.max(1, Math.ceil(records.length / pageSize))}
-          onClick={() => setPage((p) => Math.min(Math.max(1, Math.ceil(records.length / pageSize)), p + 1))}
-        >
-          ถัดไป
-        </button>
-        <button
-          className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 disabled:opacity-50"
-          disabled={page >= Math.max(1, Math.ceil(records.length / pageSize))}
-          onClick={() => setPage(Math.max(1, Math.ceil(records.length / pageSize)))}
-        >
-          หน้าสุดท้าย
-        </button>
-      </div>
-
-      {/* Image preview modal */}
-      {previewSrc && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"
-          onClick={closePreview}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="max-w-5xl w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-2 flex items-center justify-between">
-              <div className="text-white text-sm truncate pr-6">{previewAlt}</div>
-              <button className="rounded-md bg-white/90 px-3 py-1 text-sm hover:bg-white" onClick={closePreview}>
-                ปิด
-              </button>
-            </div>
-            <div className="overflow-hidden rounded-xl bg-black">
-              <img src={previewSrc} alt={previewAlt} className="mx-auto max-h-[78vh] w-auto" />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Person info modal */}
-      {personOpen && (
-        <div
-          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setPersonOpen(false)}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div
-            className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">ข้อมูลบุคคลภายใน</h3>
-              <button className="rounded-md border px-3 py-1 text-sm" onClick={() => setPersonOpen(false)}>
-                ปิด
-              </button>
-            </div>
-
-            {personLoading && <div className="py-6 text-center text-slate-500">กำลังโหลด…</div>}
-
-            {!personLoading && person?._error && (
-              <div className="py-6 text-center text-rose-600">เกิดข้อผิดพลาดในการดึงข้อมูล</div>
-            )}
-
-            {!personLoading && person?._notFound && (
-              <div className="py-6 text-center text-slate-600">ไม่พบข้อมูลสมาชิกในระบบสำหรับทะเบียนนี้</div>
-            )}
-
-            {!personLoading && person && !person._error && !person._notFound && (
-              <div className="space-y-2 text-sm">
-                <div><span className="text-slate-500">ชื่อ-นามสกุล:</span> {person.firstname || "-"} {person.lastname || ""}</div>
-                {"std_id" in person && (
-                  <div><span className="text-slate-500">รหัสนักศึกษา:</span> {person.std_id ?? "-"}</div>
-                )}
-                {"faculty" in person && (
-                  <div><span className="text-slate-500">คณะ:</span> {person.faculty || "-"}</div>
-                )}
-                {"major" in person && (
-                  <div><span className="text-slate-500">สาขา:</span> {person.major || "-"}</div>
-                )}
-                <div><span className="text-slate-500">บทบาท:</span> {person.role || "-"}</div>
-                <div><span className="text-slate-500">ทะเบียน/จังหวัด:</span> {person.plate || "-"} {person.province ? `จ.${person.province}` : ""}</div>
+      {/* Modal รายละเอียด */}
+      {selected && (
+        <div className="fixed inset-0 z-50 bg-black/40 overflow-y-auto">
+          {/* ชั้นนี้ช่วยให้ modal อยู่กลางจอเสมอ (แนวตั้ง + แนวนอน) */}
+          <div className="flex min-h-full items-center justify-center px-3 py-8">
+            <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
+              {/* header */}
+              <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                <h2 className="text-base font-semibold text-slate-900">
+                  รายละเอียดการเข้า-ออก
+                </h2>
+                <button
+                  type="button"
+                  onClick={closeDetail}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                >
+                  ✕
+                </button>
               </div>
-            )}
+
+              {/* body */}
+              {(() => {
+                const imgUrl = getImageUrl(selected);
+                const { label: dirLabel, chipClass, cardBg } =
+                  getDirectionUI(selected);
+                const { label: personLabel, chipClass: personChipClass } =
+                  getPersonUI(selected);
+
+                const raw = selected._raw || {};
+
+                // ====== รองรับกรณีที่ข้อมูล Member ซ่อนใน Vehicle.member จาก Supabase ======
+                let vehicle = raw.Vehicle || {};
+                if (Array.isArray(vehicle)) {
+                  vehicle = vehicle[0] || {};
+                }
+                const member = vehicle.member || {};
+
+                // ดึงชื่อจากหลายแหล่ง: flatten + nested member
+                const baseName =
+                  raw.driver_name ||
+                  raw.member_name ||
+                  raw.owner_name ||
+                  raw.full_name ||
+                  raw.name ||
+                  member.full_name ||
+                  member.name ||
+                  member.display_name ||
+                  selected.driver_name ||
+                  selected.member_name ||
+                  "ไม่ทราบชื่อ";
+
+                // ดึงแผนก / สังกัด (flatten + nested member)
+                const dept =
+                  raw.member_department ||
+                  raw.department ||
+                  raw.dept ||
+                  member.department ||
+                  member.dept ||
+                  selected.member_department ||
+                  selected.department ||
+                  "";
+
+                const displayName = dept ? `${baseName} (${dept})` : baseName;
+
+                const province = raw.province || selected.province || "-";
+
+                return (
+                  <div className="px-6 py-5">
+                    <div className="grid gap-6 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1.4fr)] items-start">
+                      {/* ซ้าย: รูป */}
+                      <div className="flex items-center justify-center">
+                        {imgUrl ? (
+                          <div
+                            className={`aspect-square w-full max-w-sm rounded-3xl overflow-hidden ${cardBg} flex items-center justify-center`}
+                          >
+                            {/* eslint-disable-next-line jsx-a11y/alt-text */}
+                            <img
+                              src={imgUrl}
+                              alt="ภาพจากกล้อง"
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div
+                            className={`aspect-square w-full max-w-sm rounded-3xl ${cardBg} flex items-center justify-center`}
+                          >
+                            <span className="text-xl font-semibold text-white">
+                              {selected.plate || "ไม่มีภาพ"}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ขวา: รายละเอียด */}
+                      <div className="space-y-3">
+                        {/* chip ทิศทาง */}
+                        <span
+                          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${chipClass}`}
+                        >
+                          {dirLabel}
+                        </span>
+
+                        {/* ป้ายทะเบียน */}
+                        <div className="mt-1">
+                          <p className="text-xs font-medium text-slate-500">
+                            ป้ายทะเบียน
+                          </p>
+                          <p className="mt-1 text-2xl font-bold text-slate-900">
+                            {selected.plate || "-"}
+                          </p>
+                        </div>
+
+                        {/* จังหวัด */}
+                        <div className="pt-2">
+                          <p className="text-xs font-medium text-slate-500">
+                            จังหวัด
+                          </p>
+                          <p className="mt-1 text-sm text-slate-900">
+                            {province}
+                          </p>
+                        </div>
+
+                        {/* เวลา */}
+                        <div className="pt-2">
+                          <p className="text-xs font-medium text-slate-500">
+                            เวลา
+                          </p>
+                          <p className="mt-1 text-sm text-slate-900">
+                            {selected.time || "-"}
+                          </p>
+                        </div>
+
+                        {/* ผู้ขับขี่ */}
+                        <div className="pt-3 border-t border-slate-100 mt-2">
+                          <p className="text-xs font-medium text-slate-500">
+                            ผู้ขับขี่
+                          </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span
+                              className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${personChipClass}`}
+                            >
+                              {personLabel}
+                            </span>
+                            <p className="text-sm font-medium text-slate-900">
+                              {displayName}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         </div>
       )}
