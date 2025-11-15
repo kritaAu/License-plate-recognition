@@ -1,11 +1,13 @@
-import { useState, useEffect } from "react";
+// src/pages/LoginPage.jsx
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
-const API =
-  (typeof window !== "undefined" && window.VITE_API_BASE_URL) ||
-  "http://127.0.0.1:8000";
+// ใช้รูปแบบเดียวกับหน้า Home / Search
+const API = (
+  import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+).replace(/\/$/, "");
 
-// Auth utilities
+// ===== Auth utilities =====
 const AuthService = {
   setToken: (token) => localStorage.setItem("auth_token", token),
   getToken: () => localStorage.getItem("auth_token"),
@@ -34,12 +36,6 @@ function getDirectionCode(ev = {}) {
 }
 
 const pad2 = (n) => String(n).padStart(2, "0");
-function todayLocalStr() {
-  const now = new Date();
-  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(
-    now.getDate()
-  )}`;
-}
 function dateToYMD(d) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
@@ -55,69 +51,56 @@ export default function LoginPage() {
   const [todayStats, setTodayStats] = useState({ in: 0, out: 0 });
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  // ===== ดึงสถิติวันนี้จาก /events (ใช้ useCallback ให้ ref คงที่) =====
+  const fetchTodayStatsFromEvents = useCallback(async () => {
+  try {
+    const todayStr = dateToYMD(new Date()); // YYYY-MM-DD แบบเดียวกับ backend
+
+    // ✓ เปลี่ยนมาใช้ /dashboard/daily แทน /events
+    const res = await fetch(`${API}/dashboard/daily?date=${todayStr}`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      throw new Error(`API error: ${res.status}`);
+    }
+
+    const hourly = await res.json(); // รูปแบบ: [{ label, inside, outside }, ... ]
+
+    const inCount = hourly.reduce(
+      (sum, h) => sum + (h.inside ?? h.in ?? 0),
+      0
+    );
+    const outCount = hourly.reduce(
+      (sum, h) => sum + (h.outside ?? h.out ?? 0),
+      0
+    );
+
+    setTodayStats({ in: inCount, out: outCount });
+  } catch (err) {
+    console.error("Error fetching stats:", err);
+    setTodayStats({ in: 0, out: 0 });
+  }
+}, []);
+
+  // ===== initial effect =====
   useEffect(() => {
-    if (AuthService.isAuthenticated()) {
-      setIsLoggedIn(true);
-    }
+  if (AuthService.isAuthenticated()) {
+    setIsLoggedIn(true);
+  }
 
-    // ดึงข้อมูลวันนี้แบบเดียวกับ Home
-    fetchTodayStatsFromEvents();
+  // ดึงข้อมูลวันนี้
+  fetchTodayStatsFromEvents();
 
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
+  const timer = setInterval(() => {
+    setCurrentTime(new Date());
+  }, 1000);
 
-    return () => clearInterval(timer);
-  }, []);
+  return () => clearInterval(timer);
+}, [fetchTodayStatsFromEvents]);  // อย่าลืมใส่ใน dependency
 
-  // ✅ ใช้วิธีเดียวกับ Home.jsx
-  const fetchTodayStatsFromEvents = async () => {
-    try {
-      const today = new Date();
-      const todayStr = dateToYMD(today);
 
-      const params = new URLSearchParams();
-      params.set("start_date", todayStr);
-      params.set("end_date", todayStr);
-      params.set("limit", "10000");
-
-      const res = await fetch(`${API}/events?${params.toString()}`, {
-        cache: "no-store",
-      });
-
-      if (!res.ok) {
-        throw new Error(`API error: ${res.status}`);
-      }
-
-      const data = await res.json();
-      const list = Array.isArray(data) ? data : data?.data || [];
-
-      // กรองเฉพาะวันนี้
-      const filtered = list.filter((e) => {
-        const dt = new Date(e.datetime || e.time);
-        if (isNaN(dt)) return false;
-        return (
-          dt.getFullYear() === today.getFullYear() &&
-          dt.getMonth() === today.getMonth() &&
-          dt.getDate() === today.getDate()
-        );
-      });
-
-      // นับ IN/OUT
-      const inCount = filtered.filter(
-        (x) => getDirectionCode(x) === "IN"
-      ).length;
-      const outCount = filtered.filter(
-        (x) => getDirectionCode(x) === "OUT"
-      ).length;
-
-      setTodayStats({ in: inCount, out: outCount });
-    } catch (err) {
-      console.error("Error fetching stats:", err);
-      setTodayStats({ in: 0, out: 0 });
-    }
-  };
-
+  // ===== login / logout =====
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
@@ -139,6 +122,7 @@ export default function LoginPage() {
       AuthService.setToken(data.access_token);
       AuthService.setUser(data.user);
 
+      // ถ้าหน้านี้เป็น /login ให้เด้งไป Dashboard ที่ "/"
       navigate("/", { replace: true });
     } catch (err) {
       setError(err.message);
@@ -154,22 +138,22 @@ export default function LoginPage() {
     setPassword("");
   };
 
-  const formatDate = (date) => {
-    return date.toLocaleDateString("th-TH", {
+  // ===== formatter วันที่/เวลา =====
+  const formatDate = (date) =>
+    date.toLocaleDateString("th-TH", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
     });
-  };
 
-  const formatTime = (date) => {
-    return date.toLocaleTimeString("th-TH", {
+  const formatTime = (date) =>
+    date.toLocaleTimeString("th-TH", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
     });
-  };
 
+  // ===== UI เมื่อ login แล้ว (ถ้ามี route ใช้หน้านี้เป็นหน้า Profile/login ซ้ำ) =====
   if (isLoggedIn) {
     const user = AuthService.getUser();
 
@@ -254,7 +238,9 @@ export default function LoginPage() {
                 </button>
                 <button className="bg-white hover:bg-gray-50 rounded-lg p-4 shadow-md transition-all duration-200 hover:shadow-lg">
                   <div className="text-3xl mb-2">🔍</div>
-                  <div className="text-sm font-medium text-gray-700">ค้นหา</div>
+                  <div className="text-sm font-medium text-gray-700">
+                    ค้นหา
+                  </div>
                 </button>
                 <button className="bg-white hover:bg-gray-50 rounded-lg p-4 shadow-md transition-all duration-200 hover:shadow-lg">
                   <div className="text-3xl mb-2">👥</div>
@@ -276,6 +262,7 @@ export default function LoginPage() {
     );
   }
 
+  // ===== UI หน้า login ปกติ =====
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
       <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 rounded-3xl overflow-hidden shadow-2xl">
@@ -348,7 +335,9 @@ export default function LoginPage() {
             </div>
 
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-red-400/50">
-              <p className="text-sm text-red-300 mb-2 font-medium">ออก (Out)</p>
+              <p className="text-sm text-red-300 mb-2 font-medium">
+                ออก (Out)
+              </p>
               <p className="text-5xl font-bold text-white">{todayStats.out}</p>
             </div>
           </div>
