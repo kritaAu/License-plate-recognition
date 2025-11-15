@@ -118,14 +118,12 @@ export default function LoginPage() {
     });
   };
 
-  // หน้า Dashboard หลัง login
   if (isLoggedIn) {
     const user = AuthService.getUser();
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 p-4">
         <div className="max-w-6xl mx-auto">
-          {/* Header with Logout */}
           <div className="bg-white/80 backdrop-blur rounded-2xl shadow-lg p-6 mb-6 flex justify-between items-center">
             <div>
               <h1 className="text-2xl font-bold text-gray-800">
@@ -143,9 +141,7 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {/* Dashboard Content */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* DateTime Card */}
             <div className="bg-gradient-to-br from-indigo-200 to-purple-300 rounded-2xl p-8 shadow-lg">
               <div className="text-center">
                 <p className="text-gray-700 font-medium mb-2">วันที่</p>
@@ -159,7 +155,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Stats Card */}
             <div className="bg-white/90 backdrop-blur rounded-2xl p-8 shadow-lg">
               <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center">
                 สถิติวันนี้
@@ -184,8 +179,6 @@ export default function LoginPage() {
                 </div>
               </div>
             </div>
-
-            {/* System Status */}
             <div className="md:col-span-2 bg-white/80 backdrop-blur rounded-2xl p-6 shadow-lg">
               <div className="flex items-center justify-center gap-3">
                 <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
@@ -194,8 +187,6 @@ export default function LoginPage() {
                 </span>
               </div>
             </div>
-
-            {/* Quick Actions */}
             <div className="md:col-span-2 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-2xl p-8 shadow-lg">
               <h3 className="text-xl font-semibold text-gray-800 mb-4 text-center">
                 เมนูด่วน
@@ -231,37 +222,40 @@ export default function LoginPage() {
     );
   }
 
-  // หน้า Login
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-0 rounded-3xl overflow-hidden shadow-2xl">
-        {/* Left side - Login Form */}
-        <div className="bg-gradient-to-br from-blue-200 to-blue-300 p-8 md:p-12 flex flex-col justify-center">
-          <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">
-            Login
-          </h1>
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 rounded-3xl overflow-hidden shadow-2xl">
+        <div className="bg-white p-8 md:p-12 flex flex-col justify-center">
+          <h2 className="text-4xl font-bold text-slate-800 mb-8 text-center">
+            เข้าสู่ระบบ
+          </h2>
 
-          <div className="space-y-6">
+          <form onSubmit={handleLogin} className="space-y-6">
             <div>
+              <label className="block text-sm font-medium text-slate-600 mb-2">
+                Username
+              </label>
               <input
                 type="text"
-                placeholder="Username"
+                placeholder="ชื่อผู้ใช้ (admin)"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={loading}
-                className="w-full px-4 py-3 rounded-lg border-2 border-transparent bg-white/90 text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-4 py-3 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50 transition"
               />
             </div>
 
             <div>
+              <label className="block text-sm font-medium text-slate-600 mb-2">
+                Password
+              </label>
               <input
                 type="password"
-                placeholder="Password"
+                placeholder="รหัสผ่าน (password)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleLogin(e)}
                 disabled={loading}
-                className="w-full px-4 py-3 rounded-lg border-2 border-transparent bg-white/90 text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-4 py-3 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50 transition"
               />
             </div>
 
@@ -272,50 +266,43 @@ export default function LoginPage() {
             )}
 
             <button
-              onClick={handleLogin}
+              type="submit"
               disabled={loading || !username || !password}
-              className="w-full bg-gradient-to-r from-green-400 to-green-500 hover:from-green-500 hover:to-green-600 text-gray-800 font-semibold py-3 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-green-400 disabled:hover:to-green-500"
+              className="w-full bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-700 hover:to-sky-600 text-white font-semibold py-3 rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-indigo-600 disabled:hover:to-sky-500"
             >
-              {loading ? "กำลังเข้าสู่ระบบ..." : "Login"}
+              {loading ? "กำลังตรวจสอบ..." : "Login"}
             </button>
-          </div>
+          </form>
         </div>
 
-        {/* Right side - Stats Display */}
-        <div className="bg-gradient-to-br from-blue-300 via-purple-200 to-pink-200 p-8 md:p-12 flex flex-col justify-center">
+        <div className="bg-gradient-to-br from-slate-900 to-indigo-800 p-8 md:p-12 flex flex-col justify-center text-white">
           <div className="text-center mb-8">
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">
-              วันที่ {formatDate(currentTime)}
+            <h2 className="text-xl font-medium text-indigo-200 mb-2">
+              {formatDate(currentTime)}
             </h2>
-            <p className="text-4xl font-bold text-gray-900">
-              เวลา {formatTime(currentTime)} น.
+            <p className="text-5xl font-bold text-white">
+              {formatTime(currentTime)}
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-gradient-to-br from-green-200 to-green-300 rounded-2xl p-6 shadow-lg border-2 border-green-400">
-              <p className="text-sm text-gray-700 mb-2 font-medium">
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-green-400/50">
+              <p className="text-sm text-green-300 mb-2 font-medium">
                 เข้า (In)
               </p>
-              <p className="text-5xl font-bold text-gray-800">
-                {todayStats.in}
-              </p>
+              <p className="text-5xl font-bold text-white">{todayStats.in}</p>
             </div>
 
-            <div className="bg-gradient-to-br from-red-200 to-red-300 rounded-2xl p-6 shadow-lg border-2 border-red-400">
-              <p className="text-sm text-gray-700 mb-2 font-medium">
-                ออก (Out)
-              </p>
-              <p className="text-5xl font-bold text-gray-800">
-                {todayStats.out}
-              </p>
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-red-400/50">
+              <p className="text-sm text-red-300 mb-2 font-medium">ออก (Out)</p>
+              <p className="text-5xl font-bold text-white">{todayStats.out}</p>
             </div>
           </div>
 
           <div className="mt-8 text-center">
-            <div className="inline-flex items-center gap-2 bg-white/50 rounded-full px-4 py-2 backdrop-blur-sm">
-              <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-sm font-medium text-gray-700">
+            <div className="inline-flex items-center gap-2 bg-slate-700 rounded-full px-4 py-2">
+              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-sm font-medium text-green-300">
                 ระบบทำงานปกติ
               </span>
             </div>
