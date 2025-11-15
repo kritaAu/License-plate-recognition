@@ -213,7 +213,7 @@ export default function RecordsTable({ records = [] }) {
                         (dir === "IN"
                           ? "bg-emerald-50 text-emerald-700"
                           : dir === "OUT"
-                          ? "bg-slate-50 text-slate-700"
+                          ? "bg-slate-50 text-orange-700"
                           : "bg-slate-100 text-slate-600")
                       }
                     >

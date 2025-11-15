@@ -5,17 +5,16 @@ import StatsCards from "../components/StatsCards";
 import DailyLineChart from "../components/DailyLineChart";
 import RecordsTable from "../components/RecordsTable";
 import WeeklyBarChart from "../components/WeeklyBarChart";
-import { getRecentEvents } from "../services/dashboardApi";
 import { formatThaiDateTime } from "../utils/date";
 
-// ===== สร้าง WS_URL จาก env หรือ fallback =====
+// ===== API / WS URL =====
 const API = (
   import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
 const WS_URL =
   (import.meta.env?.VITE_WS_URL || API.replace(/^http/i, "ws")) + "/ws/events";
 
-// ===== helper: คนใน/คนนอก =====
+// ===== helpers =====
 function isInsideRole(role) {
   const r = String(role || "").trim();
   const rl = r.toLowerCase();
@@ -24,7 +23,45 @@ function isInsideRole(role) {
   return false;
 }
 
-// สำหรับสร้าง yyyy-mm-dd แบบ Local
+const isUnknownPlate = (plate) => {
+  const s = String(plate ?? "").trim();
+  if (!s || s === "-") return true;
+
+  const n = s.replace(/\s+/g, "").toLowerCase();
+  const th = [
+    "ไม่มีป้ายทะเบียน",
+    "ไม่มีทะเบียน",
+    "ไม่ทราบ",
+    "ไม่พบป้าย",
+  ];
+  const en = [
+    "unknown",
+    "no plate",
+    "noplate",
+    "n/a",
+    "na",
+    "null",
+    "none",
+    "unk",
+  ];
+
+  if (th.some((k) => n.includes(k.replace(/\s+/g, "")))) return true;
+  if (en.some((k) => n.includes(k.replace(/\s+/g, "")))) return true;
+
+  return false;
+};
+
+// direction ปรับให้เป็น "IN" | "OUT" | "UNKNOWN" ใช้ที่เดียวทุกที่
+function getDirectionCode(ev = {}) {
+  const rawDir = (ev.direction ?? "").toString().trim().toUpperCase();
+  const statusStr = (ev.status ?? "").toString();
+
+  if (rawDir === "IN" || statusStr.includes("เข้า")) return "IN";
+  if (rawDir === "OUT" || statusStr.includes("ออก")) return "OUT";
+  return "UNKNOWN";
+}
+
+// yyyy-mm-dd local
 const pad2 = (n) => String(n).padStart(2, "0");
 function todayLocalStr() {
   const now = new Date();
@@ -32,11 +69,14 @@ function todayLocalStr() {
     now.getDate()
   )}`;
 }
+function dateToYMD(d) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
 
 export default function Home() {
   const [filters, setFilters] = useState({
-    start: "2025-08-01",
-    end: "2025-08-09",
+    start: "",
+    end: "",
     direction: "all",
     query: "",
   });
@@ -54,25 +94,27 @@ export default function Home() {
   // รายวัน
   const [dailyDate, setDailyDate] = useState(todayLocalStr());
   const [dailySeries, setDailySeries] = useState([]);
+
+  // raw events (ย้อนหลัง 30 วัน + WS)
   const [rawEvents, setRawEvents] = useState([]);
 
-  // รายสัปดาห์ (รถเข้า)
-  const [weeklyInData, setWeeklyInData] = useState([]);
+  // รายสัปดาห์
+  const [weeklyInOutData, setWeeklyInOutData] = useState([]);
 
-  // ==== LIVE (WebSocket) ====
-  const [live, setLive] = useState(true);
+  // WebSocket
   const wsRef = useRef(null);
   const retryRef = useRef(0);
   const stopRef = useRef(false);
 
+  // โหลดย้อนหลัง 30 วันครั้งแรก
   useEffect(() => {
-    loadRecent();
+    loadRecentEvents();
   }, []);
 
+  // rebuild ตาราง/สถิติ/กราฟรายวัน/สัปดาห์ ทุกครั้งที่ rawEvents หรือ dailyDate เปลี่ยน
   useEffect(() => {
-    buildDailySeries(rawEvents, dailyDate);
-    rebuildRecordsAndStatsForDay(rawEvents, dailyDate);
-    setWeeklyInData(buildWeeklyInData(rawEvents));
+    rebuildRecordsAndStatsForDay(rawEvents, dailyDate); // รวมกราฟรายวันอยู่ข้างใน
+    setWeeklyInOutData(buildWeeklyInOutData(rawEvents));
   }, [rawEvents, dailyDate]);
 
   // กรองตารางตาม personType
@@ -87,14 +129,8 @@ export default function Home() {
     setRecords(filtered);
   }, [personType, recordsRawForDay]);
 
-  // ---- WebSocket effect ----
+  // ---- WebSocket: ต่ออัตโนมัติ + auto reconnect ----
   useEffect(() => {
-    if (!live) {
-      stopRef.current = true;
-      if (wsRef.current) wsRef.current.close();
-      return;
-    }
-
     stopRef.current = false;
     let retry = retryRef.current;
 
@@ -110,8 +146,7 @@ export default function Home() {
         try {
           const data =
             typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
-          if (!data?.datetime) return;
-          // data จาก WS จะมี member_name / member_department ด้วย (ถ้าเป็นบุคคลภายใน)
+          if (!data?.datetime && !data?.time) return;
           setRawEvents((prev) => [data, ...prev]);
         } catch {
           // ไม่ใช่ JSON -> ข้าม
@@ -138,13 +173,34 @@ export default function Home() {
         wsRef.current?.close();
       } catch {}
     };
-  }, [live]);
+  }, []);
 
-  const loadRecent = async () => {
-    const res = await getRecentEvents();
-    const list = Array.isArray(res) ? res : res?.data || [];
-    // list แต่ละตัวควรมี member_name / member_department มาจาก /dashboard/recent แล้ว
-    setRawEvents(list);
+  // ===== โหลดข้อมูลย้อนหลัง 30 วันจาก /events =====
+  const loadRecentEvents = async () => {
+    try {
+      const endDate = new Date(); // วันนี้
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30); // ย้อนหลัง 30 วัน
+
+      const params = new URLSearchParams();
+      params.set("start_date", dateToYMD(startDate));
+      params.set("end_date", dateToYMD(endDate));
+      params.set("limit", "10000");
+
+      const res = await fetch(`${API}/events?${params.toString()}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        throw new Error(`API error: ${res.status}`);
+      }
+
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : data?.data || [];
+      setRawEvents(list);
+    } catch (e) {
+      console.error(e);
+      setRawEvents([]);
+    }
   };
 
   // ===== Helper: รายสัปดาห์ =====
@@ -194,19 +250,23 @@ export default function Home() {
       },
     ];
   };
-  const buildWeeklyInData = (events) => {
+
+  const buildWeeklyInOutData = (events) => {
     if (!Array.isArray(events)) return [];
     const weeks = buildWeekRanges();
-    const isIn = (x) => (x?.direction || "").toLowerCase() === "in";
-    const out = weeks.map((w) => ({ label: w.label, count: 0 }));
+    const out = weeks.map((w) => ({ label: w.label, in: 0, out: 0 }));
+
     for (const e of events) {
-      if (!isIn(e)) continue;
-      const dt = new Date(e.datetime);
+      const dt = new Date(e.datetime || e.time);
       if (Number.isNaN(+dt)) continue;
+
+      const dirCode = getDirectionCode(e);
+
       for (let i = 0; i < weeks.length; i++) {
         const { start, end } = weeks[i];
         if (dt >= start && dt < end) {
-          out[i].count += 1;
+          if (dirCode === "IN") out[i].in += 1;
+          else if (dirCode === "OUT") out[i].out += 1;
           break;
         }
       }
@@ -214,61 +274,21 @@ export default function Home() {
     return out;
   };
 
-  // ===== Helper: รายวัน =====
-  const buildDailySeries = (events, dateStr) => {
-    if (!Array.isArray(events) || !dateStr) {
-      setDailySeries([]);
-      return;
-    }
-
-    const [y, m, d] = dateStr.split("-").map((n) => parseInt(n, 10));
-    const start = new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
-    const end = new Date(y, (m || 1) - 1, (d || 1) + 1, 0, 0, 0, 0);
-
-    const pad = (n) => String(n).padStart(2, "0");
-
-    const buckets = Array.from({ length: 24 }, (_, hour) => ({
-      label: `${pad(hour)}:00`,
-      internal: 0,
-      external: 0,
-      inside: 0,
-      outside: 0,
-    }));
-
-    for (const ev of events) {
-      const dt = new Date(ev.datetime);
-      if (Number.isNaN(+dt)) continue;
-      if (!(dt >= start && dt < end)) continue;
-
-      const h = dt.getHours();
-      const isInternal = isInsideRole(ev.role);
-
-      if (isInternal) {
-        buckets[h].internal += 1;
-        buckets[h].inside += 1;
-      } else {
-        buckets[h].external += 1;
-        buckets[h].outside += 1;
-      }
-    }
-
-    setDailySeries(buckets);
-  };
-
-  // ===== Helper: ตาราง + การ์ดสถิติของวัน =====
+  // ===== Helper: ตาราง + สถิติ + กราฟรายวันของวันหนึ่ง =====
   const rebuildRecordsAndStatsForDay = (events, dateStr) => {
     if (!Array.isArray(events) || !dateStr) {
       setRecords([]);
       setRecordsRawForDay([]);
       setStats({ total: 0, in: 0, out: 0, unknown: 0 });
       setCountsByRole({ inside: 0, outside: 0 });
+      setDailySeries([]);
       return;
     }
     const [y, m, d] = dateStr.split("-").map((n) => parseInt(n, 10));
     const day = new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
 
     const filtered = events.filter((e) => {
-      const dt = new Date(e.datetime);
+      const dt = new Date(e.datetime || e.time);
       if (isNaN(dt)) return false;
       return (
         dt.getFullYear() === day.getFullYear() &&
@@ -277,15 +297,34 @@ export default function Home() {
       );
     });
 
+    // ===== กราฟรายวัน: ใช้ข้อมูลเดียวกับตาราง (realtime 100%) =====
+    const buckets = Array.from({ length: 24 }, (_, hour) => ({
+      label: `${pad2(hour)}:00`,
+      in: 0,
+      out: 0,
+    }));
+
+    for (const ev of filtered) {
+      const dtVal = ev.datetime || ev.time;
+      const dt = new Date(dtVal);
+      if (Number.isNaN(+dt)) continue;
+
+      const h = dt.getHours();
+      const dirCode = getDirectionCode(ev);
+      if (dirCode === "IN") buckets[h].in += 1;
+      else if (dirCode === "OUT") buckets[h].out += 1;
+    }
+    setDailySeries(buckets);
+
+    // ===== ตาราง =====
     const mapped = filtered.map((e) => {
-      const dir = (e.direction || "").toLowerCase();
+      const dirCode = getDirectionCode(e);
       const status =
-        dir === "in" ? "เข้า" : dir === "out" ? "ออก" : e.direction || "-";
+        dirCode === "IN" ? "เข้า" : dirCode === "OUT" ? "ออก" : "-";
+
       const check = isInsideRole(e.role) ? "บุคคลภายใน" : "บุคคลภายนอก";
+      const formattedTime = formatThaiDateTime(e.datetime || e.time);
 
-      const formattedTime = formatThaiDateTime(e.datetime);
-
-      // 🔎 ดึงชื่อ + แผนกจาก event (รองรับทั้งจาก /dashboard/recent และ WS)
       const memberName =
         e.member_name ||
         e.driver_name ||
@@ -294,22 +333,18 @@ export default function Home() {
         e.name ||
         null;
 
-      const memberDept =
-        e.member_department ||
-        e.department ||
-        e.dept ||
-        null;
-
+      const memberDept = e.member_department || e.department || e.dept || null;
+      const plateStr = isUnknownPlate(e.plate)
+        ? "ไม่มีป้ายทะเบียน"
+        : e.plate || "-";
       return {
         time: formattedTime,
-        plate: `${e.plate || "-"}${e.province ? " จ." + e.province : ""}`,
+        plate: `${plateStr}${e.province ? " จ." + e.province : ""}`,
         status,
         check,
         imgUrl: e.image || e.blob || null,
-        // เก็บชื่อ/แผนกไว้บน record ด้วย เผื่อ component อื่นใช้
         member_name: memberName,
         member_department: memberDept,
-        // และย้ำเก็บลง _raw เพื่อให้ RecordsTable modal อ่านได้แน่นอน
         _raw: {
           ...e,
           member_name: memberName,
@@ -320,15 +355,13 @@ export default function Home() {
 
     setRecordsRawForDay(mapped);
 
-    const inCount = filtered.filter(
-      (x) => (x.direction || "").toLowerCase() === "in"
-    ).length;
-    const outCount = filtered.filter(
-      (x) => (x.direction || "").toLowerCase() === "out"
-    ).length;
-    const unknownCount = filtered.filter(
-      (x) => !x.plate || x.plate === "-"
-    ).length;
+    // ===== การ์ดสถิติ =====
+    const inCount = filtered.filter((x) => getDirectionCode(x) === "IN").length;
+    const outCount = filtered.filter((x) => getDirectionCode(x) === "OUT")
+      .length;
+    const unknownCount = filtered.filter((x) => isUnknownPlate(x.plate))
+      .length;
+
     setStats({
       total: filtered.length,
       in: inCount,
@@ -341,42 +374,29 @@ export default function Home() {
     setCountsByRole({ inside: insideCount, outside: outsideCount });
   };
 
-  const handleApplyFilters = () => loadRecent();
+  const handleApplyFilters = () => loadRecentEvents();
   const handleResetFilters = () => {
     setFilters({
-      start: "2025-08-01",
-      end: "2025-08-09",
+      start: "",
+      end: "",
       direction: "all",
       query: "",
     });
-    loadRecent();
+    loadRecentEvents();
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white to-blue-400">
       <div className="mx-auto max-w-5xl px-3" />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* ฟิลเตอร์ (ซ่อนไว้ตามเดิม) */}
-        <div className="hidden bg-white/70 backdrop-blur border border-sky-100 shadow-sm rounded-2xl p-6 mb-6">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        {/* ฟิลเตอร์ (ซ่อน) */}
+        <div className="mb-6 hidden rounded-2xl border border-sky-100 bg-white/70 p-6 shadow-sm backdrop-blur">
           <Filters
             filters={filters}
             setFilters={setFilters}
             onApply={handleApplyFilters}
             onReset={handleResetFilters}
           />
-        </div>
-
-        {/* แถบ Live toggle */}
-        <div className="mb-4 flex items-center justify-end">
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={live}
-              onChange={(e) => setLive(e.target.checked)}
-              className="h-4 w-4 rounded accent-sky-600"
-            />
-            อัปเดตแบบ Live (WebSocket)
-          </label>
         </div>
 
         {/* การ์ดสถิติ */}
@@ -395,7 +415,6 @@ export default function Home() {
             </span>
           </div>
 
-          {/* ปุ่มกรองตาม personType */}
           <div className="inline-flex rounded-xl border border-sky-200 bg-white px-1 text-sm">
             <button
               type="button"
@@ -436,26 +455,26 @@ export default function Home() {
         </div>
 
         {/* กราฟสองคอลัมน์ */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* รายสัปดาห์ */}
-          <section className="bg-white/90 backdrop-blur border border-sky-100 shadow-[0_8px_24px_-10px_rgba(30,64,175,0.25)] rounded-2xl p-6">
+          <section className="rounded-2xl border border-sky-100 bg-white/90 p-6 shadow-[0_8px_24px_-10px_rgba(30,64,175,0.25)] backdrop-blur">
             <header className="mb-4">
               <h3 className="text-lg font-semibold tracking-tight text-indigo-900">
-                สถิติรายสัปดาห์ (รถเข้า)
+                สถิติรายสัปดาห์ (เข้า-ออก)
               </h3>
               <div className="mt-2 h-px bg-gradient-to-r from-sky-200 via-indigo-200 to-transparent" />
             </header>
             <div className="pt-2">
-              <WeeklyBarChart data={weeklyInData} color="#b3cde0" />
+              <WeeklyBarChart data={weeklyInOutData} />
             </div>
           </section>
 
           {/* รายวัน */}
-          <section className="bg-white/90 backdrop-blur border border-sky-100 shadow-[0_8px_24px_-10px_rgba(30,64,175,0.25)] rounded-2xl p-6">
-            <header className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <section className="rounded-2xl border border-sky-100 bg-white/90 p-6 shadow-[0_8px_24px_-10px_rgba(30,64,175,0.25)] backdrop-blur">
+            <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-lg font-semibold tracking-tight text-indigo-900">
-                สถิติรายวัน (แยกภายใน/ภายนอก)
-                <span className="ml-2 inline-flex items-center rounded-full bg-indigo-100 text-indigo-700 px-1 py-0.5 text-xs font-medium">
+                สถิติรายวัน (เข้า-ออก)
+                <span className="ml-2 inline-flex items-center rounded-full bg-indigo-100 px-1 py-0.5 text-xs font-medium text-indigo-700">
                   {dailyDate}
                 </span>
               </h3>
@@ -465,20 +484,20 @@ export default function Home() {
                   type="date"
                   value={dailyDate}
                   onChange={(e) => setDailyDate(e.target.value)}
-                  className="px-2 py-2 rounded-lg border border-sky-200 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+                  className="rounded-lg border border-sky-200 bg-white px-2 py-2 text-sm text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
                 />
               </label>
             </header>
             <div className="pt-2">
-              <DailyLineChart data={dailySeries} height={260} />
+              <DailyLineChart data={dailySeries} height={280} fontScale={1.4} />
             </div>
           </section>
         </div>
 
         {/* ตาราง */}
-        <section className="bg-white/95 backdrop-blur border border-sky-100 shadow-[0_8px_24px_-10px_rgba(2,132,199,0.25)] rounded-2xl p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
-            <h3 className="text-lg font-semibold text-indigo-900 tracking-tight">
+        <section className="rounded-2xl border border-sky-100 bg-white/95 p-6 shadow-[0_8px_24px_-10px_rgba(2,132,199,0.25)] backdrop-blur">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="text-lg font-semibold tracking-tight text-indigo-900">
               รายการล่าสุด
               <span className="ml-2 text-sm font-normal text-slate-500">
                 เฉพาะ {dailyDate} (

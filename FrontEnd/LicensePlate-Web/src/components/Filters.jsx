@@ -82,9 +82,8 @@ export default function Filters({
 
         <button
   type="button"
-  onClick={onExport}
-  style={{ borderRadius: "9999px" }}  
-  className="px-5 py-2 bg-pink-200 text-red-700 font-medium shadow-sm hover:bg-pink-300 transition-colors"
+  onClick={() => onExport?.()}              
+  className="rounded-full px-5 py-2 bg-sky-600 text-white font-medium shadow-sm hover:bg-sky-700 transition-colors"
 >
   Export CSV
 </button>

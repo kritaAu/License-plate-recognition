@@ -1,12 +1,21 @@
 // src/pages/Search.jsx
-import { useEffect, useState, useRef, useDeferredValue, startTransition } from "react";
+import {
+  useEffect,
+  useState,
+  useRef,
+  useDeferredValue,
+  startTransition,
+} from "react";
 import Filters from "../components/Filters";
 import RecordsTable from "../components/RecordsTable";
+import ExportModal from "../components/ExportModal";
 import { formatThaiDateTime } from "../utils/date";
-import { downloadCsv } from "../utils/downloadCsv";
 
-const API = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
-const WS_URL = (import.meta.env.VITE_WS_URL || API.replace(/^http/i, "ws")) + "/ws/events";
+const API = (
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+).replace(/\/$/, "");
+const WS_URL =
+  (import.meta.env.VITE_WS_URL || API.replace(/^http/i, "ws")) + "/ws/events";
 
 // จำกัดจำนวนรายการในหน้าเพื่อลดงานเรนเดอร์
 const LIST_LIMIT = 300;
@@ -32,10 +41,7 @@ function toThaiDirection(v) {
 
 // ดึง URL รูป (ทนทานกับ schema เก่า/ใหม่)
 function extractImage(e = {}) {
-  return (
-    e.blob ??
-    null
-  );
+  return e.blob ?? null;
 }
 
 // คำนวณ limit ตามช่วงวัน (ยืดหยุ่นขึ้น แต่ไม่เกิน LIST_LIMIT)
@@ -70,7 +76,8 @@ const mapRows = (raw) =>
           plate: e.plate || "-",
           province: e.province || "-",
           status: e.status || toThaiDirection(e.direction),
-          check: e.check || (isInsideRole(e.role) ? "บุคคลภายใน" : "บุคคลภายนอก"),
+          check:
+            e.check || (isInsideRole(e.role) ? "บุคคลภายใน" : "บุคคลภายนอก"),
           imgUrl: img,
           image: img,
           _raw: e,
@@ -100,7 +107,12 @@ function recordPassesFilters(d, f) {
 
   if (f.query) {
     const q = f.query.toLowerCase();
-    if (!String(d.plate || "").toLowerCase().includes(q)) return false;
+    if (
+      !String(d.plate || "")
+        .toLowerCase()
+        .includes(q)
+    )
+      return false;
   }
 
   return true;
@@ -117,6 +129,9 @@ export default function Search() {
   const [records, setRecords] = useState([]);
   const deferredRecords = useDeferredValue(records);
   const [loading, setLoading] = useState(true);
+
+  // state เปิด/ปิด Export Modal
+  const [exportOpen, setExportOpen] = useState(false);
 
   const controllerRef = useRef(null);
   const wsRef = useRef(null);
@@ -141,7 +156,8 @@ export default function Search() {
         signal,
         cache: "no-store",
       });
-      if (!res.ok) throw new Error(`API Error: ${res.status} ${res.statusText}`);
+      if (!res.ok)
+        throw new Error(`API Error: ${res.status} ${res.statusText}`);
       const raw = await res.json();
       const mapped = mapRows(raw).slice(0, LIST_LIMIT);
       startTransition(() => setRecords(mapped));
@@ -177,7 +193,8 @@ export default function Search() {
 
       ws.onmessage = (ev) => {
         try {
-          const data = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
+          const data =
+            typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
           if (!data) return;
           if (!recordPassesFilters(data, filtersRef.current)) return;
 
@@ -190,17 +207,19 @@ export default function Search() {
             plate: data.plate || "-",
             province: data.province || "-",
             status: data.status || toThaiDirection(data.direction),
-            check: data.check || (isInsideRole(data.role) ? "บุคคลภายใน" : "บุคคลภายนอก"),
+            check:
+              data.check ||
+              (isInsideRole(data.role) ? "บุคคลภายใน" : "บุคคลภายนอก"),
             imgUrl: img,
             image: img,
             _raw: data,
           };
 
           startTransition(() => {
-            // กันซ้ำแบบหยาบ ๆ จากหัวรายการ
-            const keyOf = (r) => `${r.time}|${r.plate}|${r.province}|${r.status}`;
+            const keyOf = (r) =>
+              `${r.time}|${r.plate}|${r.province}|${r.status}`;
             setRecords((prev) => {
-              if (prev[0] && keyOf(prev[0]) === keyOf(newRecord)) return prev;
+              if (prev[0] && keyOf(prev[0]) === keyOf(newRecord)) return prev; // กันซ้ำหัวรายการ
               const next = [newRecord, ...prev];
               if (next.length > LIST_LIMIT) next.length = LIST_LIMIT;
               return next;
@@ -245,44 +264,56 @@ export default function Search() {
     load(f);
   };
 
-  // Export CSV (endpoint export ใช้ start/end/plate/direction)
-  const onExport = async () => {
-    const params = new URLSearchParams({
-      start: filters.start || "",
-      end: filters.end || "",
-      direction: filters.direction !== "all" ? filters.direction : "",
-      plate: filters.query || "",
-    });
-    await downloadCsv(`${API}/export/events?${params.toString()}`);
+  // เปิด Export Modal
+  const onExport = () => {
+    setExportOpen(true);
   };
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-6 bg-gradient-to-tr from-white to-blue-400">
-      <div className="bg-slate-200/60 rounded-xl p-6">
+      <div className="rounded-xl bg-slate-200/60 p-6">
         <Filters
           filters={filters}
           setFilters={setFilters}
           onApply={onApply}
           onReset={onReset}
-          onExport={onExport}
+          onExport={onExport} // ✅ เรียกเปิด CSV modal
         />
       </div>
 
-      <section className="mt-6 bg-white rounded-2xl border border-slate-100 shadow p-6">
-        <div className="flex items-center justify-between mb-3">
+      <section className="mt-6 rounded-2xl border border-slate-100 bg-white p-6 shadow">
+        <div className="mb-3 flex items-center justify-between">
           <h3 className="text-lg font-semibold">รายการล่าสุด</h3>
-          <span className="text-sm text-slate-600">Items {deferredRecords.length} items</span>
+          <span className="text-sm text-slate-600">
+            Items {deferredRecords.length} items
+          </span>
         </div>
 
         <RecordsTable records={deferredRecords} />
 
         {loading && (
-          <div className="py-6 text-center text-sm text-slate-600">กำลังโหลด...</div>
+          <div className="py-6 text-center text-sm text-slate-600">
+            กำลังโหลด...
+          </div>
         )}
         {!loading && deferredRecords.length === 0 && (
-          <div className="py-6 text-center text-sm text-slate-600">ไม่พบข้อมูล</div>
+          <div className="py-6 text-center text-sm text-slate-600">
+            ไม่พบข้อมูล
+          </div>
         )}
       </section>
+
+      {/* Export Modal */}
+      <ExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        defaultFilters={{
+          start: filters.start,
+          end: filters.end,
+          direction: filters.direction,
+          query: filters.query,
+        }}
+      />
     </div>
   );
 }
