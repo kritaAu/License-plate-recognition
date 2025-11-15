@@ -1,3 +1,6 @@
+# ===
+#  1. IMPORTS
+# ===
 from fastapi import (
     FastAPI,
     HTTPException,
@@ -6,25 +9,34 @@ from fastapi import (
     Query,
     WebSocket,
     WebSocketDisconnect,
-    APIRouter
+    Depends,
+    status,
 )
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_validator
 from typing import Optional, Union, Literal
-from supabase import create_client
-from dotenv import load_dotenv
-from datetime import datetime, timedelta, timezone, date
-
+from passlib.context import CryptContext
 import os
 import io
 import csv
+from datetime import datetime, timedelta, timezone
+import jwt
+
+from supabase import create_client
+from dotenv import load_dotenv
 from utils import upload_image_to_storage
 
+# ===
+#  2. LOGGING & TIMEZONE
+# ===
+import logging
 
-# =====
-# CONFIGURATION & INITIALIZATION
-# =====
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 try:
     from zoneinfo import ZoneInfo
@@ -39,39 +51,138 @@ def get_bkk_tz():
             return ZoneInfo("Asia/Bangkok")
         except Exception:
             pass
-    # fallback ถ้าไม่มี tzdata บนเครื่อง
     return timezone(timedelta(hours=7))
 
 
-# ENVIRONMENT & DATABASE SETUP
+BKK = get_bkk_tz()
+
+# ===
+#  3. ENVIRONMENT & DATABASE
+# ===
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-# สร้าง Supabase client แบบ Global
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-
-# FASTAPI INITIALIZATION
+# ===
+#  4. FASTAPI INITIALIZATION
+# ===
 app = FastAPI(title="License Plate Recognition API")
 
-# Frontend ที่เชื่อมต่อ (CORS)
-origins = ["http://localhost:5173"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# =====
-# PYDANTIC MODELS
-# =====
+# ===
+#  5. AUTHENTICATION
+# ===
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 480  # 8 ชั่วโมง
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer()
 
 
-# Model สำหรับรับข้อมูล Event จาก Worker
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """ตรวจสอบ password"""
+    if len(plain_password.encode("utf-8")) > 72:
+        plain_password = plain_password.encode("utf-8")[:72].decode(
+            "utf-8", errors="ignore"
+        )
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    """สร้าง JWT token"""
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (
+        expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def authenticate_user(username: str, password: str):
+    """ตรวจสอบ username และ password (จาก Supabase)"""
+    response = (
+        supabase.table("Users")
+        .select("username, hashed_password, role")
+        .eq("username", username)
+        .limit(1)
+        .execute()
+    )
+
+    if not response.data:
+        return False
+
+    user = response.data[0]
+
+    # ตรวจสอบว่าเป็น admin เท่านั้น
+    if user.get("role") != "admin":
+        logger.warning(f"Non-admin user tried to login: {username}")
+        return False
+
+    if not verify_password(password, user["hashed_password"]):
+        return False
+
+    return user
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    """(Dependency) ดึงข้อมูล user ปัจจุบันจาก Token"""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="ไม่สามารถยืนยันตัวตนได้",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except jwt.PyJWTError:
+        raise credentials_exception
+
+    response = (
+        supabase.table("Users")
+        .select("username, role")
+        .eq("username", username)
+        .eq("role", "admin")  # ต้องเป็น admin เท่านั้น
+        .limit(1)
+        .execute()
+    )
+
+    if not response.data:
+        raise credentials_exception
+
+    return response.data[0]
+
+
+# ===
+#  6. PYDANTIC MODELS
+# ===
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: dict
+
+
 class EventIn(BaseModel):
+    """Model สำหรับรับข้อมูล Event จาก Worker"""
+
     datetime: datetime
     plate: str | None = None
     province: str | None = None
@@ -82,16 +193,15 @@ class EventIn(BaseModel):
 
     @field_validator("datetime")
     @classmethod
-    # ตรวจสอบว่าถ้าเวลาที่ส่งมาเป็น 'naive' (ไม่มี timezone) ให้ 'assume' ว่าเป็นเวลา Bangkok (BKK)
     def localize_datetime(cls, v: datetime) -> datetime:
         if v.tzinfo is None:
-            # BKK ถูก define ไว้ด้านบนของไฟล์แล้ว (BKK = get_bkk_tz())
             return v.replace(tzinfo=BKK)
         return v
 
 
-# Model สำหรับสร้าง Member ใหม่
 class MemberCreate(BaseModel):
+    """Model สำหรับสร้างสมาชิกใหม่"""
+
     firstname: str
     lastname: str
     std_id: Optional[Union[int, str]] = None
@@ -99,46 +209,24 @@ class MemberCreate(BaseModel):
     major: Optional[str] = None
     role: Literal["นักศึกษา", "อาจารย์", "เจ้าหน้าที่", "อื่น ๆ", "อื่นๆ"] = "นักศึกษา"
 
-    @field_validator("std_id")
-    @classmethod
-    # แปลง std_id ที่เป็นสตริงตัวเลขให้เป็น int
-    def normalize_std_id(cls, v):
-        if v is None:
-            return v
-        if isinstance(v, str) and v.isdigit():
-            return int(v)
-        return v
 
-    @model_validator(mode="after")
-    # บังคับเงื่อนไขตาม role
-    def validate_by_role(self):
-        if self.role == "นักศึกษา":
-            if self.std_id is None or str(self.std_id) == "":
-                raise ValueError("std_id is required for role นักศึกษา")
-        elif self.role == "อาจารย์":
-            self.std_id = None
-            self.major = None
-        elif self.role == "เจ้าหน้าที่":
-            self.std_id = None
-            self.faculty = None
-            self.major = None
-        return self
-
-
-# Model สำหรับสร้าง Vehicle ใหม่
 class VehicleCreate(BaseModel):
+    """Model สำหรับสร้างรถใหม่"""
+
     plate: str
     province: str
 
 
-# Model รับข้อมูล Member และ Vehicle พร้อมกัน
 class RegisterRequest(BaseModel):
+    """Model สำหรับลงทะเบียนสมาชิก + รถ"""
+
     member: MemberCreate
     vehicle: VehicleCreate
 
 
-# Model สำหรับอัปเดต Member
 class MemberUpdate(BaseModel):
+    """Model สำหรับอัปเดตสมาชิก"""
+
     firstname: str | None = None
     lastname: str | None = None
     std_id: int | None = None
@@ -147,79 +235,56 @@ class MemberUpdate(BaseModel):
     role: str | None = None
 
 
-
-# =====
-# ROUTES: WEBSOCKET
-# =====
-# WebSocket endpoint สำหรับ Frontend รับการเชื่อมต่อจาก Client (React) และคอยรับการ Broadcast เมื่อมี Event ใหม่
-@app.websocket("/ws/events")
-async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
-    try:
-        while True:
-            # คอยรับข้อความ (ถ้ามี) - ไม่บังคับให้ client ส่งอะไรมา
-            data = await websocket.receive_text()
-            print(f"[WS] Received from client: {data}")
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-
-
-# MANAGER
-# =====
-# Class สำหรับจัดการการเชื่อมต่อ WebSocket
+# ===
+#  7. WEBSOCKET MANAGER
+# ===
 class ConnectionManager:
+    """จัดการการเชื่อมต่อ WebSocket"""
+
     def __init__(self):
         self.active_connections: list[WebSocket] = []
 
-    # รับการเชื่อมต่อใหม่จาก Client
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        print(f"WebSocket connected: {len(self.active_connections)} active client(s)")
+        logger.info(f"WebSocket connected: {len(self.active_connections)} active")
 
-    # ลบ Client ที่ตัดการเชื่อมต่อออก
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-            print(
-                f"WebSocket disconnected: {len(self.active_connections)} active client(s)"
+            logger.info(
+                f"WebSocket disconnected: {len(self.active_connections)} active"
             )
 
-    # ส่งข้อความแจ้งเตือนไปยังทุก Client ที่เชื่อมต่ออยู่
     async def broadcast(self, message: str):
-        print(f"Broadcast to {len(self.active_connections)} clients: {message}")
+        logger.info(f"Broadcasting to {len(self.active_connections)} clients")
         for connection in self.active_connections:
             try:
                 await connection.send_text(message)
             except Exception as e:
-                print(f"Broadcast error: {e}")
+                logger.error(f"Broadcast error: {e}")
 
 
-# สร้าง Instance ของ Manager
 manager = ConnectionManager()
 
 
-# =====
-# HELPER FUNCTIONS
-# =====
-
-
-# ตัดช่องว่างทั้งหมดออกจากป้ายทะเบียน
+# ===
+#  8. HELPER FUNCTIONS
+# ===
 def _canon_plate(s: str | None) -> str | None:
     if not s:
         return None
     return "".join(s.split()) or None
 
 
-# ตัดช่องว่างและทำ lowercase
 def _canon_text(s: str | None) -> str | None:
     if not s:
         return None
     return s.strip().lower() or None
 
 
-# หา role จากป้าย/จังหวัด กรณีที่ event ไม่มี vehicle_id หรือ JOIN ไม่เจอ
 def _role_from_plate_province(plate: str | None, province: str | None):
+    """ค้นหา Role จากป้ายทะเบียน (Fallback)"""
     if not plate or not province:
         return None
     try:
@@ -239,35 +304,64 @@ def _role_from_plate_province(plate: str | None, province: str | None):
     return None
 
 
-# =====
-# API ROUTES (HTTP)
-# =====
+# ===
+#  9. ROUTES: AUTHENTICATION
+# ===
+@app.post("/api/auth/login", response_model=LoginResponse)
+def login(request: LoginRequest):
+    """Endpoint สำหรับ Login (Admin เท่านั้น)"""
+    user = authenticate_user(request.username, request.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง หรือไม่มีสิทธิ์เข้าถึง",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token = create_access_token(data={"sub": user["username"]})
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {"username": user["username"], "role": user["role"]},
+    }
 
 
-# Health check endpoint
-@app.get("/")
-def root():
-    return {"status": "ok", "message": "API is running"}
+@app.get("/api/auth/me")
+async def get_me(current_user: dict = Depends(get_current_user)):
+    """ดึงข้อมูล user ปัจจุบัน"""
+    return {"username": current_user["username"], "role": current_user["role"]}
 
 
-# =====
-# ROUTES: MEMBERS
-# =====
+# ===
+#  10. ROUTES: WEBSOCKET
+# ===
+@app.websocket("/ws/events")
+async def websocket_endpoint(websocket: WebSocket):
+    """รับการเชื่อมต่อ WebSocket จาก Frontend"""
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            logger.debug(f"[WS] Received from client: {data}")
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 
-# ดึงข้อมูลสมาชิกทั้งหมด พร้อม Join ข้อมูลรถ (รองรับการค้นหา/Filter)
+# ===
+#  11. ROUTES: MEMBERS
+# ===
 @app.get("/members")
 def get_members(
     plate: str | None = Query(None),
     firstname: str | None = Query(None),
     lastname: str | None = Query(None),
 ):
+    """ดึงข้อมูลสมาชิกทั้งหมด (พร้อม Filter)"""
     try:
         query_builder = supabase.table("Member").select(
             "member_id, firstname, lastname, std_id, faculty, major, role, Vehicle(plate, province)"
         )
-
-        # Filtering
         if firstname:
             query_builder = query_builder.ilike("firstname", f"%{firstname.strip()}%")
         if lastname:
@@ -277,7 +371,6 @@ def get_members(
 
         response = query_builder.execute()
 
-        # Map ข้อมูล
         members = []
         for row in response.data or []:
             vehicle = row.get("Vehicle") or {}
@@ -285,7 +378,6 @@ def get_members(
                 vehicle = vehicle[0]
             elif isinstance(vehicle, list):
                 vehicle = {}
-
             members.append(
                 {
                     "member_id": row.get("member_id"),
@@ -304,12 +396,11 @@ def get_members(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ลงทะเบียนสมาชิกใหม่ พร้อมกับรถ 1 คัน
 @app.post("/members/register")
 @app.post("/register")
 def register_member_with_vehicle(payload: RegisterRequest):
+    """ลงทะเบียนสมาชิกใหม่ พร้อมกับรถ 1 คัน"""
     try:
-        # Insert Member
         m_in = payload.member.model_dump(exclude_none=True)
         sid = m_in.get("std_id")
         if isinstance(sid, str) and sid.isdigit():
@@ -321,8 +412,6 @@ def register_member_with_vehicle(payload: RegisterRequest):
 
         member = m_res.data[0]
         member_id = member["member_id"]
-
-        # Insert Vehicle
         v_in = payload.vehicle.model_dump(exclude_none=True)
         v_in["member_id"] = member_id
         v_res = supabase.table("Vehicle").insert(v_in).execute()
@@ -334,253 +423,166 @@ def register_member_with_vehicle(payload: RegisterRequest):
             )
 
         vehicle = v_res.data[0]
-        row = {
-            "member_id": member_id,
-            "std_id": member.get("std_id"),
-            "firstname": member.get("firstname"),
-            "lastname": member.get("lastname"),
-            "plate": vehicle.get("plate"),
-            "province": vehicle.get("province"),
+        return {
+            "message": "เพิ่มข้อมูลสมาชิกและรถเรียบร้อยแล้ว",
+            "row": {
+                "member_id": member_id,
+                "std_id": member.get("std_id"),
+                "firstname": member.get("firstname"),
+                "lastname": member.get("lastname"),
+                "plate": vehicle.get("plate"),
+                "province": vehicle.get("province"),
+            },
         }
-        return {"message": "เพิ่มข้อมูลสมาชิกและรถเรียบร้อยแล้ว", "row": row}
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# อัปเดตข้อมูลสมาชิก เฉพาะ field ที่ส่งมา
-@app.put("/members/{member_id}")
-def update_member(member_id: int, data: MemberUpdate):
+@app.patch("/members/{member_id}")
+def update_member(member_id: int, payload: MemberUpdate):
+    """อัปเดตข้อมูลสมาชิก"""
     try:
-        # ตรวจสอบว่ามี Member ID นี้จริงหรือไม่
-        old_resp = (
-            supabase.table("Member").select("*").eq("member_id", member_id).execute()
-        )
-        if not old_resp.data:
-            raise HTTPException(status_code=404, detail="ไม่พบสมาชิกในระบบ")
+        update_data = payload.model_dump(exclude_none=True)
+        if not update_data:
+            raise HTTPException(status_code=400, detail="ไม่มีข้อมูลที่ต้องการอัปเดต")
 
-        # กรองเฉพาะ field ที่ส่งมา
-        update_fields = data.model_dump(exclude_none=True)
-        if not update_fields:
-            raise HTTPException(status_code=400, detail="ไม่พบข้อมูลที่ต้องการอัปเดต")
-
-        # สั่งอัปเดต
-        new_resp = (
+        response = (
             supabase.table("Member")
-            .update(update_fields)
+            .update(update_data)
             .eq("member_id", member_id)
             .execute()
         )
-        new_data = new_resp.data[0] if new_resp.data else None
 
-        return {
-            "message": "แก้ไขข้อมูลสมาชิกเรียบร้อยแล้ว",
-            "old_data": old_resp.data[0],
-            "new_data": new_data,
-        }
-    except HTTPException:
-        raise
+        if not response.data:
+            raise HTTPException(status_code=404, detail="ไม่พบสมาชิกในระบบ")
+
+        return {"message": "อัปเดตข้อมูลเรียบร้อยแล้ว", "data": response.data[0]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ลบสมาชิกและรถที่ผูกอยู่
 @app.delete("/members/{member_id}")
 def delete_member(member_id: int):
+    """ลบสมาชิก (และรถที่ผูกอยู่)"""
     try:
-        # ตรวจสอบว่ามี Member ID นี้จริงหรือไม่
         old_resp = (
             supabase.table("Member").select("*").eq("member_id", member_id).execute()
         )
         if not old_resp.data:
             raise HTTPException(status_code=404, detail="ไม่พบสมาชิกในระบบ")
 
-        # ลบ Vehicle ที่ผูกอยู่ก่อน
         supabase.table("Vehicle").delete().eq("member_id", member_id).execute()
-
-        # ลบ Member
         supabase.table("Member").delete().eq("member_id", member_id).execute()
 
         return {
             "message": "ลบสมาชิกและรถที่ผูกอยู่เรียบร้อยแล้ว",
             "deleted_data": old_resp.data[0],
         }
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# =====
-# ROUTES: EVENTS
-# =====
-
-
-# ดึงข้อมูล Event ทั้งหมด รองรับการกรอง (Filter)
+# ===
+#  12. ROUTES: EVENTS
+# ===
 @app.get("/events")
-def list_events(
-    start_date: str | None = Query(None, description="YYYY-MM-DD (local)"),
-    end_date: str | None = Query(None, description="YYYY-MM-DD (local)"),
-    direction: str | None = Query(None, description="IN|OUT"),
-    plate: str | None = Query(None, description="partial match, case-insensitive"),
-    limit: int = 5000,
+def get_events(
+    limit: int = Query(1000, ge=1),
+    start_date: str | None = Query(None, description="YYYY-MM-DD"),
+    end_date: str | None = Query(None, description="YYYY-MM-DD"),
+    direction: str | None = Query(None),
+    query: str | None = Query(None, description="Plate query"),
 ):
-    q = supabase.table("Event").select("*")
-
-    # ----- กรองช่วงวันแบบ Local แล้วแปลงเป็น UTC ก่อนยิงเข้า DB -----
-    if start_date:
-        d = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=BKK)
-        start_utc = d.astimezone(timezone.utc)
-        q = q.gte("datetime", start_utc.isoformat())
-
-    if end_date:
-        d = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=BKK) + timedelta(days=1)
-        end_utc = d.astimezone(timezone.utc)
-        q = q.lt("datetime", end_utc.isoformat())
-
-    # ----- กรองทิศทาง -----
-    if direction and direction.upper() in ("IN", "OUT"):
-        q = q.eq("direction", direction.upper())
-
-    # ----- กรองทะเบียน -----
-    if plate:
-        q = q.ilike("plate", f"%{plate}%")
-
-    q = q.order("datetime", desc=True).limit(limit)
-    res = q.execute().data
-
-    out: list[dict] = []
-
-    for r in res:
-        role_raw = (r.get("role") or "").strip()
-
-        member_name = None
-        member_department = None
-
-        # ถ้ามี vehicle_id ลองไปดึง Member ที่ผูกกับรถคันนี้
-        vehicle_id = r.get("vehicle_id")
-        if vehicle_id:
-            try:
-                v = (
-                    supabase.table("Vehicle")
-                    .select(
-                        "member:Member!Vehicle_member_id_fkey(full_name,name,department,dept,role)"
-                    )
-                    .eq("vehicle_id", vehicle_id)
-                    .limit(1)
-                    .execute()
-                )
-                if v.data:
-                    member = v.data[0].get("member") or {}
-                    # ถ้า role ใน Event ว่าง ใช้ role จาก Member แทน
-                    if not role_raw:
-                        role_raw = (member.get("role") or "").strip()
-
-                    member_name = (
-                        member.get("full_name")
-                        or member.get("name")
-                        or member.get("display_name")
-                    )
-                    member_department = (
-                        member.get("department")
-                        or member.get("dept")
-                        or None
-                    )
-            except Exception as e:
-                # พลาดก็ปล่อยผ่าน แค่ไม่มีชื่อ ไม่ให้ error ทั้ง endpoint
-                print("member lookup error:", e)
-
-        # แยกบุคคลภายใน/ภายนอกจาก role
-        check = (
-            "บุคคลภายใน"
-            if role_raw in ("นักศึกษา", "อาจารย์", "เจ้าหน้าที่", "internal", "staff", "employee")
-            else "บุคคลภายนอก"
+    """ดึงข้อมูล Event ทั้งหมด รองรับการกรอง (Filter)"""
+    try:
+        qb = (
+            supabase.table("Event")
+            .select(
+                "datetime, plate, province, direction, blob, vehicle_id,"
+                "Vehicle!Event_vehicle_id_fkey(member:Member!Vehicle_member_id_fkey(role))"
+            )
+            .order("datetime", desc=True)
+            .limit(limit)
         )
+        if start_date:
+            qb = qb.gte("datetime", f"{start_date}T00:00:00")
+        if end_date:
+            qb = qb.lte("datetime", f"{end_date}T23:59:59")
+        if direction and direction.lower() != "all":
+            qb = qb.eq("direction", direction.upper())
+        if query:
+            qb = qb.ilike("plate", f"%{query.strip()}%")
 
-        # รูปภาพ
-        blob = r.get("blob") or r.get("image") or r.get("imgUrl")
+        resp = qb.execute()
+        dir_th = {"IN": "เข้า", "OUT": "ออก"}
+        results = []
 
-        out.append(
-            {
-                "datetime": r.get("datetime"),
-                "plate": r.get("plate"),
-                "province": r.get("province"),
-                "direction": r.get("direction"),
-                "role": role_raw,
-                "check": check,
-                "blob": blob,
-                "imgUrl": blob,
-                "image": blob,
-                # ✅ เพิ่มสองฟิลด์นี้ให้ frontend ใช้
-                "member_name": member_name,
-                "member_department": member_department,
-            }
-        )
+        for e in resp.data or []:
+            vehicle = e.get("Vehicle") or {}
+            if isinstance(vehicle, list):
+                vehicle = vehicle[0] if vehicle else {}
+            member_obj = vehicle.get("member") or {}
+            if isinstance(member_obj, list):
+                member_obj = member_obj[0] if member_obj else {}
+            role = member_obj.get("role")
 
-    return out
+            if not role:
+                role = _role_from_plate_province(e.get("plate"), e.get("province"))
+
+            check_status = (
+                "บุคคลภายนอก"
+                if not role or str(role).lower() == "visitor"
+                else "บุคคลภายใน"
+            )
+            direction_en = (e.get("direction") or "").upper()
+            direction_th = dir_th.get(direction_en, "ไม่ทราบ")
+
+            results.append(
+                {
+                    "time": e.get("datetime"),
+                    "plate": e.get("plate") or "-",
+                    "province": e.get("province") or "-",
+                    "status": direction_th,
+                    "check": check_status,
+                    "imgUrl": e.get("blob") or None,
+                }
+            )
+        return results
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=f"Error fetching events: {str(ex)}")
 
 
-
-
-# สร้าง Event ใหม่, บันทึกลง DB, และ Broadcast ไปยัง WebSocket
 @app.post("/events")
 async def create_event(event: EventIn):
+    """สร้าง Event ใหม่, บันทึกลง DB, และ Broadcast"""
     try:
-        # Normalize ค่าที่เข้ามา
         plate_raw = (event.plate or "").strip()
         prov_raw = (event.province or "").strip()
         p_can = _canon_plate(plate_raw)
         prov_can = _canon_text(prov_raw)
 
-        # ตรวจสอบ Vehicle ในระบบ พร้อม role + ชื่อ/แผนก ของ Member
         vehicle_data = None
-        role: str | None = None
-        member_name: str | None = None
-        member_department: str | None = None
-
+        role = None
         if p_can and prov_can:
             guess = (
                 supabase.table("Vehicle")
                 .select(
-                    # ดึงข้อมูล member มามากกว่าตัว role
-                    "vehicle_id, plate, province, member_id, "
-                    "member:Member!Vehicle_member_id_fkey(full_name,name,department,dept,role)"
+                    "vehicle_id, plate, province, member_id, member:Member!Vehicle_member_id_fkey(role)"
                 )
                 .ilike("plate", f"%{plate_raw}%")
                 .ilike("province", f"%{prov_raw}%")
                 .limit(20)
                 .execute()
             )
-
             if guess.data:
                 vehicle_data = guess.data[0]
                 member = vehicle_data.get("member") or {}
+                role = member.get("role")
 
-                # role ใช้จาก Member ถ้ามี
-                role = (member.get("role") or "").strip() or None
-
-                # ชื่อ (ลองหลาย field เผื่อ schema ต่างกัน)
-                member_name = (
-                    member.get("full_name")
-                    or member.get("name")
-                    or member.get("display_name")
-                    or None
-                )
-
-                # แผนก (ลองหลาย field เช่น department / dept)
-                member_department = (
-                    member.get("department")
-                    or member.get("dept")
-                    or None
-                )
-
-        # ตรวจสอบ direction (ใช้ cam_id เป็น Fallback)
         direction = event.direction or (
             "IN" if event.cam_id == 1 else "OUT" if event.cam_id == 2 else "UNKNOWN"
         )
 
-        # เตรียมข้อมูล (Payload) สำหรับบันทึกลง DB
         payload = {
             "datetime": event.datetime.isoformat(),
             "plate": event.plate or None,
@@ -591,15 +593,11 @@ async def create_event(event: EventIn):
             "vehicle_id": vehicle_data["vehicle_id"] if vehicle_data else None,
         }
 
-        # บันทึกลง Supabase
         response = supabase.table("Event").insert(payload).execute()
         if not response.data:
             raise HTTPException(status_code=400, detail="เพิ่มข้อมูล Event ไม่สำเร็จ")
 
         saved_event = response.data[0]
-
-        # สร้างข้อมูลที่จะส่งไปยัง WebSocket (รูปแบบเดียวกับ /dashboard/recent)
-        import json
 
         ws_payload = {
             "datetime": saved_event.get("datetime"),
@@ -608,14 +606,11 @@ async def create_event(event: EventIn):
             "direction": saved_event.get("direction") or "-",
             "role": role or "Visitor",
             "image": saved_event.get("blob"),
-            "blob": saved_event.get("blob"),  # เผื่อ frontend ใช้ชื่อนี้
-
-            #  เพิ่มข้อมูล member สำหรับบุคคลภายใน
-            "member_name": member_name,
-            "member_department": member_department,
+            "blob": saved_event.get("blob"),
         }
 
-        # Broadcast event ใหม่ไปยัง Client แบบ JSON
+        import json
+
         await manager.broadcast(json.dumps(ws_payload))
 
         return {
@@ -627,51 +622,12 @@ async def create_event(event: EventIn):
         raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาด: {str(e)}")
 
 
-
-# =====
-# ROUTES: CHECK PLATE
-# =====
-
-
-# ตรวจสอบว่าป้ายทะเบียนนี้มีในระบบ (ตาราง Vehicle) หรือไม่
-@app.get("/check_plate")
-def check_plate(
-    plate: str | None = Query(None, description="ทะเบียนรถ"),
-    province: str | None = Query(None, description="จังหวัด"),
-):
-    try:
-        query = supabase.table("Vehicle").select(
-            "vehicle_id, plate, province, member:Member!Vehicle_member_id_fkey(role)"
-        )
-        if plate:
-            query = query.ilike("plate", plate.strip())
-        if province:
-            query = query.ilike("province", province.strip())
-
-        response = query.execute()
-        if response.data:
-            vehicle = response.data[0]
-            role = vehicle.get("member", {}).get("role", "Visitor")
-            return {
-                "exists": True,
-                "vehicle_id": vehicle.get("vehicle_id"),
-                "plate": vehicle.get("plate"),
-                "province": vehicle.get("province"),
-                "role": role,
-            }
-        return {"exists": False, "message": "Not registered."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# =====
-# ROUTES: DASHBOARD
-# =====
-
-
-# ดึงข้อมูล Stats Cards (ทั้งหมด, เข้า, ออก, ไม่รู้จัก) ของวันที่เลือก
+# ===
+#  13. ROUTES: DASHBOARD
+# ===
 @app.get("/dashboard/summary")
 def dashboard_summary(date: str | None = None):
+    """ดึงข้อมูล Stats Cards (ทั้งหมด, เข้า, ออก, ไม่รู้จัก)"""
     try:
         date = date or datetime.now().strftime("%Y-%m-%d")
         start, end = f"{date}T00:00:00", f"{date}T23:59:59"
@@ -684,8 +640,6 @@ def dashboard_summary(date: str | None = None):
             .execute()
         )
         events = response.data
-
-        # นับและสรุปผล
         ins = [e for e in events if e["direction"] == "IN"]
         outs = [e for e in events if e["direction"] == "OUT"]
         unknown = [
@@ -703,115 +657,30 @@ def dashboard_summary(date: str | None = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ดึง Event ล่าสุด 50 รายการ (พร้อม Role คนนอกหรือคนใน)
 @app.get("/dashboard/recent")
 def dashboard_recent(limit: int = 50):
+    """ดึง Event ล่าสุด 50 รายการ (พร้อม Role)"""
     try:
-        # ดึง Event ล่าสุด (ไม่ใช้ Event.id แล้ว)
-        resp = (
+        response = (
             supabase.table("Event")
-            .select("datetime, plate, province, direction, blob, vehicle_id")
+            .select(
+                "datetime, plate, province, direction, blob,"
+                "Vehicle!Event_vehicle_id_fkey(member:Member!Vehicle_member_id_fkey(role))"
+            )
             .order("datetime", desc=True)
             .limit(limit)
             .execute()
         )
 
-        rows = resp.data or []
-        results: list[dict] = []
-
-        for e in rows:
-            # role ที่อาจจะมีมาจากที่อื่น (ส่วนใหญ่จะว่าง)
-            role_raw = (e.get("role") or "").strip()
-
-            member_name = None
-            member_department = None
-
-            vehicle_id = e.get("vehicle_id")
-            plate_raw = (e.get("plate") or "").strip()
-            prov_raw = (e.get("province") or "").strip()
-
-            member = None
-
-            # ---------- หา Vehicle + Member ----------
-            try:
-                vehicle_resp = None
-
-                if vehicle_id:
-                  # มี vehicle_id ใช้อันนี้เป็นหลัก
-                  vehicle_resp = (
-                      supabase.table("Vehicle")
-                      .select("member:Member!Vehicle_member_id_fkey(*)")
-                      .eq("vehicle_id", vehicle_id)
-                      .limit(1)
-                      .execute()
-                  )
-                elif plate_raw and prov_raw:
-                  # fallback เก่า ๆ: ป้าย + จังหวัด
-                  vehicle_resp = (
-                      supabase.table("Vehicle")
-                      .select("member:Member!Vehicle_member_id_fkey(*)")
-                      .ilike("plate", f"%{plate_raw}%")
-                      .ilike("province", f"%{prov_raw}%")
-                      .limit(1)
-                      .execute()
-                  )
-
-                if vehicle_resp and vehicle_resp.data:
-                    v = vehicle_resp.data[0]
-                    member = v.get("member") or {}
-
-            except Exception as sub_ex:
-                # log ไว้ดูหลังบ้าน ไม่กระทบ response
-                print("dashboard_recent vehicle/member lookup error:", sub_ex)
-
-            # ---------- หา role ----------
-            if member and not role_raw:
-                role_raw = (member.get("role") or "").strip()
-
-            # ถ้ายังไม่มี -> ใช้ fallback เดิมจากป้าย/จังหวัด
-            if not role_raw:
-                role_raw = _role_from_plate_province(
-                    e.get("plate"), e.get("province")
-                )
-
-            role_raw = role_raw or "Visitor"
-
-            # ---------- สร้างชื่อ + แผนก จาก key ที่มีจริง ----------
-            if member:
-                # ชื่อ
-                first = (
-                    member.get("first_name")
-                    or member.get("firstname")
-                    or ""
-                ).strip()
-                last = (
-                    member.get("last_name")
-                    or member.get("lastname")
-                    or ""
-                ).strip()
-
-                full = (
-                    member.get("full_name")
-                    or member.get("name")
-                    or member.get("display_name")
-                    or ""
-                )
-
-                if not full:
-                    full = (first + " " + last).strip()
-
-                member_name = full or None
-
-                # แผนก / ฝ่าย
-                member_department = (
-                    member.get("department")
-                    or member.get("dept")
-                    or member.get("division")
-                    or None
-                )
-
-            # ---------- รูป ----------
-            blob = e.get("blob") or e.get("image") or e.get("imgUrl")
+        results = []
+        for e in response.data or []:
+            vehicle = e.get("Vehicle") or {}
+            if isinstance(vehicle, list):
+                vehicle = vehicle[0] if vehicle else {}
+            role = (vehicle.get("member") or {}).get("role")
+            if not role:
+                role = _role_from_plate_province(e.get("plate"), e.get("province"))
+            role = role or "Visitor"
 
             results.append(
                 {
@@ -819,39 +688,27 @@ def dashboard_recent(limit: int = 50):
                     "plate": e.get("plate") or "-",
                     "province": e.get("province") or "-",
                     "direction": e.get("direction") or "-",
-                    "role": role_raw,
-                    "image": blob,
-                    # ให้ frontend เอาไปใช้ใน modal
-                    "member_name": member_name,
-                    "member_department": member_department,
+                    "role": role,
+                    "image": e.get("blob") or None,
                 }
             )
 
         return {"count": len(results), "data": results}
-
     except Exception as ex:
         raise HTTPException(
             status_code=500, detail=f"Error in dashboard_recent: {str(ex)}"
         )
 
 
-
-
-BKK = get_bkk_tz()
-
-
-# กราฟรายวัน ดึงสถิติรายชั่วโมง (เข้า/ออก) สำหรับวันที่ระบุ
 @app.get("/dashboard/daily")
 def dashboard_daily(date: str = Query(..., description="Date in YYYY-MM-DD format")):
+    """ดึงสถิติรายชั่วโมง (เข้า/ออก) สำหรับกราฟรายวัน"""
     try:
-        # ผู้ใช้เลือก "วันแบบไทย" → ทำเป็นช่วงเวลา local แล้วแปลงเป็น UTC
         start_local = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=BKK)
         end_local = start_local + timedelta(days=1)
-
         start_utc = start_local.astimezone(timezone.utc).isoformat()
         end_utc = end_local.astimezone(timezone.utc).isoformat()
 
-        # ดึงเหตุการณ์ในช่วง UTC นั้น ๆ
         response = (
             supabase.table("Event")
             .select("datetime, direction")
@@ -861,16 +718,13 @@ def dashboard_daily(date: str = Query(..., description="Date in YYYY-MM-DD forma
         )
         events = response.data or []
 
-        # เตรียม bucket 24 ชั่วโมง
         hourly_data = {
             h: {"label": f"{h:02d}:00", "inside": 0, "outside": 0} for h in range(24)
         }
 
-        # เวลาจาก DB เป็น UTC → แปลงเป็นเวลาท้องถิ่น (ไทย) แล้วค่อยนับชั่วโมง
         for e in events:
             dt_utc = datetime.fromisoformat(e["datetime"])
             dt_local = dt_utc.astimezone(BKK)
-
             hour = dt_local.hour
             direction = (e.get("direction") or "").lower()
             if 0 <= hour < 24:
@@ -880,7 +734,6 @@ def dashboard_daily(date: str = Query(..., description="Date in YYYY-MM-DD forma
                     hourly_data[hour]["outside"] += 1
 
         return [hourly_data[h] for h in range(24)]
-
     except ValueError:
         raise HTTPException(
             status_code=400, detail="Invalid date format. Use YYYY-MM-DD."
@@ -891,14 +744,12 @@ def dashboard_daily(date: str = Query(..., description="Date in YYYY-MM-DD forma
         )
 
 
-# =====
-# ROUTES: UPLOAD IMAGE
-# =====
-
-
-# อัปโหลดไฟล์ภาพ (blob) ไปยัง Storage
+# ===
+#  14. ROUTES: UPLOAD & EXPORT
+# ===
 @app.post("/upload")
 async def upload_image(file: UploadFile = File(...)):
+    """อัปโหลดไฟล์ภาพ (blob) ไปยัง Storage"""
     try:
         contents = await file.read()
         url = upload_image_to_storage(contents, folder="plates")
@@ -907,12 +758,6 @@ async def upload_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# =====
-# ROUTES: EXPORT CSV
-# =====
-
-
-# Export ข้อมูล CSV ตาม Filter ที่เลือก
 @app.get("/export/events")
 def export_events(
     start: str | None = Query(None),
@@ -920,9 +765,9 @@ def export_events(
     direction: str | None = Query(None),
     plate: str | None = Query(None),
 ):
+    """Export ข้อมูล CSV ตาม Filter ที่เลือก"""
     try:
         query_builder = supabase.table("Event").select("*").order("datetime", desc=True)
-
         if start:
             query_builder = query_builder.gte("datetime", f"{start}T00:00:00")
         if end:
@@ -935,10 +780,8 @@ def export_events(
         response = query_builder.execute()
         data = response.data or []
 
-        # สร้างไฟล์ CSV ใน Memory
         output = io.StringIO(newline="")
-        output.write("\ufeff")  # UTF-8 BOM (สำหรับ Excel อ่านไทย)
-
+        output.write("\ufeff")
         fieldnames = (
             list(data[0].keys())
             if data
@@ -957,30 +800,3 @@ def export_events(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error exporting events: {str(e)}")
-
-
-# WEBSOCKET ROUTES
-# =====
-# Endpoint สำหรับ Frontend รับการเชื่อมต่อ WebSocket จาก Client (React) และค้างไว้เพื่อรอรับการ Broadcast
-@app.websocket("/ws/events")
-async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
-    try:
-        while True:
-            # คอยรับข้อความ (ถ้ามี)
-            data = await websocket.receive_text()
-            print(f"[WS] Received from client: {data}")
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-
-router = APIRouter(prefix="/auth", tags=["Auth"])
-# Model สำหรับ Login
-class LoginIn(BaseModel):
-    username: str
-    password: str
-@router.post("/login")
-def login(body: LoginIn):
-    # ตัวอย่างตรวจแบบง่าย
-    if body.username == "admin" and body.password == "1234":
-        return {"access_token": "demo-token-admin", "user": {"username": "admin"}}
-    raise HTTPException(status_code=401, detail="Invalid credentials")

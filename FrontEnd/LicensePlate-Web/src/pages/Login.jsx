@@ -1,145 +1,326 @@
-// src/pages/Login.jsx
-import { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { todayLocalKey, addDays, toLocalDateKey } from "../utils/date";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"; // ⬅️ เพิ่มบรรทัดนี้
 
-const API = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+const API =
+  (typeof window !== "undefined" && window.VITE_API_BASE_URL) ||
+  "http://127.0.0.1:8000";
 
-export default function Login() {
-  const { login } = useAuth();
-  const nav = useNavigate();
-  const loc = useLocation();
+// Auth utilities
+const AuthService = {
+  setToken: (token) => localStorage.setItem("auth_token", token),
+  getToken: () => localStorage.getItem("auth_token"),
+  removeToken: () => localStorage.removeItem("auth_token"),
+  setUser: (user) => localStorage.setItem("user", JSON.stringify(user)),
+  getUser: () => {
+    const user = localStorage.getItem("user");
+    return user ? JSON.parse(user) : null;
+  },
+  removeUser: () => localStorage.removeItem("user"),
+  isAuthenticated: () => !!AuthService.getToken(),
+  logout: () => {
+    AuthService.removeToken();
+    AuthService.removeUser();
+  },
+};
 
+export default function LoginPage() {
+  const navigate = useNavigate(); // ⬅️ เพิ่มบรรทัดนี้
+
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [todayStats, setTodayStats] = useState({ in: 0, out: 0 });
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  // ==== สถิติของ "วันนี้" ====
-  const [stats, setStats] = useState({
-    total: "—",
-    in: "—",
-    out: "—",
-    unique: "—",
-  });
-
-  // ดึงเหตุการณ์ของ "วันนี้" แล้วสรุปตัวเลข
   useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadTodayStats() {
-      try {
-        const start = todayLocalKey();                       // YYYY-MM-DD (local)
-        const end = toLocalDateKey(addDays(new Date(), 1));  // วันถัดไป
-
-        const params = new URLSearchParams({
-          start_date: start,
-          end_date: end,
-          limit: "20000",          // กันกรณีข้อมูลเยอะ
-        });
-
-        const res = await fetch(`${API}/events?${params.toString()}`, {
-          signal: controller.signal,
-        });
-        if (!res.ok) throw new Error(`API Error: ${res.status} ${res.statusText}`);
-
-        const events = (await res.json()) || [];
-
-        const dir = (v) => String(v || "").trim().toLowerCase();
-        const total = events.length;
-        const inCount = events.filter((e) => dir(e.direction) === "in").length;
-        const outCount = events.filter((e) => dir(e.direction) === "out").length;
-
-        // นับป้ายทะเบียนไม่ซ้ำ: ตัดค่าว่าง / "-" / "ไม่มีป้ายทะเบียน" ออก
-        const normalizePlate = (p) => String(p || "").trim();
-        const uniquePlates = new Set(
-          events
-            .map((e) => normalizePlate(e.plate))
-            .filter((p) => p && p !== "-" && !/^ไม่มีป้าย/i.test(p))
-        ).size;
-
-        setStats({
-          total,
-          in: inCount,
-          out: outCount,
-          unique: uniquePlates,
-        });
-      } catch (err) {
-        // ถ้าพลาด ให้คง "—" ไว้ ไม่ให้หน้าแตก
-        console.error("loadTodayStats error:", err);
-      }
+    // ตรวจสอบว่า login แล้วหรือยัง
+    if (AuthService.isAuthenticated()) {
+      setIsLoggedIn(true);
     }
 
-    loadTodayStats();
-    return () => controller.abort();
+    // ดึงสถิติวันนี้
+    fetchTodayStats();
+
+    // อัพเดทเวลาทุก 1 วินาที
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, []);
 
-  async function submit(e) {
-    e.preventDefault();
-    setError(""); setLoading(true);
+  const fetchTodayStats = async () => {
     try {
-      await login(username.trim(), password);
-      const to = loc.state?.from?.pathname || "/home";
-      nav(to, { replace: true });
+      const today = new Date().toISOString().split("T")[0];
+      const res = await fetch(`${API}/dashboard/summary?date=${today}`);
+      const data = await res.json();
+      setTodayStats({ in: data.in || 0, out: data.out || 0 });
     } catch (err) {
-      setError(err.message || "ล็อกอินไม่สำเร็จ");
+      console.error("Error fetching stats:", err);
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "เข้าสู่ระบบไม่สำเร็จ");
+      }
+
+      // บันทึก token และข้อมูล user
+      AuthService.setToken(data.access_token);
+      AuthService.setUser(data.user);
+
+      // ⬇️ เพิ่มส่วนนี้: Redirect ไปหน้า Home
+      navigate("/", { replace: true });
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  return (
-    <div className="min-h-screen grid grid-cols-1 md:grid-cols-2">
-      {/* ซ้าย: พื้นหลังไล่สี + การ์ดสรุปของ "วันนี้" */}
-      <div className="hidden md:flex flex-col items-center justify-center p-10 bg-gradient-to-b from-sky-400 via-indigo-300 to-rose-200">
-        <div className="grid grid-cols-2 gap-6 w-full max-w-xl">
-          {[
-            { t: "ทั้งหมด",    v: stats.total },
-            { t: "เข้า (in)",  v: stats.in },
-            { t: "ออก (out)",  v: stats.out },
-            { t: "ป้ายทะเบียน", v: stats.unique },
-          ].map((c, i) => (
-            <div key={i} className="rounded-xl bg-white/90 p-4 shadow">
-              <div className="text-slate-700 text-lg">{c.t}</div>
-              <div className="text-3xl font-bold mt-1">{c.v}</div>
+  // ... (ส่วนที่เหลือเหมือนเดิม)
+
+  const handleLogout = () => {
+    AuthService.logout();
+    setIsLoggedIn(false);
+    setUsername("");
+    setPassword("");
+  };
+
+  const formatDate = (date) => {
+    return date.toLocaleDateString("th-TH", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+
+  const formatTime = (date) => {
+    return date.toLocaleTimeString("th-TH", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  };
+
+  // หน้า Dashboard หลัง login
+  if (isLoggedIn) {
+    const user = AuthService.getUser();
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 p-4">
+        <div className="max-w-6xl mx-auto">
+          {/* Header with Logout */}
+          <div className="bg-white/80 backdrop-blur rounded-2xl shadow-lg p-6 mb-6 flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">
+                ยินดีต้อนรับ, {user?.username}
+              </h1>
+              <p className="text-sm text-gray-600 mt-1">
+                บทบาท: {user?.role === "admin" ? "ผู้ดูแลระบบ" : "พนักงาน"}
+              </p>
             </div>
-          ))}
+            <button
+              onClick={handleLogout}
+              className="bg-red-500 hover:bg-red-600 text-white font-semibold px-6 py-2 rounded-lg transition-colors duration-200 shadow-md hover:shadow-lg"
+            >
+              ออกจากระบบ
+            </button>
+          </div>
+
+          {/* Dashboard Content */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* DateTime Card */}
+            <div className="bg-gradient-to-br from-indigo-200 to-purple-300 rounded-2xl p-8 shadow-lg">
+              <div className="text-center">
+                <p className="text-gray-700 font-medium mb-2">วันที่</p>
+                <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                  {formatDate(currentTime)}
+                </h2>
+                <p className="text-gray-700 font-medium mb-2">เวลา</p>
+                <h2 className="text-5xl font-bold text-gray-900">
+                  {formatTime(currentTime)} น.
+                </h2>
+              </div>
+            </div>
+
+            {/* Stats Card */}
+            <div className="bg-white/90 backdrop-blur rounded-2xl p-8 shadow-lg">
+              <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center">
+                สถิติวันนี้
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gradient-to-br from-green-200 to-green-300 rounded-xl p-6 shadow-md border-2 border-green-400">
+                  <p className="text-sm text-gray-700 mb-2 font-medium">
+                    เข้า (In)
+                  </p>
+                  <p className="text-5xl font-bold text-gray-800">
+                    {todayStats.in}
+                  </p>
+                </div>
+
+                <div className="bg-gradient-to-br from-red-200 to-red-300 rounded-xl p-6 shadow-md border-2 border-red-400">
+                  <p className="text-sm text-gray-700 mb-2 font-medium">
+                    ออก (Out)
+                  </p>
+                  <p className="text-5xl font-bold text-gray-800">
+                    {todayStats.out}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* System Status */}
+            <div className="md:col-span-2 bg-white/80 backdrop-blur rounded-2xl p-6 shadow-lg">
+              <div className="flex items-center justify-center gap-3">
+                <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-lg font-semibold text-gray-700">
+                  ระบบทำงานปกติ
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="md:col-span-2 bg-gradient-to-r from-blue-200 to-cyan-200 rounded-2xl p-8 shadow-lg">
+              <h3 className="text-xl font-semibold text-gray-800 mb-4 text-center">
+                เมนูด่วน
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <button className="bg-white hover:bg-gray-50 rounded-lg p-4 shadow-md transition-all duration-200 hover:shadow-lg">
+                  <div className="text-3xl mb-2">📊</div>
+                  <div className="text-sm font-medium text-gray-700">
+                    รายงาน
+                  </div>
+                </button>
+                <button className="bg-white hover:bg-gray-50 rounded-lg p-4 shadow-md transition-all duration-200 hover:shadow-lg">
+                  <div className="text-3xl mb-2">🔍</div>
+                  <div className="text-sm font-medium text-gray-700">ค้นหา</div>
+                </button>
+                <button className="bg-white hover:bg-gray-50 rounded-lg p-4 shadow-md transition-all duration-200 hover:shadow-lg">
+                  <div className="text-3xl mb-2">👥</div>
+                  <div className="text-sm font-medium text-gray-700">
+                    สมาชิก
+                  </div>
+                </button>
+                <button className="bg-white hover:bg-gray-50 rounded-lg p-4 shadow-md transition-all duration-200 hover:shadow-lg">
+                  <div className="text-3xl mb-2">⚙️</div>
+                  <div className="text-sm font-medium text-gray-700">
+                    ตั้งค่า
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+    );
+  }
 
-      {/* ขวา: ฟอร์มล็อกอิน */}
-      <div className="flex items-center justify-center bg-[#e8ecff]">
-        <form onSubmit={submit} className="w-full max-w-md bg-white rounded-2xl shadow p-8 m-6">
-          <h1 className="text-5xl font-semibold text-center mb-8">Login</h1>
+  // หน้า Login
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 flex items-center justify-center p-4">
+      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-0 rounded-3xl overflow-hidden shadow-2xl">
+        {/* Left side - Login Form */}
+        <div className="bg-gradient-to-br from-blue-200 to-blue-300 p-8 md:p-12 flex flex-col justify-center">
+          <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">
+            Login
+          </h1>
 
-          <label className="block text-sm text-slate-600 mb-1">Username</label>
-          <input
-            className="w-full rounded-lg border px-3 py-2 mb-4"
-            value={username}
-            onChange={(e)=>setUsername(e.target.value)}
-            required
-          />
+          <div className="space-y-6">
+            <div>
+              <input
+                type="text"
+                placeholder="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={loading}
+                className="w-full px-4 py-3 rounded-lg border-2 border-transparent bg-white/90 text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
 
-          <label className="block text-sm text-slate-600 mb-1">Password</label>
-          <input
-            type="password"
-            className="w-full rounded-lg border px-3 py-2 mb-6"
-            value={password}
-            onChange={(e)=>setPassword(e.target.value)}
-            required
-          />
+            <div>
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleLogin(e)}
+                disabled={loading}
+                className="w-full px-4 py-3 rounded-lg border-2 border-transparent bg-white/90 text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
 
-          {error && <div className="mb-4 text-center text-rose-600 text-sm">{error}</div>}
+            {error && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="mx-auto block w-40 rounded-lg bg-lime-200 py-2 text-slate-900 font-medium shadow hover:brightness-105 disabled:opacity-60 rounded-2xl"
-          >
-            {loading ? "กำลังเข้า..." : "Login"}
-          </button>
-        </form>
+            <button
+              onClick={handleLogin}
+              disabled={loading || !username || !password}
+              className="w-full bg-gradient-to-r from-green-400 to-green-500 hover:from-green-500 hover:to-green-600 text-gray-800 font-semibold py-3 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-green-400 disabled:hover:to-green-500"
+            >
+              {loading ? "กำลังเข้าสู่ระบบ..." : "Login"}
+            </button>
+          </div>
+        </div>
+
+        {/* Right side - Stats Display */}
+        <div className="bg-gradient-to-br from-blue-300 via-purple-200 to-pink-200 p-8 md:p-12 flex flex-col justify-center">
+          <div className="text-center mb-8">
+            <h2 className="text-xl font-semibold text-gray-800 mb-2">
+              วันที่ {formatDate(currentTime)}
+            </h2>
+            <p className="text-4xl font-bold text-gray-900">
+              เวลา {formatTime(currentTime)} น.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-gradient-to-br from-green-200 to-green-300 rounded-2xl p-6 shadow-lg border-2 border-green-400">
+              <p className="text-sm text-gray-700 mb-2 font-medium">
+                เข้า (In)
+              </p>
+              <p className="text-5xl font-bold text-gray-800">
+                {todayStats.in}
+              </p>
+            </div>
+
+            <div className="bg-gradient-to-br from-red-200 to-red-300 rounded-2xl p-6 shadow-lg border-2 border-red-400">
+              <p className="text-sm text-gray-700 mb-2 font-medium">
+                ออก (Out)
+              </p>
+              <p className="text-5xl font-bold text-gray-800">
+                {todayStats.out}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-8 text-center">
+            <div className="inline-flex items-center gap-2 bg-white/50 rounded-full px-4 py-2 backdrop-blur-sm">
+              <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm font-medium text-gray-700">
+                ระบบทำงานปกติ
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
