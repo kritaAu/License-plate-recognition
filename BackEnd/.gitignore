@@ -4,3 +4,5 @@
 .env
 .csv
 \__pycache__
+\generate_hash.py
+\requirements.txt
