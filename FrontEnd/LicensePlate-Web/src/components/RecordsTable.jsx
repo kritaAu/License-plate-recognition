@@ -1,5 +1,5 @@
 // src/components/RecordsTable.jsx
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 
 /* ---------- helpers ---------- */
 function getImageUrl(rec = {}) {
@@ -15,7 +15,9 @@ function getImageUrl(rec = {}) {
 }
 
 function getDirection(rec = {}) {
-  const raw = (rec._raw?.direction || rec.direction || "").toString().toUpperCase();
+  const raw = (rec._raw?.direction || rec.direction || "")
+    .toString()
+    .toUpperCase();
   const status = (rec.status || "").toString();
   if (raw === "IN" || status.includes("เข้า")) return "IN";
   if (raw === "OUT" || status.includes("ออก")) return "OUT";
@@ -48,7 +50,10 @@ function onlyPlate(plateStr) {
 }
 
 /* ช่วย normalize ป้ายทะเบียน/จังหวัด */
-const normalize = (s) => String(s || "").replace(/\s+/g, "").toUpperCase();
+const normalize = (s) =>
+  String(s || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
 
 /* ดึงชื่อจาก payload ที่มีอยู่ (flatten + nested) ถ้ามี */
 function extractNameFromRaw(raw = {}) {
@@ -70,10 +75,91 @@ function extractNameFromRaw(raw = {}) {
   );
 }
 
-/* ---------- component ---------- */
-const API = (import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+/* ---------- constants ---------- */
+const API = (
+  import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+).replace(/\/$/, "");
 
-export default function RecordsTable({ records = [] }) {
+/* ---------- แถวของตาราง (memoized) ---------- */
+const TableRow = React.memo(function TableRow({ rec, onOpenDetail }) {
+  const imgUrl = getImageUrl(rec);
+  const dir = getDirection(rec);
+  const isInside = (rec.check || "").includes("ภายใน");
+  const province = rec._raw?.province || rec.province || "-";
+
+  return (
+    <tr
+      onClick={() => onOpenDetail(rec)}
+      className="cursor-pointer hover:bg-sky-50/70 transition-colors"
+    >
+      {/* เวลา */}
+      <td className="px-4 py-3 whitespace-nowrap text-slate-800">
+        {rec.time || "-"}
+      </td>
+
+      {/* ทะเบียน (ตัด จ.จังหวัด ออก) */}
+      <td className="px-4 py-3">
+        <span className="font-medium text-slate-900">
+          {onlyPlate(rec.plate) || "-"}
+        </span>
+      </td>
+
+      {/* จังหวัด */}
+      <td className="px-4 py-3">
+        <span className="text-slate-800">{province}</span>
+      </td>
+
+      {/* ทิศทาง */}
+      <td className="px-4 py-3 text-center">
+        <span
+          className={
+            "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium " +
+            (dir === "IN"
+              ? "bg-emerald-50 text-emerald-700"
+              : dir === "OUT"
+              ? "bg-orange-50 text-orange-700" // ออก = ส้มแดง
+              : "bg-slate-100 text-slate-600")
+          }
+        >
+          {rec.status || (dir === "IN" ? "เข้า" : dir === "OUT" ? "ออก" : "-")}
+        </span>
+      </td>
+
+      {/* คนใน/คนนอก */}
+      <td className="px-4 py-3 text-center">
+        <span
+          className={
+            "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium " +
+            (isInside
+              ? "bg-indigo-50 text-indigo-700"
+              : "bg-rose-50 text-rose-700")
+          }
+        >
+          {rec.check || (isInside ? "บุคคลภายใน" : "บุคคลภายนอก")}
+        </span>
+      </td>
+
+      {/* ภาพ */}
+      <td className="px-4 py-3 text-center">
+        {imgUrl ? (
+          <div className="inline-flex h-12 w-16 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
+            <img
+              src={imgUrl}
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          </div>
+        ) : (
+          <span className="text-xs text-slate-400">ไม่มีภาพ</span>
+        )}
+      </td>
+    </tr>
+  );
+});
+
+/* ---------- component หลัก ---------- */
+function RecordsTable({ records = [] }) {
   const PAGE_SIZE = 10;
 
   const [page, setPage] = useState(1);
@@ -95,43 +181,22 @@ export default function RecordsTable({ records = [] }) {
     return records.slice(start, start + PAGE_SIZE);
   }, [records, page]);
 
-  function openDetail(rec) {
-    setSelected(rec);
-    setPersonName("");
-    setPersonLoading(false);
-
-    // ถ้าเป็นบุคคลภายในแต่ payload ไม่มีชื่อ -> ดึงจาก /members on-demand
-    const isInside = (rec.check || "").includes("ภายใน");
-    const rawName = extractNameFromRaw(rec._raw || {});
-    if (isInside && !rawName) {
-      fetchMemberName(rec);
-    }
-  }
-
-  function closeDetail() {
-    setSelected(null);
-    setPersonName("");
-    setPersonLoading(false);
-  }
-
-  async function fetchMemberName(rec) {
+  // ดึงข้อมูล member (ใช้ใน modal เท่านั้น)
+  const fetchMemberName = useCallback(async (rec) => {
     try {
       setPersonLoading(true);
 
-      // ใช้ทะเบียนแบบ "ไม่พ่วงจังหวัด"
       const plate = onlyPlate(String(rec.plate || "")).trim();
       const province = (rec._raw?.province || rec.province || "").trim();
 
       const url = new URL(`${API}/members`);
       if (plate) url.searchParams.set("plate", plate);
-      // เผื่อ backend รองรับ province ให้แนบไปด้วย
       if (province) url.searchParams.set("province", province);
 
       const res = await fetch(url.toString(), { cache: "no-store" });
       if (!res.ok) throw new Error("fetch members failed");
       const list = (await res.json()) || [];
 
-      // เลือก record ที่แมตช์ที่สุดจาก plate (+ province ถ้าได้)
       const nPlate = normalize(plate);
       const nProv = normalize(province);
 
@@ -147,7 +212,9 @@ export default function RecordsTable({ records = [] }) {
       const name =
         best?.full_name ||
         best?.name ||
-        (best?.firstname && best?.lastname ? `${best.firstname} ${best.lastname}` : "") ||
+        (best?.firstname && best?.lastname
+          ? `${best.firstname} ${best.lastname}`
+          : "") ||
         best?.display_name ||
         "";
 
@@ -157,7 +224,29 @@ export default function RecordsTable({ records = [] }) {
     } finally {
       setPersonLoading(false);
     }
-  }
+  }, []);
+
+  // ฟังก์ชันเปิด modal (ใช้ useCallback ให้ reference คงที่ → row ไม่ re-render)
+  const openDetail = useCallback(
+    (rec) => {
+      setSelected(rec);
+      setPersonName("");
+      setPersonLoading(false);
+
+      const isInside = (rec.check || "").includes("ภายใน");
+      const rawName = extractNameFromRaw(rec._raw || {});
+      if (isInside && !rawName) {
+        fetchMemberName(rec);
+      }
+    },
+    [fetchMemberName]
+  );
+
+  const closeDetail = useCallback(() => {
+    setSelected(null);
+    setPersonName("");
+    setPersonLoading(false);
+  }, []);
 
   return (
     <>
@@ -176,81 +265,20 @@ export default function RecordsTable({ records = [] }) {
           </thead>
 
           <tbody className="divide-y divide-slate-100 bg-white">
-            {currentRows.map((rec, idx) => {
-              const imgUrl = getImageUrl(rec);
-              const dir = getDirection(rec);
-              const isInside = (rec.check || "").includes("ภายใน");
-              const province = rec._raw?.province || rec.province || "-";
-
-              return (
-                <tr
-                  key={rec.id || rec._raw?.id || `${rec.time}-${idx}`}
-                  onClick={() => openDetail(rec)}
-                  className="cursor-pointer hover:bg-sky-50/70 transition-colors"
-                >
-                  {/* เวลา */}
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-800">
-                    {rec.time || "-"}
-                  </td>
-
-                  {/* ทะเบียน (ตัด จ.จังหวัด ออก) */}
-                  <td className="px-4 py-3">
-                    <span className="font-medium text-slate-900">
-                      {onlyPlate(rec.plate) || "-"}
-                    </span>
-                  </td>
-
-                  {/* จังหวัด */}
-                  <td className="px-4 py-3">
-                    <span className="text-slate-800">{province}</span>
-                  </td>
-
-                  {/* ทิศทาง */}
-                  <td className="px-4 py-3 text-center">
-                    <span
-                      className={
-                        "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium " +
-                        (dir === "IN"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : dir === "OUT"
-                          ? "bg-slate-50 text-orange-700"
-                          : "bg-slate-100 text-slate-600")
-                      }
-                    >
-                      {rec.status || (dir === "IN" ? "เข้า" : dir === "OUT" ? "ออก" : "-")}
-                    </span>
-                  </td>
-
-                  {/* คนใน/คนนอก */}
-                  <td className="px-4 py-3 text-center">
-                    <span
-                      className={
-                        "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium " +
-                        (isInside ? "bg-indigo-50 text-indigo-700" : "bg-rose-50 text-rose-700")
-                      }
-                    >
-                      {rec.check || (isInside ? "บุคคลภายใน" : "บุคคลภายนอก")}
-                    </span>
-                  </td>
-
-                  {/* ภาพ */}
-                  <td className="px-4 py-3 text-center">
-                    {imgUrl ? (
-                      <div className="inline-flex h-12 w-16 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-                        {/* eslint-disable-next-line jsx-a11y/alt-text */}
-                        <img src={imgUrl} className="h-full w-full object-cover" loading="lazy" />
-                      </div>
-                    ) : (
-                      <span className="text-xs text-slate-400">ไม่มีภาพ</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
+            {currentRows.map((rec, idx) => (
+              <TableRow
+                key={rec.id || rec._raw?.id || `${rec.time}-${idx}`}
+                rec={rec}
+                onOpenDetail={openDetail}
+              />
+            ))}
 
             {currentRows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td
+                  colSpan={6}
+                  className="px-4 py-6 text-center text-sm text-slate-500"
+                >
                   ไม่พบข้อมูล
                 </td>
               </tr>
@@ -279,7 +307,10 @@ export default function RecordsTable({ records = [] }) {
 
         {getPaginationRange(page, pageCount, 1).map((p, i) =>
           p === "..." ? (
-            <span key={`dots-${i}`} className="inline-flex h-9 items-center px-2 text-slate-400">
+            <span
+              key={`dots-${i}`}
+              className="inline-flex h-9 items-center px-2 text-slate-400"
+            >
               …
             </span>
           ) : (
@@ -324,10 +355,15 @@ export default function RecordsTable({ records = [] }) {
           role="dialog"
           aria-modal="true"
         >
-          <div className="flex min-h-full items-center justify-center px-3 py-8" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="flex min-h-full items-center justify-center px-3 py-8"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
               <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-                <h2 className="text-base font-semibold text-slate-900">รายละเอียดการเข้า-ออก</h2>
+                <h2 className="text-base font-semibold text-slate-900">
+                  รายละเอียดการเข้า-ออก
+                </h2>
                 <button
                   type="button"
                   onClick={closeDetail}
@@ -362,32 +398,49 @@ export default function RecordsTable({ records = [] }) {
                   <div className="space-y-3">
                     <div>
                       <p className="text-xs font-medium text-slate-500">เวลา</p>
-                      <p className="mt-1 text-sm text-slate-900">{selected.time || "-"}</p>
+                      <p className="mt-1 text-sm text-slate-900">
+                        {selected.time || "-"}
+                      </p>
                     </div>
 
                     <div>
-                      <p className="text-xs font-medium text-slate-500">ป้ายทะเบียน</p>
+                      <p className="text-xs font-medium text-slate-500">
+                        ป้ายทะเบียน
+                      </p>
                       <p className="mt-1 text-lg font-bold text-slate-900">
                         {onlyPlate(selected.plate) || "-"}
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-xs font-medium text-slate-500">จังหวัด</p>
+                      <p className="text-xs font-medium text-slate-500">
+                        จังหวัด
+                      </p>
                       <p className="mt-1 text-sm text-slate-900">
-                        {selected._raw?.province || selected.province || "-"}
+                        {selected._raw?.province ||
+                          selected.province ||
+                          "-"}
                       </p>
                     </div>
 
                     {/* ===== ชื่อผู้ใช้ ===== */}
                     {(() => {
-                      const isInside = (selected.check || "").includes("ภายใน");
-                      const rawName = extractNameFromRaw(selected._raw || {});
-                      const nameToShow = rawName || personName || (personLoading ? "กำลังโหลดชื่อ..." : "ไม่ทราบชื่อ");
+                      const isInside = (selected.check || "").includes(
+                        "ภายใน"
+                      );
+                      const rawName = extractNameFromRaw(
+                        selected._raw || {}
+                      );
+                      const nameToShow =
+                        rawName ||
+                        personName ||
+                        (personLoading ? "กำลังโหลดชื่อ..." : "ไม่ทราบชื่อ");
 
                       return (
                         <div>
-                          <p className="text-xs font-medium text-slate-500">ชื่อ</p>
+                          <p className="text-xs font-medium text-slate-500">
+                            ชื่อ
+                          </p>
                           <p className="mt-1 text-sm text-slate-900">
                             {isInside ? nameToShow : "ไม่ทราบชื่อ"}
                           </p>
@@ -397,12 +450,20 @@ export default function RecordsTable({ records = [] }) {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <p className="text-xs font-medium text-slate-500">ทิศทาง</p>
-                        <p className="mt-1 text-sm">{selected.status || "-"}</p>
+                        <p className="text-xs font-medium text-slate-500">
+                          ทิศทาง
+                        </p>
+                        <p className="mt-1 text-sm">
+                          {selected.status || "-"}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-xs font-medium text-slate-500">สถานะ</p>
-                        <p className="mt-1 text-sm">{selected.check || "-"}</p>
+                        <p className="text-xs font-medium text-slate-500">
+                          สถานะ
+                        </p>
+                        <p className="mt-1 text-sm">
+                          {selected.check || "-"}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -415,3 +476,6 @@ export default function RecordsTable({ records = [] }) {
     </>
   );
 }
+
+// ห่อด้วย React.memo อีกชั้น (ถ้า parent ส่ง props เดิมมา จะไม่ต้อง re-render เลย)
+export default React.memo(RecordsTable);
