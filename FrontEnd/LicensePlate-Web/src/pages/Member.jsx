@@ -512,7 +512,7 @@ export default function Member() {
   };
 
   return (
-    <div class="pt-0 bg-gradient-to-br from-white to-blue-400">
+    <div className="pt-0 bg-gradient-to-br from-white to-blue-400">
       <div className="mx-auto max-w-7xl px-4 py-6 ">
         <h1 className="mb-4 text-3xl font-bold">ค้นหาสมาชิก</h1>
 

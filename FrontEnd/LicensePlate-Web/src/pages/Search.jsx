@@ -1,17 +1,18 @@
-// src/pages/Search.jsx 
-import { useEffect, useState, useRef } from "react";
+// src/pages/Search.jsx
+import { useEffect, useState, useRef, useDeferredValue, startTransition } from "react";
 import Filters from "../components/Filters";
 import RecordsTable from "../components/RecordsTable";
 import { formatThaiDateTime } from "../utils/date";
 import { downloadCsv } from "../utils/downloadCsv";
 
 const API = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+const WS_URL = (import.meta.env.VITE_WS_URL || API.replace(/^http/i, "ws")) + "/ws/events";
 
-// ===== WebSocket URL =====
-const WS_URL =
-  (import.meta.env.VITE_WS_URL || API.replace(/^http/i, "ws")) + "/ws/events";
+// จำกัดจำนวนรายการในหน้าเพื่อลดงานเรนเดอร์
+const LIST_LIMIT = 300;
 
-// ===== helper: คนใน/คนนอก =====
+/* ===== Helpers ===== */
+// ภายใน/ภายนอก (fallback เมื่อ backend ไม่ส่ง check มา)
 function isInsideRole(role) {
   const r = String(role || "").trim();
   const rl = r.toLowerCase();
@@ -20,57 +21,56 @@ function isInsideRole(role) {
   return false;
 }
 
-// ทิศทาง -> ภาษาไทย
-const toThaiDirection = (v) => {
+// ทิศทาง -> ภาษาไทย (fallback เมื่อ backend ไม่ส่ง status มา)
+function toThaiDirection(v) {
   const s = String(v || "").toUpperCase();
   if (s === "IN") return "เข้า";
   if (s === "OUT") return "ออก";
   if (s === "UNKNOWN") return "ไม่ทราบ";
   return s || "-";
-};
+}
 
-// ==== helper ดึง URL รูปจากหลาย ๆ ชื่อ field ที่เป็นไปได้ ====
+// ดึง URL รูป (ทนทานกับ schema เก่า/ใหม่)
 function extractImage(e = {}) {
   return (
-    e.imgUrl ||
-    e.image ||
-    e.image_url ||
-    e.imageUrl ||
-    e.img ||
-    e.photo ||
-    e.file ||
-    e.blob ||
+    e.blob ??
     null
   );
 }
 
-/* ---------- helpers ---------- */
+// คำนวณ limit ตามช่วงวัน (ยืดหยุ่นขึ้น แต่ไม่เกิน LIST_LIMIT)
+function computeLimit(f) {
+  if (f?.start && f?.end) {
+    const ms = new Date(f.end) - new Date(f.start);
+    const days = Math.max(1, Math.round(ms / 86400000) + 1);
+    return Math.min(LIST_LIMIT, days * 120); // ประมาณ 120 รายการ/วัน
+  }
+  return Math.min(LIST_LIMIT, 300);
+}
+
+// query ให้ตรงกับ backend (ใช้ query สำหรับป้ายทะเบียน)
 const buildQuery = (f) => {
   const p = new URLSearchParams();
   if (f.start) p.set("start_date", f.start);
   if (f.end) p.set("end_date", f.end);
   if (f.direction && f.direction !== "all") p.set("direction", f.direction);
-  if (f.query) p.set("plate", f.query);
-  p.set("limit", "5000");
+  if (f.query) p.set("query", f.query);
+  p.set("limit", String(computeLimit(f)));
   return p.toString();
 };
 
+// map ข้อมูลให้เข้ากับตาราง (ไม่ต่อจังหวัดใน plate)
 const mapRows = (raw) =>
   Array.isArray(raw)
     ? raw.map((e) => {
-        const check = isInsideRole(e.role) ? "บุคคลภายใน" : "บุคคลภายนอก";
         const img = extractImage(e);
         return {
           ...e,
-          // เวลา
           time: formatThaiDateTime(e.time || e.datetime),
-          // ทะเบียน + จังหวัด
-          plate: `${e.plate || "-"}${e.province ? " จ." + e.province : ""}`,
-          // สถานะเข้า/ออก
-          status: toThaiDirection(e.direction),
-          // คนใน/คนนอก
-          check,
-          // ให้มีทั้ง imgUrl และ image เผื่อ RecordsTable ใช้อันไหนอยู่
+          plate: e.plate || "-",
+          province: e.province || "-",
+          status: e.status || toThaiDirection(e.direction),
+          check: e.check || (isInsideRole(e.role) ? "บุคคลภายใน" : "บุคคลภายนอก"),
           imgUrl: img,
           image: img,
           _raw: e,
@@ -78,7 +78,35 @@ const mapRows = (raw) =>
       })
     : [];
 
-/* ---------- page ---------- */
+// ตรวจว่าเรคคอร์ดจาก WS ตรงกับฟิลเตอร์ปัจจุบันไหม (กันเด้งรายการที่ไม่เกี่ยว)
+function recordPassesFilters(d, f) {
+  const dtVal = d.time || d.datetime;
+  const dt = dtVal ? new Date(dtVal) : null;
+
+  if (f.start && dt) {
+    const from = new Date(`${f.start}T00:00:00`);
+    if (dt < from) return false;
+  }
+  if (f.end && dt) {
+    const to = new Date(`${f.end}T23:59:59`);
+    if (dt > to) return false;
+  }
+
+  if (f.direction && f.direction !== "all") {
+    const de = String(d.direction || d.status || "").toUpperCase();
+    const norm = de === "เข้า" ? "IN" : de === "ออก" ? "OUT" : de;
+    if (norm !== f.direction.toUpperCase()) return false;
+  }
+
+  if (f.query) {
+    const q = f.query.toLowerCase();
+    if (!String(d.plate || "").toLowerCase().includes(q)) return false;
+  }
+
+  return true;
+}
+
+/* ===== Page ===== */
 export default function Search() {
   const [filters, setFilters] = useState({
     start: "",
@@ -87,34 +115,40 @@ export default function Search() {
     query: "",
   });
   const [records, setRecords] = useState([]);
+  const deferredRecords = useDeferredValue(records);
   const [loading, setLoading] = useState(true);
 
   const controllerRef = useRef(null);
   const wsRef = useRef(null);
   const stopRef = useRef(false);
   const retryRef = useRef(0);
+  const filtersRef = useRef(filters);
 
-  // ✅ แก้ตรงนี้ให้ใช้ AbortController อย่างถูกต้อง
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
+
+  // โหลดข้อมูลโดยยกเลิก request เก่าเสมอ (ลด overfetch)
   const load = async (f) => {
-    // ยกเลิก request ก่อนหน้า (ถ้ามี)
-    if (controllerRef.current) {
-      controllerRef.current.abort();
-    }
-
+    controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
     const { signal } = controller;
 
     setLoading(true);
     try {
-      const res = await fetch(`${API}/events?${buildQuery(f)}`, { signal });
+      const res = await fetch(`${API}/events?${buildQuery(f)}`, {
+        signal,
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error(`API Error: ${res.status} ${res.statusText}`);
       const raw = await res.json();
-      setRecords(mapRows(raw));
+      const mapped = mapRows(raw).slice(0, LIST_LIMIT);
+      startTransition(() => setRecords(mapped));
     } catch (err) {
       if (err.name !== "AbortError") {
         console.error(err);
-        setRecords([]);
+        startTransition(() => setRecords([]));
       }
     } finally {
       setLoading(false);
@@ -128,7 +162,7 @@ export default function Search() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // WebSocket: เพิ่ม record ใหม่เข้ามาบนสุด
+  // WebSocket: รับเหตุการณ์ใหม่ (ที่ผ่านฟิลเตอร์) แทรกบนสุด และจำกัดจำนวน
   useEffect(() => {
     stopRef.current = false;
     let retry = retryRef.current;
@@ -143,29 +177,35 @@ export default function Search() {
 
       ws.onmessage = (ev) => {
         try {
-          const data =
-            typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
-          if (!data?.datetime) return;
+          const data = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
+          if (!data) return;
+          if (!recordPassesFilters(data, filtersRef.current)) return;
 
-          const check = isInsideRole(data.role)
-            ? "บุคคลภายใน"
-            : "บุคคลภายนอก";
+          const dt = data.time || data.datetime;
+          if (!dt) return;
 
           const img = extractImage(data);
-
           const newRecord = {
-            time: formatThaiDateTime(data.datetime),
-            plate: `${data.plate || "-"}${
-              data.province ? " จ." + data.province : ""
-            }`,
-            status: toThaiDirection(data.direction),
-            check,
+            time: formatThaiDateTime(dt),
+            plate: data.plate || "-",
+            province: data.province || "-",
+            status: data.status || toThaiDirection(data.direction),
+            check: data.check || (isInsideRole(data.role) ? "บุคคลภายใน" : "บุคคลภายนอก"),
             imgUrl: img,
             image: img,
             _raw: data,
           };
 
-          setRecords((prev) => [newRecord, ...prev]);
+          startTransition(() => {
+            // กันซ้ำแบบหยาบ ๆ จากหัวรายการ
+            const keyOf = (r) => `${r.time}|${r.plate}|${r.province}|${r.status}`;
+            setRecords((prev) => {
+              if (prev[0] && keyOf(prev[0]) === keyOf(newRecord)) return prev;
+              const next = [newRecord, ...prev];
+              if (next.length > LIST_LIMIT) next.length = LIST_LIMIT;
+              return next;
+            });
+          });
         } catch (e) {
           console.error("WS message processing error:", e);
         }
@@ -193,18 +233,19 @@ export default function Search() {
     };
   }, []);
 
-  // กด “ใช้ฟิลเตอร์”
+  // ใช้ฟิลเตอร์
   const onApply = () => {
     load(filters);
   };
 
+  // ล้างฟิลเตอร์
   const onReset = () => {
     const f = { start: "", end: "", direction: "all", query: "" };
     setFilters(f);
     load(f);
   };
 
-  // export ตาม endpoint /export/events (รับ start/end/plate/direction)
+  // Export CSV (endpoint export ใช้ start/end/plate/direction)
   const onExport = async () => {
     const params = new URLSearchParams({
       start: filters.start || "",
@@ -230,22 +271,16 @@ export default function Search() {
       <section className="mt-6 bg-white rounded-2xl border border-slate-100 shadow p-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold">รายการล่าสุด</h3>
-          <span className="text-sm text-slate-600">
-            Items {records.length} items
-          </span>
+          <span className="text-sm text-slate-600">Items {deferredRecords.length} items</span>
         </div>
 
-        <RecordsTable records={records} />
+        <RecordsTable records={deferredRecords} />
 
         {loading && (
-          <div className="py-6 text-center text-sm text-slate-600">
-            กำลังโหลด...
-          </div>
+          <div className="py-6 text-center text-sm text-slate-600">กำลังโหลด...</div>
         )}
-        {!loading && records.length === 0 && (
-          <div className="py-6 text-center text-sm text-slate-600">
-            ไม่พบข้อมูล
-          </div>
+        {!loading && deferredRecords.length === 0 && (
+          <div className="py-6 text-center text-sm text-slate-600">ไม่พบข้อมูล</div>
         )}
       </section>
     </div>

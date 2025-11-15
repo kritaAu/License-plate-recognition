@@ -15,8 +15,6 @@ BackEnd Api
 pip install "fastapi[standard]"
 pip install supabase
 pip install bcrypt==4.0.1
-python-jose[cryptography] PyJWT // อัพ pip ด้วย
-pip install -r requirements.txt
 pip install "passlib[bcrypt]"
 # run api use this
 
