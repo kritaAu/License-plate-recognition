@@ -135,12 +135,11 @@ async def handle_flutter_batch(
                 except Exception:
                     continue
 
-    if best_plate_crop_np is not None:
-        print(f"Best file: {best_filename}")
-        print(f"Best frame shape: {best_frame_np.shape}")                
     # หลังวนครบ batch
     if best_plate_crop_np is None:
         print("ไม่พบป้ายทะเบียนใน Batch นี้")
+        print(f"Best file: {best_filename}")
+        print(f"Best frame shape: {best_frame_np.shape}")   
         image_to_upload = first_image_bytes or await images[0].read()
         try:
             image_url = upload_image_to_storage(image_to_upload, ext="jpg", folder="plates")
