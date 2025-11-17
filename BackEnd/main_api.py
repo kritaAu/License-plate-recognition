@@ -628,36 +628,32 @@ def update_event(
     province: str | None = None,
 ):
     try:
-        # ตรวจสอบว่ามีข้อมูลที่จะแก้ไขหรือไม่
         if plate is None and province is None:
             raise HTTPException(
                 status_code=400,
                 detail="ต้องระบุอย่างน้อย 1 ฟิลด์ที่ต้องการแก้ไข (plate หรือ province)",
             )
 
-        # เตรียมข้อมูลที่จะ update
         update_data = {}
         if plate is not None:
             update_data["plate"] = plate.strip()
         if province is not None:
             update_data["province"] = province.strip()
 
-        # ตรวจสอบว่า Event มีอยู่จริงหรือไม่ (ใช้ event_id แทน id)
         check_resp = (
             supabase.table("Event")
             .select("event_id, datetime, plate, province")
-            .eq("event_id", event_id)  # เปลี่ยนจาก id เป็น event_id
+            .eq("event_id", event_id)
             .execute()
         )
 
         if not check_resp.data:
             raise HTTPException(status_code=404, detail=f"ไม่พบ Event ID: {event_id}")
 
-        # อัปเดตข้อมูล (ใช้ event_id แทน id)
         update_resp = (
             supabase.table("Event")
             .update(update_data)
-            .eq("event_id", event_id)  # เปลี่ยนจาก id เป็น event_id
+            .eq("event_id", event_id)
             .execute()
         )
 
