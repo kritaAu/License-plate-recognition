@@ -72,6 +72,40 @@ def check_plate_in_system(plate: str, province: str):
         print(f"[ERROR] เชื่อมต่อ API Server (/check_plate) ไม่ได้: {e}")
         return None
 
+def preprocess_plate(plate_np):
+    """
+    รับภาพป้ายทะเบียนแบบ numpy (BGR หรือ RGB ก็ได้)
+    แล้วทำ:
+      
+    resize ให้ใหญ่ขึ้น (อย่างน้อยสูง ~256px)
+    แปลงเป็น grayscale
+    blur เบา ๆ ลด noise
+    equalize histogram ให้ contrast ชัดขึ้น
+    threshold (ทำเป็นขาวดำ) เพื่อให้ตัวหนังสือเด่น
+    คืนค่าเป็นภาพขาวดำ (uint8) พร้อมใช้ส่งเข้า OCR"""
+    if plate_np is None:
+        return None
+
+    img = plate_np.copy()
+    if img.ndim == 2:
+        gray = img
+    else:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    h, w = gray.shape[:2]
+
+    target_h = 256 
+    scale = max(1.5, target_h / float(h)) 
+    new_w, new_h = int(w * scale), int(h * scale)
+    gray = cv2.resize(gray, (new_w, new_h), interpolation=cv2.INTERCUBIC)
+
+    gray = cv2.GaussianBlur(gray, (3, 3), 0)
+
+    gray = cv2.equalizeHist(gray)
+
+    _, bw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    return bw
 
 @app.get("/")
 def root():
@@ -160,9 +194,15 @@ async def handle_flutter_batch(
         return send_event(event_payload)
 
     # ถ้าเจอป้าย
-    _, buffer = cv2.imencode(".jpg", best_plate_crop_np)
+    preprocess_plate = preprocess_plate(best_plate_crop_np)
+    if preprocess_plate is None:
+        _, buffer = cv2.imencode(".jpg", best_plate_crop_np)
+    else:
+        _, buffer = cv2.imencode(".png", preprocess_plate)
+
     img_b64 = base64.b64encode(buffer).decode("utf-8")
     ocr_result = read_plate(img_b64=img_b64)
+    
     plate_text = ocr_result.get("plate", None)
     province_text = ocr_result.get("province", None)
 
