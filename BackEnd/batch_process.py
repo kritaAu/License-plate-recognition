@@ -106,7 +106,7 @@ async def handle_flutter_batch(
         plate_candidates = []
 
         if model_mc:
-            mc_results = model_mc(pil_image, classes=[3], verbose=False, device=0)
+            mc_results = model_mc(pil_image, classes=[3], verbose=False)
             if mc_results[0].boxes and len(mc_results[0].boxes) > 0:
                 for box in mc_results[0].boxes.xyxy.cpu().numpy():
                     x1, y1, x2, y2 = map(int, box)
@@ -118,13 +118,16 @@ async def handle_flutter_batch(
 
         # ตรวจป้ายทุก candidate
         for candidate in plate_candidates:
-            results = model_lpr(Image.fromarray(candidate), classes=[0], verbose=False)
+            results = model_lpr(Image.fromarray(candidate), classes=[0], verbose=False,conf = 0.3)
             if results[0].boxes:
                 try:
                     confs = results[0].boxes.conf.cpu().numpy()
                     boxes = results[0].boxes.xyxy.cpu().numpy()
-                    best_idx = confs.argmax()
+                    areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+                    best_idx = areas.argmax()
                     conf, box = confs[best_idx], boxes[best_idx]
+                    if conf < 0.3:
+                        continue
 
                     if conf > best_plate_conf:
                         best_plate_conf = conf
@@ -138,8 +141,7 @@ async def handle_flutter_batch(
     # หลังวนครบ batch
     if best_plate_crop_np is None:
         print("ไม่พบป้ายทะเบียนใน Batch นี้")
-        print(f"Best file: {best_filename}")
-        print(f"Best frame shape: {best_frame_np.shape}")   
+        print(f"Best file: {best_filename}")  
         image_to_upload = first_image_bytes or await images[0].read()
         try:
             image_url = upload_image_to_storage(image_to_upload, ext="jpg", folder="plates")
