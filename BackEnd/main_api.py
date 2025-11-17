@@ -642,20 +642,23 @@ def update_event(
         if province is not None:
             update_data["province"] = province.strip()
 
-        # ตรวจสอบว่า Event มีอยู่จริงหรือไม่
+        # ตรวจสอบว่า Event มีอยู่จริงหรือไม่ (ใช้ event_id แทน id)
         check_resp = (
             supabase.table("Event")
-            .select("id, datetime, plate, province")
-            .eq("id", event_id)
+            .select("event_id, datetime, plate, province")
+            .eq("event_id", event_id)  # เปลี่ยนจาก id เป็น event_id
             .execute()
         )
 
         if not check_resp.data:
             raise HTTPException(status_code=404, detail=f"ไม่พบ Event ID: {event_id}")
 
-        # อัปเดตข้อมูล
+        # อัปเดตข้อมูล (ใช้ event_id แทน id)
         update_resp = (
-            supabase.table("Event").update(update_data).eq("id", event_id).execute()
+            supabase.table("Event")
+            .update(update_data)
+            .eq("event_id", event_id)  # เปลี่ยนจาก id เป็น event_id
+            .execute()
         )
 
         if not update_resp.data:
@@ -669,7 +672,7 @@ def update_event(
             "success": True,
             "message": "แก้ไขข้อมูลสำเร็จ",
             "data": {
-                "id": updated_event.get("id"),
+                "event_id": updated_event.get("event_id"),  # เปลี่ยนจาก id
                 "datetime": updated_event.get("datetime"),
                 "plate": updated_event.get("plate"),
                 "province": updated_event.get("province"),
