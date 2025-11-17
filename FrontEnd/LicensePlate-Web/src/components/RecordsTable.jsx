@@ -1,7 +1,94 @@
-// src/components/RecordsTable.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
-/* ---------- helpers ---------- */
+// ===== CONFIG API =====
+const API = (
+  import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+).replace(/\/$/, "");
+
+// รายชื่อจังหวัดไทย (ปรับเพิ่ม/ลดได้)
+const THAI_PROVINCES = [
+  "กรุงเทพมหานคร",
+  "กระบี่",
+  "กาญจนบุรี",
+  "กาฬสินธุ์",
+  "กำแพงเพชร",
+  "ขอนแก่น",
+  "จันทบุรี",
+  "ฉะเชิงเทรา",
+  "ชลบุรี",
+  "ชัยนาท",
+  "ชัยภูมิ",
+  "ชุมพร",
+  "เชียงราย",
+  "เชียงใหม่",
+  "ตรัง",
+  "ตราด",
+  "ตาก",
+  "นครนายก",
+  "นครปฐม",
+  "นครพนม",
+  "นครราชสีมา",
+  "นครศรีธรรมราช",
+  "นครสวรรค์",
+  "นนทบุรี",
+  "นราธิวาส",
+  "น่าน",
+  "บึงกาฬ",
+  "บุรีรัมย์",
+  "ปทุมธานี",
+  "ประจวบคีรีขันธ์",
+  "ปราจีนบุรี",
+  "ปัตตานี",
+  "พระนครศรีอยุธยา",
+  "พังงา",
+  "พัทลุง",
+  "พิจิตร",
+  "พิษณุโลก",
+  "เพชรบุรี",
+  "เพชรบูรณ์",
+  "แพร่",
+  "ภูเก็ต",
+  "มหาสารคาม",
+  "มุกดาหาร",
+  "แม่ฮ่องสอน",
+  "ยโสธร",
+  "ยะลา",
+  "ร้อยเอ็ด",
+  "ระนอง",
+  "ระยอง",
+  "ราชบุรี",
+  "ลพบุรี",
+  "ลำปาง",
+  "ลำพูน",
+  "เลย",
+  "ศรีสะเกษ",
+  "สกลนคร",
+  "สงขลา",
+  "สตูล",
+  "สมุทรปราการ",
+  "สมุทรสงคราม",
+  "สมุทรสาคร",
+  "สระแก้ว",
+  "สระบุรี",
+  "สิงห์บุรี",
+  "สุโขทัย",
+  "สุพรรณบุรี",
+  "สุราษฎร์ธานี",
+  "สุรินทร์",
+  "หนองคาย",
+  "หนองบัวลำภู",
+  "อ่างทอง",
+  "อำนาจเจริญ",
+  "อุดรธานี",
+  "อุตรดิตถ์",
+  "อุทัยธานี",
+  "อุบลราชธานี",
+];
+
+// ===== helpers =====
+
+// helper ดึง URL รูปจาก record
 function getImageUrl(rec = {}) {
   return (
     rec.imgUrl ||
@@ -14,428 +101,661 @@ function getImageUrl(rec = {}) {
   );
 }
 
+// helper ดูทิศทางจากข้อมูลดิบ
 function getDirection(rec = {}) {
-  const raw = (rec._raw?.direction || rec.direction || "").toString().toUpperCase();
-  const status = (rec.status || "").toString();
+  const raw = (rec._raw?.direction || rec.direction || "")
+    .toString()
+    .toUpperCase();
+  const status = (rec.status || rec._raw?.status || "").toString();
   if (raw === "IN" || status.includes("เข้า")) return "IN";
   if (raw === "OUT" || status.includes("ออก")) return "OUT";
   return "UNKNOWN";
 }
 
-function getPaginationRange(current, totalPages, siblings = 1) {
-  const totalNumbers = siblings * 2 + 5; // 1 ... [range] ... N
-  if (totalPages <= totalNumbers) {
-    return Array.from({ length: totalPages }, (_, i) => i + 1);
+// helper label/สีสำหรับทิศทาง
+function getDirectionUI(rec = {}) {
+  const dir = getDirection(rec);
+  if (dir === "IN") {
+    return {
+      label: "เข้า (IN)",
+      chipClass: "bg-sky-100 text-sky-700 border border-sky-200",
+      cardBg: "bg-sky-500",
+    };
   }
-  const left = Math.max(2, current - siblings);
-  const right = Math.min(totalPages - 1, current + siblings);
-  const showLeftDots = left > 2;
-  const showRightDots = right < totalPages - 1;
-
-  const range = [1];
-  if (showLeftDots) range.push("...");
-  for (let i = left; i <= right; i++) range.push(i);
-  if (showRightDots) range.push("...");
-  range.push(totalPages);
-  return range;
+  if (dir === "OUT") {
+    return {
+      label: "ออก (OUT)",
+      chipClass: "bg-amber-100 text-amber-700 border border-amber-200",
+      cardBg: "bg-amber-500",
+    };
+  }
+  return {
+    label: "ไม่ทราบ",
+    chipClass: "bg-slate-100 text-slate-700 border border-slate-200",
+    cardBg: "bg-slate-500",
+  };
 }
 
-/* ตัด "จ.จังหวัด" ออกจากสตริงทะเบียน (กันกรณีฝั่งอื่นเผลอต่อมา) */
-function onlyPlate(plateStr) {
-  const s = String(plateStr || "").replace(/\s{2,}/g, " ").trim();
-  const i = s.indexOf("จ.");
-  return (i >= 0 ? s.slice(0, i) : s).trim();
+// helper สีสำหรับบุคคลภายใน/ภายนอก
+function getPersonTypeUI(rec = {}) {
+  const val = rec.check || rec._raw?.check || "";
+
+  if (val === "บุคคลภายใน") {
+    return {
+      label: "บุคคลภายใน",
+      chipClass: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    };
+  }
+
+  if (val === "บุคคลภายนอก") {
+    return {
+      label: "บุคคลภายนอก",
+      chipClass: "bg-rose-50 text-rose-700 border border-rose-200",
+    };
+  }
+
+  return {
+    label: val || "-",
+    chipClass: "bg-slate-50 text-slate-600 border border-slate-200",
+  };
 }
 
-/* ช่วย normalize ป้ายทะเบียน/จังหวัด */
-const normalize = (s) => String(s || "").replace(/\s+/g, "").toUpperCase();
-
-/* ดึงชื่อจาก payload ที่มีอยู่ (flatten + nested) ถ้ามี */
-function extractNameFromRaw(raw = {}) {
-  let vehicle = raw.Vehicle || raw.vehicle || {};
-  if (Array.isArray(vehicle)) vehicle = vehicle[0] || {};
-  let member = vehicle.member || raw.member || {};
-  if (Array.isArray(member)) member = member[0] || {};
-
+function InfoRow({ label, value }) {
   return (
-    raw.driver_name ||
-    raw.member_name ||
-    raw.owner_name ||
-    raw.full_name ||
-    raw.name ||
-    member.full_name ||
-    member.name ||
-    member.display_name ||
-    ""
+    <p className="flex gap-2">
+      <span className="w-24 shrink-0 text-xs font-medium text-slate-500">
+        {label}
+      </span>
+      <span className="text-sm text-slate-800">{value || "-"}</span>
+    </p>
   );
 }
 
-/* ---------- component ---------- */
-const API = (import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+// ดึง event_id จาก record/_raw
+function getEventId(rec = {}) {
+  return rec._raw?.event_id ?? rec._raw?.id ?? rec.event_id ?? rec.id ?? null;
+}
 
-export default function RecordsTable({ records = [] }) {
-  const PAGE_SIZE = 10;
+// ===== Modal Portal ให้ render ไปที่ document.body =====
+function ModalPortal({ children }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(children, document.body);
+}
 
-  const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState(null);
+// ===== Modal รายละเอียด (แก้ป้ายทะเบียน + จังหวัดได้) =====
+function DetailModal({ record, onClose, onUpdated }) {
+  const [showFullImage, setShowFullImage] = useState(false);
+  const [plateInput, setPlateInput] = useState("");
+  const [provinceInput, setProvinceInput] = useState("");
+  const [showProvinceList, setShowProvinceList] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
-  // ชื่อที่โหลดแบบ on-demand เมื่อต้องการ
-  const [personName, setPersonName] = useState("");
-  const [personLoading, setPersonLoading] = useState(false);
+  const imgUrl = getImageUrl(record);
+  const dirUI = getDirectionUI(record);
+  const personUI = getPersonTypeUI(record); // ✅ ใช้ record ไม่ใช่ rec
 
-  // รูปที่เปิดดูแบบเต็มจอ
-  const [previewUrl, setPreviewUrl] = useState(null);
+  const rawPlate =
+    record._raw?.plate ?? record.plate ?? record._raw?.license_plate ?? "";
+  const rawProvince = record._raw?.province ?? record.province ?? "";
 
-  // รีเซ็ตไปหน้า 1 เมื่อมีการเปลี่ยนชุดข้อมูล
+  const time = record.time || record._raw?.time || record._raw?.datetime || "-";
+
+  const name =
+    record.member_name ||
+    record._raw?.member_name ||
+    record._raw?.driver_name ||
+    record._raw?.owner_name ||
+    "ไม่ทราบชื่อ";
+
+  const status = record.check || record.status || record._raw?.check || "-";
+
+  // init form เมื่อเปิด modal
   useEffect(() => {
-    setPage(1);
-  }, [records]);
+    setPlateInput(rawPlate || "");
+    setProvinceInput(rawProvince || "");
+    setErrorMsg("");
+    setSuccessMsg("");
+  }, [rawPlate, rawProvince]);
 
-  const pageCount = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
+  const filteredProvinces = THAI_PROVINCES.filter((p) =>
+    p.toLowerCase().includes(provinceInput.toLowerCase())
+  ).slice(0, 10);
 
-  const currentRows = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return records.slice(start, start + PAGE_SIZE);
-  }, [records, page]);
+  const eventId = getEventId(record);
 
-  function openDetail(rec) {
-    setSelected(rec);
-    setPersonName("");
-    setPersonLoading(false);
+  const hasChanged =
+    plateInput.trim() !== (rawPlate || "") ||
+    provinceInput.trim() !== (rawProvince || "");
 
-    // ถ้าเป็นบุคคลภายในแต่ payload ไม่มีชื่อ -> ดึงจาก /members on-demand
-    const isInside = (rec.check || "").includes("ภายใน");
-    const rawName = extractNameFromRaw(rec._raw || {});
-    if (isInside && !rawName) {
-      fetchMemberName(rec);
-    }
-  }
-
-  function closeDetail() {
-    setSelected(null);
-    setPersonName("");
-    setPersonLoading(false);
-    setPreviewUrl(null); // เผื่อกำลังเปิด preview อยู่
-  }
-
-  async function fetchMemberName(rec) {
+  async function handleSave() {
     try {
-      setPersonLoading(true);
+      setErrorMsg("");
+      setSuccessMsg("");
 
-      // ใช้ทะเบียนแบบ "ไม่พ่วงจังหวัด"
-      const plate = onlyPlate(String(rec.plate || "")).trim();
-      const province = (rec._raw?.province || rec.province || "").trim();
+      if (!hasChanged) {
+        setErrorMsg("ยังไม่มีการเปลี่ยนแปลง");
+        return;
+      }
 
-      const url = new URL(`${API}/members`);
-      if (plate) url.searchParams.set("plate", plate);
-      // เผื่อ backend รองรับ province ให้แนบไปด้วย
-      if (province) url.searchParams.set("province", province);
+      if (!eventId) {
+        setErrorMsg("ไม่พบรหัส Event สำหรับบันทึก");
+        return;
+      }
 
-      const res = await fetch(url.toString(), { cache: "no-store" });
-      if (!res.ok) throw new Error("fetch members failed");
-      const list = (await res.json()) || [];
+      const newPlate = plateInput.trim();
+      const newProvince = provinceInput.trim();
 
-      // เลือก record ที่แมตช์ที่สุดจาก plate (+ province ถ้าได้)
-      const nPlate = normalize(plate);
-      const nProv = normalize(province);
+      const params = new URLSearchParams();
+      if (newPlate !== (rawPlate || "")) params.set("plate", newPlate);
+      if (newProvince !== (rawProvince || ""))
+        params.set("province", newProvince);
 
-      let best =
-        list.find(
-          (m) =>
-            normalize(m.plate) === nPlate &&
-            (!nProv || normalize(m.province) === nProv)
-        ) ||
-        list.find((m) => normalize(m.plate) === nPlate) ||
-        list[0];
+      if (![...params.keys()].length) {
+        setErrorMsg("ยังไม่มีฟิลด์ที่ต้องการแก้ไข");
+        return;
+      }
 
-      const name =
-        best?.full_name ||
-        best?.name ||
-        (best?.firstname && best?.lastname ? `${best.firstname} ${best.lastname}` : "") ||
-        best?.display_name ||
-        "";
+      setIsSaving(true);
 
-      setPersonName(name || "ไม่ทราบชื่อ");
-    } catch {
-      setPersonName("ไม่ทราบชื่อ");
+      const url = `${API}/events/${eventId}?${params.toString()}`;
+      const res = await fetch(url, { method: "PATCH" });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+
+      const json = await res.json().catch(() => null);
+      const data = json?.data || json || {};
+
+      const updated = {
+        plate: data.plate ?? newPlate ?? rawPlate,
+        province: data.province ?? newProvince ?? rawProvince,
+        datetime: data.datetime ?? record._raw?.datetime,
+      };
+
+      setSuccessMsg("บันทึกเรียบร้อยแล้ว");
+      onUpdated?.(eventId, updated);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
     } finally {
-      setPersonLoading(false);
+      setIsSaving(false);
     }
   }
 
   return (
     <>
-      {/* ตาราง */}
-      <div className="overflow-x-auto">
+      {/* main detail modal */}
+      <div
+        className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40 p-4"
+        onClick={onClose}
+      >
+        <div
+          className="relative flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* header */}
+          <header className="flex items-center justify-between border-b px-6 py-4">
+            <h2 className="text-base font-semibold text-slate-900">
+              รายละเอียดการเข้า-ออก
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            >
+              <span className="sr-only">Close</span>×
+            </button>
+          </header>
+
+          {/* body */}
+          <div className="flex flex-col gap-4 p-6 md:flex-row">
+            {/* รูป */}
+            <div className="md:w-1/2">
+              {imgUrl ? (
+                <button
+                  type="button"
+                  onClick={() => setShowFullImage(true)}
+                  className="block w-full overflow-hidden rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400"
+                  title="คลิกเพื่อดูรูปเต็มจอ"
+                >
+                  <img
+                    src={imgUrl}
+                    alt={rawPlate}
+                    className="h-72 w-full cursor-zoom-in object-cover"
+                  />
+                </button>
+              ) : (
+                <div className="flex h-72 w-full items-center justify-center rounded-xl border border-dashed border-slate-200 text-sm text-slate-400">
+                  ไม่มีรูปภาพ
+                </div>
+              )}
+            </div>
+
+            {/* รายละเอียด + ฟอร์มแก้ไข */}
+            <div className="flex flex-1 flex-col gap-3 text-sm md:w-1/2">
+              <InfoRow label="เวลา" value={time} />
+
+              {/* ป้ายทะเบียน (แก้ไขได้) */}
+              <label className="flex items-center gap-2">
+                <span className="w-24 shrink-0 text-xs font-medium text-slate-500">
+                  ป้ายทะเบียน
+                </span>
+                <input
+                  type="text"
+                  value={plateInput}
+                  onChange={(e) => setPlateInput(e.target.value)}
+                  className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-800 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                  placeholder="เช่น 2กท 1234"
+                />
+              </label>
+
+              {/* จังหวัด (input + dropdown แนะนำ) */}
+              <div className="flex items-start gap-2">
+                <span className="w-24 shrink-0 pt-2 text-xs font-medium text-slate-500">
+                  จังหวัด
+                </span>
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={provinceInput}
+                    onChange={(e) => {
+                      setProvinceInput(e.target.value);
+                      setShowProvinceList(true);
+                    }}
+                    onFocus={() => setShowProvinceList(true)}
+                    onBlur={() => {
+                      // หน่วงนิดนึงให้คลิกที่รายการได้
+                      setTimeout(() => setShowProvinceList(false), 150);
+                    }}
+                    className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-800 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                    placeholder="พิมพ์ชื่อจังหวัด..."
+                  />
+                  {showProvinceList && filteredProvinces.length > 0 && (
+                    <ul className="absolute z-[1300] mt-1 max-h-48 w-full overflow-auto rounded-lg border border-slate-200 bg-white text-sm shadow-lg">
+                      {filteredProvinces.map((p) => (
+                        <li key={p}>
+                          <button
+                            type="button"
+                            className="w-full px-3 py-1.5 text-left text-slate-800 hover:bg-sky-50"
+                            onClick={() => {
+                              setProvinceInput(p);
+                              setShowProvinceList(false);
+                            }}
+                          >
+                            {p}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              <InfoRow label="ชื่อ" value={name} />
+
+              <div className="flex items-center gap-2">
+                <span className="w-24 shrink-0 text-xs font-medium text-slate-500">
+                  ทิศทาง
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${dirUI.chipClass}`}
+                >
+                  {dirUI.label}
+                </span>
+              </div>
+
+              {/* แสดงสถานะเป็น chip สี บุคคลภายใน/ภายนอก */}
+              <div className="flex items-center gap-2">
+                <span className="w-24 shrink-0 text-xs font-medium text-slate-500">
+                  สถานะ
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${personUI.chipClass}`}
+                >
+                  {personUI.label || status}
+                </span>
+              </div>
+
+              {errorMsg && (
+                <p className="mt-1 text-xs text-red-600">{errorMsg}</p>
+              )}
+              {successMsg && (
+                <p className="mt-1 text-xs text-emerald-600">{successMsg}</p>
+              )}
+            </div>
+          </div>
+
+          {/* footer ปุ่มบันทึก/ปิด */}
+          <footer className="flex items-center justify-end gap-2 border-t px-6 py-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              ปิด
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving || !hasChanged}
+              className={`rounded-lg px-3 py-1.5 text-sm font-semibold text-white ${
+                isSaving || !hasChanged
+                  ? "bg-sky-300"
+                  : "bg-sky-600 hover:bg-sky-700"
+              }`}
+            >
+              {isSaving ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}
+            </button>
+          </footer>
+        </div>
+      </div>
+
+      {/* full-screen image viewer */}
+      {showFullImage && imgUrl && (
+        <ModalPortal>
+          <div
+            className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/90 px-4"
+            onClick={() => setShowFullImage(false)}
+          >
+            <div className="relative max-h-[95vh] max-w-[95vw]">
+              <img
+                src={imgUrl}
+                alt={rawPlate}
+                className="max-h-[95vh] max-w-[95vw] object-contain"
+                onClick={(e) => e.stopPropagation()}
+              />
+              <button
+                type="button"
+                onClick={() => setShowFullImage(false)}
+                className="absolute -right-3 -top-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow hover:bg-white"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+    </>
+  );
+}
+
+function Th({ children }) {
+  return (
+    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+      {children}
+    </th>
+  );
+}
+
+function Td({ children }) {
+  return (
+    <td className="whitespace-nowrap px-3 py-2 text-slate-800">{children}</td>
+  );
+}
+
+
+// ===== main table =====
+export default function RecordsTable({ records = [] }) {
+  const [selected, setSelected] = useState(null);
+  const [rows, setRows] = useState(Array.isArray(records) ? records : []);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // sync rows กับ props records
+  useEffect(() => {
+    setRows(Array.isArray(records) ? records : []);
+    setCurrentPage(1); // เปลี่ยนชุดข้อมูลใหม่ กลับไปหน้า 1 เสมอ
+  }, [records]);
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return (
+      <div className="px-4 py-6 text-center text-sm text-slate-500">
+        ไม่พบข้อมูล
+      </div>
+    );
+  }
+
+  // ===== pagination config =====
+  const PAGE_SIZE = 10; // แสดง 10 รายการต่อหน้า
+  const totalItems = rows.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+
+  const startIndex = (safePage - 1) * PAGE_SIZE;
+  const endIndex = startIndex + PAGE_SIZE;
+  const pageRows = rows.slice(startIndex, endIndex);
+
+  // สร้างเลขหน้าที่จะแสดง เช่น 1 2 3 4 5 (เลื่อนไปตาม currentPage)
+  function getPageNumbers(current, total, maxButtons = 5) {
+    const pages = [];
+    if (total <= maxButtons) {
+      for (let i = 1; i <= total; i++) pages.push(i);
+      return pages;
+    }
+
+    let start = Math.max(1, current - 2);
+    let end = Math.min(total, current + 2);
+
+    if (start === 1) {
+      end = Math.min(total, start + maxButtons - 1);
+    } else if (end === total) {
+      start = Math.max(1, end - maxButtons - 1);
+    }
+
+    for (let i = start; i <= end; i++) pages.push(i);
+    return pages;
+  }
+
+  const pageNumbers = getPageNumbers(safePage, totalPages);
+
+  // อัปเดตข้อมูลในตารางหลังบันทึกสำเร็จ
+  const handleRecordUpdated = (eventId, updated) => {
+    setRows((prev) =>
+      prev.map((rec) => {
+        const id = getEventId(rec);
+        if (id !== eventId) return rec;
+
+        const newRaw = { ...(rec._raw || {}), ...updated };
+
+        // กรณีบางหน้า plate แยกจังหวัด กับบางหน้า plate รวมจังหวัดไว้แล้ว
+        let displayPlate = rec.plate;
+        let displayProvince = rec.province;
+
+        if (typeof updated.plate !== "undefined") {
+          if (rec.plate && rec.plate.includes("จ.") && !rec.province) {
+            // style ของ Dashboard ที่รวม "จ.จังหวัด" ไว้ใน plate
+            const prov = updated.province ?? newRaw.province ?? "";
+            displayPlate = updated.plate || "";
+            if (prov) displayPlate += ` จ.${prov}`;
+          } else {
+            displayPlate = updated.plate;
+          }
+        }
+
+        if (typeof updated.province !== "undefined") {
+          displayProvince = updated.province;
+          if (rec.plate && rec.plate.includes("จ.") && !rec.province) {
+            const plt = updated.plate ?? newRaw.plate ?? "";
+            if (updated.province) {
+              displayPlate = `${plt} จ.${updated.province}`;
+            }
+          }
+        }
+
+        return {
+          ...rec,
+          plate: displayPlate ?? rec.plate,
+          province: displayProvince ?? rec.province,
+          _raw: newRaw,
+        };
+      })
+    );
+
+    // sync selected record ด้วย
+    setSelected((prev) => {
+      if (!prev) return prev;
+      const id = getEventId(prev);
+      if (id !== eventId) return prev;
+      const newRaw = { ...(prev._raw || {}), ...updated };
+      return {
+        ...prev,
+        plate: updated.plate ?? prev.plate,
+        province: updated.province ?? prev.province,
+        _raw: newRaw,
+      };
+    });
+  };
+
+  return (
+    <>
+      <div className="overflow-x-auto bg-white">
         <table className="min-w-full divide-y divide-slate-100 text-sm">
           <thead className="bg-slate-50">
-            <tr className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-4 py-3 text-left">เวลา</th>
-              <th className="px-4 py-3 text-left">ทะเบียน</th>
-              <th className="px-4 py-3 text-left">จังหวัด</th>
-              <th className="px-4 py-3 text-center">ทิศทาง</th>
-              <th className="px-4 py-3 text-center">สถานะ</th>
-              <th className="px-4 py-3 text-center">ภาพ</th>
+            <tr>
+              <Th>เวลา</Th>
+              <Th>ป้ายทะเบียน</Th>
+              <Th>จังหวัด</Th>
+              <Th>ทิศทาง</Th>
+              <Th>สถานะ</Th>
+              <Th>ภาพ</Th>
             </tr>
           </thead>
-
-          <tbody className="divide-y divide-slate-100 bg-white">
-            {currentRows.map((rec, idx) => {
+          <tbody className="divide-y divide-slate-100">
+            {pageRows.map((rec, idx) => {
+              const key =
+                rec._raw?.id ||
+                rec._raw?._id ||
+                `${rec.time || ""}-${rec.plate || ""}-${startIndex + idx}`;
               const imgUrl = getImageUrl(rec);
-              const dir = getDirection(rec);
-              const isInside = (rec.check || "").includes("ภายใน");
-              const province = rec._raw?.province || rec.province || "-";
+              const dirUI = getDirectionUI(rec);
+              const personUI = getPersonTypeUI(rec);
 
               return (
                 <tr
-                  key={rec.id || rec._raw?.id || `${rec.time}-${idx}`}
-                  onClick={() => openDetail(rec)}
-                  className="cursor-pointer hover:bg-sky-50/70 transition-colors"
+                  key={key}
+                  className="cursor-pointer hover:bg-sky-50"
+                  onClick={() => setSelected(rec)}
                 >
-                  {/* เวลา */}
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-800">
-                    {rec.time || "-"}
-                  </td>
-
-                  {/* ทะเบียน (ตัด จ.จังหวัด ออก) */}
-                  <td className="px-4 py-3">
-                    <span className="font-medium text-slate-900">
-                      {onlyPlate(rec.plate) || "-"}
-                    </span>
-                  </td>
-
-                  {/* จังหวัด */}
-                  <td className="px-4 py-3">
-                    <span className="text-slate-800">{province}</span>
-                  </td>
+                  <Td>{rec.time || rec._raw?.time || "-"}</Td>
+                  <Td>{rec.plate || rec._raw?.plate || "-"}</Td>
+                  <Td>{rec.province || rec._raw?.province || "-"}</Td>
 
                   {/* ทิศทาง */}
-                  <td className="px-4 py-3 text-center">
+                  <Td>
                     <span
-                      className={
-                        "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium " +
-                        (dir === "IN"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : dir === "OUT"
-                          ? "bg-slate-50 text-orange-700"
-                          : "bg-slate-100 text-slate-600")
-                      }
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${dirUI.chipClass}`}
                     >
-                      {rec.status || (dir === "IN" ? "เข้า" : dir === "OUT" ? "ออก" : "-")}
+                      {dirUI.label}
                     </span>
-                  </td>
+                  </Td>
 
-                  {/* คนใน/คนนอก */}
-                  <td className="px-4 py-3 text-center">
+                  {/* บุคคลภายใน/ภายนอก */}
+                  <Td>
                     <span
-                      className={
-                        "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium " +
-                        (isInside ? "bg-indigo-50 text-indigo-700" : "bg-rose-50 text-rose-700")
-                      }
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${personUI.chipClass}`}
                     >
-                      {rec.check || (isInside ? "บุคคลภายใน" : "บุคคลภายนอก")}
+                      {personUI.label}
                     </span>
-                  </td>
+                  </Td>
 
-                  {/* ภาพ */}
-                  <td className="px-4 py-3 text-center">
+                  {/* รูปภาพ */}
+                  <Td>
                     {imgUrl ? (
-                      <div className="inline-flex h-12 w-16 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-                        {/* eslint-disable-next-line jsx-a11y/alt-text */}
-                        <img src={imgUrl} className="h-full w-full object-cover" loading="lazy" />
-                      </div>
+                      <img
+                        src={imgUrl}
+                        alt={rec.plate || ""}
+                        className="h-10 w-16 rounded-md object-cover"
+                      />
                     ) : (
-                      <span className="text-xs text-slate-400">ไม่มีภาพ</span>
+                      <span className="text-xs text-slate-400">-</span>
                     )}
-                  </td>
+                  </Td>
                 </tr>
               );
             })}
-
-            {currentRows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
-                  ไม่พบข้อมูล
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
 
-      {/* แถบเลขหน้า */}
-      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-        <button
-          className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 disabled:opacity-50"
-          disabled={page === 1}
-          onClick={() => setPage(1)}
-        >
-          หน้าแรก
-        </button>
+      {/* แถบเปลี่ยนหน้า */}
+      <div className="flex flex-col items-center justify-between gap-2 border-t bg-white px-4 py-3 text-xs text-slate-600 sm:flex-row">
+        <div>
+          แสดง{" "}
+          {totalItems === 0 ? 0 : startIndex + 1}-
+          {Math.min(endIndex, totalItems)} จาก {totalItems} รายการ (หน้า{" "}
+          {safePage}/{totalPages})
+        </div>
 
-        <button
-          className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 disabled:opacity-50"
-          disabled={page === 1}
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-        >
-          ก่อนหน้า
-        </button>
+        <div className="inline-flex items-center gap-1">
+          {/* หน้าแรก / ก่อนหน้า */}
+          <button
+            type="button"
+            onClick={() => setCurrentPage(1)}
+            disabled={safePage === 1}
+            className="rounded border border-slate-200 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40 hover:bg-slate-100"
+          >
+            «
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setCurrentPage((p) => Math.max(1, p - 1))
+            }
+            disabled={safePage === 1}
+            className="rounded border border-slate-200 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40 hover:bg-slate-100"
+          >
+            ‹
+          </button>
 
-        {getPaginationRange(page, pageCount, 1).map((p, i) =>
-          p === "..." ? (
-            <span key={`dots-${i}`} className="inline-flex h-9 items-center px-2 text-slate-400">
-              …
-            </span>
-          ) : (
+          {/* เลขหน้า 1 2 3 4 ... */}
+          {pageNumbers.map((page) => (
             <button
-              key={`p-${p}`}
-              onClick={() => setPage(p)}
-              aria-current={p === page ? "page" : undefined}
-              className={
-                "inline-flex h-9 min-w-[36px] items-center justify-center rounded-lg border px-2 text-sm transition " +
-                (p === page
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50")
-              }
+              key={page}
+              type="button"
+              onClick={() => setCurrentPage(page)}
+              className={`min-w-[2rem] rounded border px-2 py-1 text-center ${
+                page === safePage
+                  ? "border-sky-500 bg-sky-500 text-white"
+                  : "border-slate-200 text-slate-700 hover:bg-slate-100"
+              }`}
             >
-              {p}
+              {page}
             </button>
-          )
-        )}
+          ))}
 
-        <button
-          className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 disabled:opacity-50"
-          disabled={page >= pageCount}
-          onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-        >
-          ถัดไป
-        </button>
-
-        <button
-          className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 disabled:opacity-50"
-          disabled={page >= pageCount}
-          onClick={() => setPage(pageCount)}
-        >
-          หน้าสุดท้าย
-        </button>
+          {/* ถัดไป / หน้าสุดท้าย */}
+          <button
+            type="button"
+            onClick={() =>
+              setCurrentPage((p) => Math.min(totalPages, p + 1))
+            }
+            disabled={safePage === totalPages}
+            className="rounded border border-slate-200 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40 hover:bg-slate-100"
+          >
+            ›
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentPage(totalPages)}
+            disabled={safePage === totalPages}
+            className="rounded border border-slate-200 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-40 hover:bg-slate-100"
+          >
+            »
+          </button>
+        </div>
       </div>
 
-      {/* Modal รายละเอียด */}
       {selected && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 overflow-y-auto"
-          onClick={closeDetail}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div
-            className="flex min-h-full items-center justify-center px-3 py-8"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
-              <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-                <h2 className="text-base font-semibold text-slate-900">รายละเอียดการเข้า-ออก</h2>
-                <button
-                  type="button"
-                  onClick={closeDetail}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="px-6 py-5">
-                <div className="grid gap-6 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1.4fr)] items-start">
-                  {/* ซ้าย: รูป */}
-                  <div className="flex items-center justify-center">
-                    {getImageUrl(selected) ? (
-                      <div
-                        className="aspect-square w-full max-w-sm rounded-3xl overflow-hidden bg-slate-100 flex items-center justify-center cursor-zoom-in"
-                        onClick={() => setPreviewUrl(getImageUrl(selected))}
-                      >
-                        <img
-                          src={getImageUrl(selected)}
-                          alt="ภาพจากกล้อง"
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="aspect-square w-full max-w-sm rounded-3xl bg-slate-200 flex items-center justify-center">
-                        <span className="text-xl font-semibold text-slate-600">
-                          {onlyPlate(selected.plate) || "ไม่มีภาพ"}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ขวา: ข้อมูล */}
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-xs font-medium text-slate-500">เวลา</p>
-                      <p className="mt-1 text-sm text-slate-900">{selected.time || "-"}</p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-medium text-slate-500">ป้ายทะเบียน</p>
-                      <p className="mt-1 text-lg font-bold text-slate-900">
-                        {onlyPlate(selected.plate) || "-"}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-medium text-slate-500">จังหวัด</p>
-                      <p className="mt-1 text-sm text-slate-900">
-                        {selected._raw?.province || selected.province || "-"}
-                      </p>
-                    </div>
-
-                    {/* ===== ชื่อผู้ใช้ ===== */}
-                    {(() => {
-                      const isInside = (selected.check || "").includes("ภายใน");
-                      const rawName = extractNameFromRaw(selected._raw || {});
-                      const nameToShow =
-                        rawName || personName || (personLoading ? "กำลังโหลดชื่อ..." : "ไม่ทราบชื่อ");
-
-                      return (
-                        <div>
-                          <p className="text-xs font-medium text-slate-500">ชื่อ</p>
-                          <p className="mt-1 text-sm text-slate-900">
-                            {isInside ? nameToShow : "ไม่ทราบชื่อ"}
-                          </p>
-                        </div>
-                      );
-                    })()}
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-xs font-medium text-slate-500">ทิศทาง</p>
-                        <p className="mt-1 text-sm">{selected.status || "-"}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-slate-500">สถานะ</p>
-                        <p className="mt-1 text-sm">{selected.check || "-"}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div> {/* px-6 py-5 */}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Overlay แสดงรูปเต็มจอ */}
-      {previewUrl && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center"
-          onClick={() => setPreviewUrl(null)}  // คลิกตรงไหนก็ปิด
-        >
-          <img
-            src={previewUrl}
-            alt="ภาพขยาย"
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-xl shadow-2xl"
+        <ModalPortal>
+          <DetailModal
+            record={selected}
+            onClose={() => setSelected(null)}
+            onUpdated={handleRecordUpdated}
           />
-        </div>
+        </ModalPortal>
       )}
     </>
   );

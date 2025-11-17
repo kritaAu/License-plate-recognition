@@ -69,8 +69,14 @@ const mapRows = (raw) =>
   Array.isArray(raw)
     ? raw.map((e) => {
         const img = extractImage(e);
+
+        // <<< ดึง event_id จาก backend หรือใช้ id เป็น fallback
+        const eventId = e.event_id ?? e.id ?? null;
+        const rawWithId = { ...e, event_id: eventId };
+
         return {
-          ...e,
+          // กระจาย rawWithId แทน e เพื่อให้ record.event_id ใช้ได้ด้วย
+          ...rawWithId,
           time: formatThaiDateTime(e.time || e.datetime),
           plate: e.plate || "-",
           province: e.province || "-",
@@ -79,7 +85,7 @@ const mapRows = (raw) =>
             e.check || (isInsideRole(e.role) ? "บุคคลภายใน" : "บุคคลภายนอก"),
           imgUrl: img,
           image: img,
-          _raw: e,
+          _raw: rawWithId,
         };
       })
     : [];
@@ -174,7 +180,6 @@ export default function Search() {
   useEffect(() => {
     load(filters);
     return () => controllerRef.current?.abort();
-
   }, []);
 
   // WebSocket: รับเหตุการณ์ใหม่ (ที่ผ่านฟิลเตอร์) แทรกบนสุด และจำกัดจำนวน
@@ -201,7 +206,13 @@ export default function Search() {
           if (!dt) return;
 
           const img = extractImage(data);
+
+          // <<< ดึง event_id จาก WS message
+          const eventId = data.event_id ?? data.id ?? null;
+          const rawWithId = { ...data, event_id: eventId };
+
           const newRecord = {
+            ...rawWithId,
             time: formatThaiDateTime(dt),
             plate: data.plate || "-",
             province: data.province || "-",
@@ -211,14 +222,14 @@ export default function Search() {
               (isInsideRole(data.role) ? "บุคคลภายใน" : "บุคคลภายนอก"),
             imgUrl: img,
             image: img,
-            _raw: data,
+            _raw: rawWithId, // <<< มี event_id แน่นอน
           };
 
           startTransition(() => {
             const keyOf = (r) =>
               `${r.time}|${r.plate}|${r.province}|${r.status}`;
             setRecords((prev) => {
-              if (prev[0] && keyOf(prev[0]) === keyOf(newRecord)) return prev; 
+              if (prev[0] && keyOf(prev[0]) === keyOf(newRecord)) return prev;
               const next = [newRecord, ...prev];
               if (next.length > LIST_LIMIT) next.length = LIST_LIMIT;
               return next;
@@ -276,7 +287,7 @@ export default function Search() {
           setFilters={setFilters}
           onApply={onApply}
           onReset={onReset}
-          onExport={onExport} 
+          onExport={onExport}
         />
       </div>
 

@@ -317,40 +317,45 @@ export default function Home() {
 
     // ===== ตาราง =====
     const mapped = filtered.map((e) => {
-      const dirCode = getDirectionCode(e);
-      const status =
-        dirCode === "IN" ? "เข้า" : dirCode === "OUT" ? "ออก" : "-";
+  const dirCode = getDirectionCode(e);
+  const status =
+    dirCode === "IN" ? "เข้า" : dirCode === "OUT" ? "ออก" : "-";
 
-      const check = isInsideRole(e.role) ? "บุคคลภายใน" : "บุคคลภายนอก";
-      const formattedTime = formatThaiDateTime(e.datetime || e.time);
+  const check = isInsideRole(e.role) ? "บุคคลภายใน" : "บุคคลภายนอก";
+  const formattedTime = formatThaiDateTime(e.datetime || e.time);
 
-      const memberName =
-        e.member_name ||
-        e.driver_name ||
-        e.owner_name ||
-        e.full_name ||
-        e.name ||
-        null;
+  const memberName =
+    e.member_name ||
+    e.driver_name ||
+    e.owner_name ||
+    e.full_name ||
+    e.name ||
+    null;
 
-      const memberDept = e.member_department || e.department || e.dept || null;
-      const plateStr = isUnknownPlate(e.plate)
-        ? "ไม่มีป้ายทะเบียน"
-        : e.plate || "-";
-      return {
-        time: formattedTime,
-        plate: `${plateStr}${e.province ? " จ." + e.province : ""}`,
-        status,
-        check,
-        imgUrl: e.image || e.blob || null,
-        member_name: memberName,
-        member_department: memberDept,
-        _raw: {
-          ...e,
-          member_name: memberName,
-          member_department: memberDept,
-        },
-      };
-    });
+  const memberDept = e.member_department || e.department || e.dept || null;
+  const plateStr = isUnknownPlate(e.plate)
+    ? "ไม่มีป้ายทะเบียน"
+    : e.plate || "-";
+
+  return {
+    time: formattedTime,
+    // ✅ ไม่ต่อจังหวัดแล้ว
+    plate: plateStr,
+    // ✅ ใส่จังหวัดให้คอลัมน์ "จังหวัด" ใช้
+    province: e.province || "",
+    status,
+    check,
+    imgUrl: e.image || e.blob || null,
+    member_name: memberName,
+    member_department: memberDept,
+    _raw: {
+      ...e,
+      member_name: memberName,
+      member_department: memberDept,
+    },
+  };
+});
+
 
     setRecordsRawForDay(mapped);
 

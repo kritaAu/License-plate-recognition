@@ -493,7 +493,7 @@ def get_events(
         qb = (
             supabase.table("Event")
             .select(
-                "datetime, plate, province, direction, blob, vehicle_id, "
+                "event_id, datetime, plate, province, direction, blob, vehicle_id, "
                 "Vehicle!Event_vehicle_id_fkey(member:Member!Vehicle_member_id_fkey(role))"
             )
             .order("datetime", desc=True)
@@ -534,6 +534,7 @@ def get_events(
 
             results.append(
                 {
+                     "event_id": e.get("event_id"),
                     "time": e.get("datetime"),
                     "plate": e.get("plate") or "-",
                     "province": e.get("province") or "-",
