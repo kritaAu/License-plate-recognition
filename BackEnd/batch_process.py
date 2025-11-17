@@ -92,17 +92,6 @@ def normalize_sharpness(sharpness: float, max_sharpness: float = 1000) -> float:
     return min(sharpness / max_sharpness, 1.0)
 
 def calculate_plate_score(area: float, sharpness: float, confidence: float) -> float:
-    """
-    Calculate normalized score for plate detection quality
-    
-    Args:
-        area: Bounding box area in pixels
-        sharpness: Blur score (higher = sharper)
-        confidence: Model confidence (0-1)
-    
-    Returns:
-        Normalized score (0-1)
-    """
     area_norm = normalize_area(area)
     sharp_norm = normalize_sharpness(sharpness)
     
@@ -136,12 +125,6 @@ def detect_motorcycle_regions(pil_image: Image.Image, frame_np: np.ndarray) -> L
     return regions
 
 def detect_best_plate_in_region(region: np.ndarray) -> Optional[dict]:
-    """
-    Detect best license plate in a given region
-    
-    Returns:
-        Dictionary with plate info or None
-    """
     try:
         results = model_lpr(
             Image.fromarray(region), 
@@ -187,12 +170,6 @@ def detect_best_plate_in_region(region: np.ndarray) -> Optional[dict]:
         return None
 
 def process_single_image(image_bytes: bytes, filename: str) -> Optional[dict]:
-    """
-    Process a single image and find best plate
-    
-    Returns:
-        Dictionary with plate detection result or None
-    """
     try:
         pil_image = Image.open(io.BytesIO(image_bytes))
         frame_np = np.array(pil_image)
@@ -222,12 +199,6 @@ def process_single_image(image_bytes: bytes, filename: str) -> Optional[dict]:
         return None
 
 def perform_ocr(plate_crop: np.ndarray) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Perform OCR on plate crop
-    
-    Returns:
-        Tuple of (plate_text, province_text)
-    """
     try:
         _, buffer = cv2.imencode(".jpg", plate_crop)
         img_b64 = base64.b64encode(buffer).decode("utf-8")
@@ -243,12 +214,6 @@ def perform_ocr(plate_crop: np.ndarray) -> Tuple[Optional[str], Optional[str]]:
         return None, None
 
 def upload_image_safe(image_bytes: bytes) -> Optional[str]:
-    """
-    Safely upload image to storage
-    
-    Returns:
-        Image URL or None if failed
-    """
     try:
         return upload_image_to_storage(image_bytes, ext="jpg", folder="plates")
     except Exception as e:
@@ -267,12 +232,6 @@ async def handle_flutter_batch(
     cam_id: int = Form(...),
     direction: str = Form(...),
 ):
-    """
-    Handle batch of images from Flutter app
-    Find best license plate detection across all images
-    """
-    
-    # Validation
     if not images:
         raise HTTPException(status_code=400, detail="No images provided")
     
