@@ -620,6 +620,71 @@ async def create_event(event: EventIn):
         raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาด: {str(e)}")
 
 
+# แก้ไขป้ายทะเบียนหรือจังหวัดของ Event
+@app.patch("/events/{event_id}")
+def update_event(
+    event_id: int,
+    plate: str | None = None,
+    province: str | None = None,
+):
+    try:
+        # ตรวจสอบว่ามีข้อมูลที่จะแก้ไขหรือไม่
+        if plate is None and province is None:
+            raise HTTPException(
+                status_code=400,
+                detail="ต้องระบุอย่างน้อย 1 ฟิลด์ที่ต้องการแก้ไข (plate หรือ province)",
+            )
+
+        # เตรียมข้อมูลที่จะ update
+        update_data = {}
+        if plate is not None:
+            update_data["plate"] = plate.strip()
+        if province is not None:
+            update_data["province"] = province.strip()
+
+        # ตรวจสอบว่า Event มีอยู่จริงหรือไม่
+        check_resp = (
+            supabase.table("Event")
+            .select("id, datetime, plate, province")
+            .eq("id", event_id)
+            .execute()
+        )
+
+        if not check_resp.data:
+            raise HTTPException(status_code=404, detail=f"ไม่พบ Event ID: {event_id}")
+
+        # อัปเดตข้อมูล
+        update_resp = (
+            supabase.table("Event").update(update_data).eq("id", event_id).execute()
+        )
+
+        if not update_resp.data:
+            raise HTTPException(status_code=500, detail="ไม่สามารถแก้ไขข้อมูลได้")
+
+        updated_event = update_resp.data[0]
+
+        logger.info(f"Updated Event ID {event_id}: {update_data}")
+
+        return {
+            "success": True,
+            "message": "แก้ไขข้อมูลสำเร็จ",
+            "data": {
+                "id": updated_event.get("id"),
+                "datetime": updated_event.get("datetime"),
+                "plate": updated_event.get("plate"),
+                "province": updated_event.get("province"),
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as ex:
+        logger.error(f"Error updating event {event_id}: {str(ex)}")
+        raise HTTPException(
+            status_code=500, detail=f"เกิดข้อผิดพลาดในการแก้ไขข้อมูล: {str(ex)}"
+        )
+
+
 # ===
 #  13. ROUTES: DASHBOARD
 # ===
