@@ -13,7 +13,7 @@ const AuthService = {
 };
 
 const TABS = [
-  { to: "/", label: "Dashboard" }, // เปลี่ยนชื่อ Home เป็น Dashboard เพื่อความชัดเจน
+  { to: "/", label: "Dashboard" }, 
   { to: "/search", label: "ค้นหา" },
   { to: "/member", label: "สมาชิก" },
 ];

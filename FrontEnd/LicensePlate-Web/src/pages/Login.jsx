@@ -25,16 +25,6 @@ const AuthService = {
   },
 };
 
-// ===== ฟังก์ชันเดียวกับ Home.jsx =====
-function getDirectionCode(ev = {}) {
-  const rawDir = (ev.direction ?? "").toString().trim().toUpperCase();
-  const statusStr = (ev.status ?? "").toString();
-
-  if (rawDir === "IN" || statusStr.includes("เข้า")) return "IN";
-  if (rawDir === "OUT" || statusStr.includes("ออก")) return "OUT";
-  return "UNKNOWN";
-}
-
 const pad2 = (n) => String(n).padStart(2, "0");
 function dateToYMD(d) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -56,7 +46,7 @@ export default function LoginPage() {
   try {
     const todayStr = dateToYMD(new Date()); // YYYY-MM-DD แบบเดียวกับ backend
 
-    // ✓ เปลี่ยนมาใช้ /dashboard/daily แทน /events
+    //  เปลี่ยนมาใช้ /dashboard/daily แทน /events
     const res = await fetch(`${API}/dashboard/daily?date=${todayStr}`, {
       cache: "no-store",
     });

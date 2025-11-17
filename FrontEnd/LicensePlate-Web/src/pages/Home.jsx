@@ -1,4 +1,3 @@
-// src/pages/Home.jsx
 import { useEffect, useRef, useState } from "react";
 import Filters from "../components/Filters";
 import StatsCards from "../components/StatsCards";

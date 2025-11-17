@@ -1,4 +1,3 @@
-// src/pages/Member.jsx
 import { useEffect, useMemo, useState } from "react";
 import {
   getMembers,
@@ -419,7 +418,7 @@ function EditMemberModal({ open, onClose, member, onSave }) {
 }
 
 export default function Member() {
-  // ฟิลเตอร์ด้านบน
+
   const [filters, setFilters] = useState({
     plate: "",
     firstname: "",
@@ -428,10 +427,8 @@ export default function Member() {
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-
   // modal “+”
   const [openAdd, setOpenAdd] = useState(false);
-
   // modal “แก้ไข”
   const [editing, setEditing] = useState(null);
   const [openEdit, setOpenEdit] = useState(false);

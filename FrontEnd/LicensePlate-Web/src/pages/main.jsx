@@ -1,4 +1,3 @@
-// src/main.jsx (ปรับให้เข้ากับโครงสร้างเดิม)
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "../css/index.css";

@@ -1,4 +1,3 @@
-// src/pages/Search.jsx
 import {
   useEffect,
   useState,
@@ -175,7 +174,7 @@ export default function Search() {
   useEffect(() => {
     load(filters);
     return () => controllerRef.current?.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   // WebSocket: รับเหตุการณ์ใหม่ (ที่ผ่านฟิลเตอร์) แทรกบนสุด และจำกัดจำนวน
@@ -219,7 +218,7 @@ export default function Search() {
             const keyOf = (r) =>
               `${r.time}|${r.plate}|${r.province}|${r.status}`;
             setRecords((prev) => {
-              if (prev[0] && keyOf(prev[0]) === keyOf(newRecord)) return prev; // กันซ้ำหัวรายการ
+              if (prev[0] && keyOf(prev[0]) === keyOf(newRecord)) return prev; 
               const next = [newRecord, ...prev];
               if (next.length > LIST_LIMIT) next.length = LIST_LIMIT;
               return next;
@@ -277,7 +276,7 @@ export default function Search() {
           setFilters={setFilters}
           onApply={onApply}
           onReset={onReset}
-          onExport={onExport} // ✅ เรียกเปิด CSV modal
+          onExport={onExport} 
         />
       </div>
 
