@@ -14,6 +14,8 @@ pip install "fastapi[standard]"
 pip install supabase
 pip install bcrypt==4.0.1
 pip install "passlib[bcrypt]"
+pip install rapidfuzz
+
 # run api use this
 
 python -m uvicorn main_api:app --reload --port 8000
