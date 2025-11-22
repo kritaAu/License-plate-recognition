@@ -495,6 +495,7 @@ def delete_member(member_id: int):
 #  12. ROUTES: EVENTS
 # ===
 # ดึงข้อมูล Event ทั้งหมด - ใช้ JOIN เดียว
+# ดึงข้อมูล Event ทั้งหมด - ใช้ JOIN เดียว
 @app.get("/events")
 def get_events(
     limit: int = Query(1000, ge=1),
@@ -573,12 +574,24 @@ def get_events(
                 }
             )
 
-        # ✅ Log แค่สรุป
-        logger.info(f"GET /events: {len(results)} records returned")
+        # Log แค่สรุปผลเดียว
+        filters = []
+        if start_date:
+            filters.append(f"from={start_date}")
+        if end_date:
+            filters.append(f"to={end_date}")
+        if direction and direction.lower() != "all":
+            filters.append(f"dir={direction}")
+        if query:
+            filters.append(f"plate={query}")
+
+        filter_str = f" [{', '.join(filters)}]" if filters else ""
+        logger.info(f"📊 Events: {len(results)} records{filter_str}")
+
         return results
 
     except Exception as ex:
-        logger.error(f"Error fetching events: {str(ex)}")
+        logger.error(f"❌ Events error: {str(ex)}")
         raise HTTPException(status_code=500, detail=f"Error fetching events: {str(ex)}")
 
 
