@@ -34,7 +34,7 @@ def find_best_match(plate_out: str, province: str, supabase: Client):
 
     # 1. ค้นหา sessions ที่ยังจอดอยู่
     parked = (
-        supabase.table("ParkingSession")
+        supabase.table("parkingsession")
         .select("*")
         .eq("status", "parked")
         .is_("exit_time", "null")

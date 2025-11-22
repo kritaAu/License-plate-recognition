@@ -21,6 +21,7 @@ import io
 import csv
 import json
 import jwt
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 from supabase import create_client
@@ -311,6 +312,9 @@ def _role_from_plate_province(plate: str | None, province: str | None):
     return None
 
 
+from background_matcher import process_unmatched_sessions
+
+
 # ===
 #  9. ROUTES: AUTHENTICATION
 # ===
@@ -495,7 +499,6 @@ def delete_member(member_id: int):
 #  12. ROUTES: EVENTS
 # ===
 # ดึงข้อมูล Event ทั้งหมด - ใช้ JOIN เดียว
-# ดึงข้อมูล Event ทั้งหมด - ใช้ JOIN เดียว
 @app.get("/events")
 def get_events(
     limit: int = Query(1000, ge=1),
@@ -586,7 +589,7 @@ def get_events(
             filters.append(f"plate={query}")
 
         filter_str = f" [{', '.join(filters)}]" if filters else ""
-        logger.info(f"📊 Events: {len(results)} records{filter_str}")
+        logger.info(f"Events: {len(results)} records{filter_str}")
 
         return results
 
@@ -649,7 +652,7 @@ async def record_entry(event: EventIn):
             "vehicle_id": vehicle_id,
             "member_id": member_id,
         }
-        session_resp = supabase.table("ParkingSession").insert(session_data).execute()
+        session_resp = supabase.table("parkingsession").insert(session_data).execute()
 
         if not session_resp.data:
             raise HTTPException(status_code=400, detail="สร้าง Session ไม่สำเร็จ")
@@ -797,7 +800,7 @@ async def record_entry(event: EventIn):
             "vehicle_id": vehicle_id,
             "member_id": member_id,
         }
-        session_resp = supabase.table("ParkingSession").insert(session_data).execute()
+        session_resp = supabase.table("parkingsession").insert(session_data).execute()
 
         if not session_resp.data:
             raise HTTPException(status_code=400, detail="สร้าง Session ไม่สำเร็จ")
@@ -868,7 +871,7 @@ async def record_exit(event: EventIn):
                 "exit_event_id": exit_event_id,
             }
             session_resp = (
-                supabase.table("ParkingSession").insert(session_data).execute()
+                supabase.table("parkingsession").insert(session_data).execute()
             )
 
             await manager.broadcast(
@@ -907,7 +910,7 @@ async def record_exit(event: EventIn):
         }
 
         updated = (
-            supabase.table("ParkingSession")
+            supabase.table("parkingsession")
             .update(update_data)
             .eq("session_id", session["session_id"])
             .execute()
@@ -958,7 +961,7 @@ def get_parking_sessions(
     """ดึงข้อมูล Parking Sessions พร้อม Filter"""
     try:
         qb = (
-            supabase.table("ParkingSession")
+            supabase.table("parkingsession")
             .select(
                 """
                 session_id,
@@ -1039,7 +1042,7 @@ def fix_session_plate(
     try:
         # ตรวจสอบว่า session มีอยู่จริง
         check = (
-            supabase.table("ParkingSession")
+            supabase.table("parkingsession")
             .select("session_id, status")
             .eq("session_id", session_id)
             .execute()
@@ -1059,7 +1062,7 @@ def fix_session_plate(
             update_data["plate_number_exit"] = correct_plate.strip()
 
         updated = (
-            supabase.table("ParkingSession")
+            supabase.table("parkingsession")
             .update(update_data)
             .eq("session_id", session_id)
             .execute()
@@ -1085,13 +1088,13 @@ def get_session_detail(session_id: str):
     """ดึงรายละเอียดของ Session พร้อมภาพเข้า-ออก"""
     try:
         resp = (
-            supabase.table("ParkingSession")
+            supabase.table("parkingsession")
             .select(
                 """
                 *,
                 Member(firstname, lastname, role, std_id),
-                entry_event:Event!ParkingSession_entry_event_id_fkey(datetime, blob, plate, province),
-                exit_event:Event!ParkingSession_exit_event_id_fkey(datetime, blob, plate, province)
+                entry_event:Event!parkingsession_entry_event_id_fkey(datetime, blob, plate, province),
+                exit_event:Event!parkingsession_exit_event_id_fkey(datetime, blob, plate, province)
             """
             )
             .eq("session_id", session_id)
@@ -1160,11 +1163,16 @@ async def create_event(event: EventIn):
     try:
         plate_raw = (event.plate or "").strip()
         prov_raw = (event.province or "").strip()
+
+        direction = event.direction or (
+            "IN" if event.cam_id == 1 else "OUT" if event.cam_id == 2 else "UNKNOWN"
+        )
+
+        # 🆕 เพิ่มส่วนนี้ - หา vehicle_data ก่อน
+        vehicle_data = None
         p_can = _canon_plate(plate_raw)
         prov_can = _canon_text(prov_raw)
 
-        vehicle_data = None
-        role = None
         if p_can and prov_can:
             guess = (
                 supabase.table("Vehicle")
@@ -1174,18 +1182,13 @@ async def create_event(event: EventIn):
                 )
                 .ilike("plate", f"%{plate_raw}%")
                 .ilike("province", f"%{prov_raw}%")
-                .limit(20)
+                .limit(1)
                 .execute()
             )
             if guess.data:
                 vehicle_data = guess.data[0]
-                member = vehicle_data.get("member") or {}
-                role = member.get("role")
 
-        direction = event.direction or (
-            "IN" if event.cam_id == 1 else "OUT" if event.cam_id == 2 else "UNKNOWN"
-        )
-
+        # บันทึก Event ก่อน
         payload = {
             "datetime": event.datetime.isoformat(),
             "plate": event.plate or None,
@@ -1201,13 +1204,76 @@ async def create_event(event: EventIn):
             raise HTTPException(status_code=400, detail="เพิ่มข้อมูล Event ไม่สำเร็จ")
 
         saved_event = response.data[0]
+        event_id = saved_event["event_id"]
 
+        # ตรวจสอบว่าควร match หรือไม่
+        if direction == "IN":
+            # สร้าง parkingsession ใหม่
+            session_data = {
+                "plate_number_entry": event.plate,
+                "province": event.province,
+                "entry_time": event.datetime.isoformat(),
+                "status": "parked",
+                "entry_event_id": event_id,
+                "vehicle_id": vehicle_data["vehicle_id"] if vehicle_data else None,
+                "member_id": vehicle_data["member_id"] if vehicle_data else None,
+            }
+            supabase.table("parkingsession").insert(
+                session_data
+            ).execute()  # ✅ lowercase
+            logger.info(f"Created parking session for {event.plate}")
+
+        elif direction == "OUT" and event.plate:
+            # ลองหา match
+            match_result = find_best_match(event.plate, event.province or "", supabase)
+
+            if match_result:
+                # มี match -> อัปเดต session
+                session = match_result["session"]
+                entry_time = datetime.fromisoformat(session["entry_time"])
+                exit_time = event.datetime
+                duration = int((exit_time - entry_time).total_seconds() / 60)
+
+                supabase.table("parkingsession").update(
+                    {
+                        "plate_number_exit": event.plate,
+                        "exit_time": event.datetime.isoformat(),
+                        "exit_event_id": event_id,
+                        "status": "completed",
+                        "match_type": match_result["match_type"],
+                        "confidence_score": match_result["confidence"],
+                        "duration_minutes": duration,
+                    }
+                ).eq("session_id", session["session_id"]).execute()
+
+                logger.info(
+                    f"Matched exit: {event.plate} ({match_result['match_type']})"
+                )
+            else:
+                # ไม่มี match -> สร้าง session ใหม่แบบ unmatched
+                unmatched_data = {
+                    "plate_number_exit": event.plate,
+                    "province": event.province,
+                    "exit_time": event.datetime.isoformat(),
+                    "status": "unmatched",
+                    "exit_event_id": event_id,
+                }
+                supabase.table("parkingsession").insert(
+                    unmatched_data
+                ).execute()  # ✅ lowercase
+                logger.warning(f"No match for exit: {event.plate}")
+
+        # Broadcast WebSocket (ตามเดิม)
         ws_payload = {
             "datetime": saved_event.get("datetime"),
             "plate": saved_event.get("plate") or "-",
             "province": saved_event.get("province") or "-",
             "direction": saved_event.get("direction") or "-",
-            "role": role or "Visitor",
+            "role": (
+                (vehicle_data.get("member") or {}).get("role")
+                if vehicle_data
+                else "Visitor"
+            ),
             "image": saved_event.get("blob"),
             "blob": saved_event.get("blob"),
         }
@@ -1220,6 +1286,7 @@ async def create_event(event: EventIn):
             "vehicle_info": vehicle_data or "ไม่พบข้อมูลรถในระบบ (บันทึกเป็น visitor)",
         }
     except Exception as e:
+        logger.error(f"❌ Error in create_event: {str(e)}")
         raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาด: {str(e)}")
 
 
@@ -1465,3 +1532,18 @@ def export_events(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error exporting events: {str(e)}")
+
+
+# ===
+#  15. STARTUP EVENTS
+# ===
+
+
+@app.on_event("startup")
+async def startup_event():
+    """เริ่ม background task ตอน server start"""
+    try:
+        asyncio.create_task(process_unmatched_sessions(supabase))
+        logger.info("Background matcher started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start background matcher: {e}")
