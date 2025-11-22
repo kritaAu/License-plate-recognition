@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  getMembers,
+  fetchMembers,
   updateMember,
   deleteMember,
   registerMemberWithVehicle,
-} from "../services/searchApi";
+} from "../services/api";
 
 /* ---------------- Utils เล็กๆ ---------------- */
 const trimOrEmpty = (v) => (typeof v === "string" ? v.trim() : v);
@@ -418,7 +418,6 @@ function EditMemberModal({ open, onClose, member, onSave }) {
 }
 
 export default function Member() {
-
   const [filters, setFilters] = useState({
     plate: "",
     firstname: "",
@@ -436,7 +435,7 @@ export default function Member() {
   const load = async () => {
     setLoading(true);
     try {
-      const list = await getMembers(); // [{ member_id, std_id, firstname, lastname, plate, province, role, ...}]
+      const list = await fetchMembers();
       setRows(Array.isArray(list) ? list : []);
     } finally {
       setLoading(false);
@@ -581,12 +580,21 @@ export default function Member() {
               <tbody className="divide-y">
                 {filtered.map((r) => (
                   <tr key={r.member_id} className="hover:bg-slate-50/70">
-                    <td className="px-3 py-2">{r.plate}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-col">
+                        <span className="font-semibold">{r.plate || "—"}</span>
+                        <span className="text-xs text-slate-500">
+                          {r.province || "ไม่ทราบจังหวัด"}
+                        </span>
+                      </div>
+                    </td>
+
                     <td className="px-3 py-2">{r.std_id ?? "—"}</td>
                     <td className="px-3 py-2">{`${r.firstname ?? ""} ${
                       r.lastname ?? ""
                     }`}</td>
                     <td className="px-3 py-2">{renderRole(r.role)}</td>
+
                     {/* แสดง badge */}
                     <td className="px-3 py-2">
                       <button

@@ -1,7 +1,7 @@
 // src/components/ExportModal.jsx
 import { useEffect, useMemo, useState } from "react";
 import { formatThaiDateTime } from "../utils/date";
-
+import { fetchEvents, fetchMembers } from "../services/api";
 const API = (
   import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
@@ -195,18 +195,20 @@ export default function ExportModal({ open, onClose, defaultFilters = {} }) {
       evParams.set("limit", String(computeExportLimit(apiStart, apiEnd)));
 
       // 2) ดึง events + members พร้อมกัน
-      const [evRes, memRes] = await Promise.all([
-        fetch(`${API}/events?${evParams.toString()}`),
-        fetch(`${API}/members`),
-      ]);
+const [eventsRaw, membersRaw] = await Promise.all([
+  fetchEvents({
+    start: apiStart,
+    end: apiEnd,
+    direction: direction === "all" ? undefined : direction,
+    query: query.trim() || undefined,
+    limit: computeExportLimit(apiStart, apiEnd),
+  }),
+  fetchMembers(),
+]);
 
-      if (!evRes.ok) throw new Error(`Events fetch failed: ${evRes.status}`);
-      if (!memRes.ok) throw new Error(`Members fetch failed: ${memRes.status}`);
+let events = Array.isArray(eventsRaw) ? eventsRaw : [];
+let members = Array.isArray(membersRaw) ? membersRaw : [];
 
-      let events = await evRes.json();
-      let members = await memRes.json();
-      if (!Array.isArray(events)) events = [];
-      if (!Array.isArray(members)) members = [];
 
       // ===== 2.5) กรองช่วงวันที่อีกทีตาม "วันที่ไทย" ที่ผู้ใช้เลือก =====
       events = events.filter((e) =>

@@ -10,11 +10,7 @@ import RecordsTable from "../components/RecordsTable";
 import ExportModal from "../components/ExportModal";
 import { formatThaiDateTime } from "../utils/date";
 
-const API = (
-  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
-).replace(/\/$/, "");
-const WS_URL =
-  (import.meta.env.VITE_WS_URL || API.replace(/^http/i, "ws")) + "/ws/events";
+import { fetchEvents, EVENTS_WS_URL } from "../services/api";
 
 // จำกัดจำนวนรายการในหน้าเพื่อลดงานเรนเดอร์
 const LIST_LIMIT = 300;
@@ -150,31 +146,37 @@ export default function Search() {
 
   // โหลดข้อมูลโดยยกเลิก request เก่าเสมอ (ลด overfetch)
   const load = async (f) => {
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
-    const { signal } = controller;
+  controllerRef.current?.abort();
+  const controller = new AbortController();
+  controllerRef.current = controller;
+  const { signal } = controller;
 
-    setLoading(true);
-    try {
-      const res = await fetch(`${API}/events?${buildQuery(f)}`, {
-        signal,
-        cache: "no-store",
-      });
-      if (!res.ok)
-        throw new Error(`API Error: ${res.status} ${res.statusText}`);
-      const raw = await res.json();
-      const mapped = mapRows(raw).slice(0, LIST_LIMIT);
-      startTransition(() => setRecords(mapped));
-    } catch (err) {
-      if (err.name !== "AbortError") {
-        console.error(err);
-        startTransition(() => setRecords([]));
-      }
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  try {
+    // ใช้ computeLimit(f) เดิมของหน้า Search
+    const raw = await fetchEvents(
+      {
+        start: f.start,
+        end: f.end,
+        direction: f.direction,
+        query: f.query,
+        limit: computeLimit(f),
+      },
+      { signal }
+    );
+
+    const mapped = mapRows(raw).slice(0, LIST_LIMIT);
+    startTransition(() => setRecords(mapped));
+  } catch (err) {
+    if (err.name !== "AbortError") {
+      console.error(err);
+      startTransition(() => setRecords([]));
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   // โหลดครั้งแรก
   useEffect(() => {
@@ -188,7 +190,7 @@ export default function Search() {
     let retry = retryRef.current;
 
     function connect() {
-      const ws = new WebSocket(WS_URL);
+      const ws = new WebSocket(EVENTS_WS_URL);
       wsRef.current = ws;
 
       ws.onopen = () => {

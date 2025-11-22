@@ -1,3 +1,4 @@
+// src/pages/Home.jsx
 import { useEffect, useRef, useState } from "react";
 import Filters from "../components/Filters";
 import StatsCards from "../components/StatsCards";
@@ -6,12 +7,7 @@ import RecordsTable from "../components/RecordsTable";
 import WeeklyBarChart from "../components/WeeklyBarChart";
 import { formatThaiDateTime } from "../utils/date";
 
-// ===== API / WS URL =====
-const API = (
-  import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000"
-).replace(/\/$/, "");
-const WS_URL =
-  (import.meta.env?.VITE_WS_URL || API.replace(/^http/i, "ws")) + "/ws/events";
+import { EVENTS_WS_URL, fetchEvents, checkPlateCached } from "../services/api";
 
 // ===== helpers =====
 function isInsideRole(role) {
@@ -27,12 +23,7 @@ const isUnknownPlate = (plate) => {
   if (!s || s === "-") return true;
 
   const n = s.replace(/\s+/g, "").toLowerCase();
-  const th = [
-    "ไม่มีป้ายทะเบียน",
-    "ไม่มีทะเบียน",
-    "ไม่ทราบ",
-    "ไม่พบป้าย",
-  ];
+  const th = ["ไม่มีป้ายทะเบียน", "ไม่มีทะเบียน", "ไม่ทราบ", "ไม่พบป้าย"];
   const en = [
     "unknown",
     "no plate",
@@ -49,6 +40,85 @@ const isUnknownPlate = (plate) => {
 
   return false;
 };
+
+// แปลงป้ายทะเบียนให้ใช้อ้างอิงได้ (ไม่สนช่องว่าง / ขีด / ตัวเล็ก-ใหญ่)
+const normalizePlateKey = (value) =>
+  (value || "").toString().replace(/\s+/g, "").replace(/-/g, "").toUpperCase();
+
+// เติมข้อมูล member_role / check / member_name / member_department ลงใน events ด้วยการเรียก /check_plate
+async function enrichEventsWithMember(events) {
+  if (!Array.isArray(events) || events.length === 0) return events;
+
+  // รวมชุดป้าย + จังหวัดที่ไม่ซ้ำ เพื่อลดจำนวนครั้งเรียก API
+  const pairs = new Map(); 
+for (const e of events) {
+  if (!e?.plate) continue;
+  if (isUnknownPlate(e.plate)) continue;   // ⬅ ข้ามป้ายที่เป็น "ไม่มีป้ายทะเบียน" / unknown
+
+  const key = `${normalizePlateKey(e.plate)}|${(e.province || "").trim()}`;
+  if (!pairs.has(key)) {
+    pairs.set(key, { plate: e.plate, province: e.province || "" });
+  }
+}
+
+
+  if (pairs.size === 0) return events;
+
+  // เรียก check_plate ทีละชุด (ใช้ checkPlateCached มี cache ในตัว)
+  const checks = await Promise.all(
+    Array.from(pairs.entries()).map(async ([key, info]) => {
+      try {
+        const res = await checkPlateCached(info.plate, info.province);
+        return [key, res];
+      } catch (err) {
+        console.error("checkPlateCached error", err);
+        return [key, null];
+      }
+    })
+  );
+
+  const byKey = new Map(checks);
+
+  // ผูก role / member_role / check / member_name / member_department / personType กลับเข้าแต่ละ event
+  return events.map((e) => {
+    if (!e?.plate) return e;
+
+    const key = `${normalizePlateKey(e.plate)}|${(e.province || "").trim()}`;
+    const cp = byKey.get(key);
+
+    if (!cp || !cp.role) return e; // ไม่มีข้อมูลสมาชิก → ใช้ค่าเดิม
+
+    const role = cp.role;
+    const inside = isInsideRole(role);
+    const personType = inside ? "inside" : "outside";
+
+    const memberName =
+      cp.name ??
+      e.member_name ??
+      e.driver_name ??
+      e.owner_name ??
+      e.full_name ??
+      e.name ??
+      null;
+
+    const memberDept =
+      cp.department ??
+      e.member_department ??
+      e.department ??
+      e.dept ??
+      null;
+
+    return {
+      ...e,
+      role,
+      member_role: role,
+      check: inside ? "บุคคลภายใน" : "บุคคลภายนอก",
+      personType,
+      member_name: memberName,
+      member_department: memberDept,
+    };
+  });
+}
 
 // direction ปรับให้เป็น "IN" | "OUT" | "UNKNOWN" ใช้ที่เดียวทุกที่
 function getDirectionCode(ev = {}) {
@@ -108,6 +178,7 @@ export default function Home() {
   // โหลดย้อนหลัง 30 วันครั้งแรก
   useEffect(() => {
     loadRecentEvents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // rebuild ตาราง/สถิติ/กราฟรายวัน/สัปดาห์ ทุกครั้งที่ rawEvents หรือ dailyDate เปลี่ยน
@@ -134,7 +205,7 @@ export default function Home() {
     let retry = retryRef.current;
 
     function connect() {
-      const ws = new WebSocket(WS_URL);
+      const ws = new WebSocket(EVENTS_WS_URL);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -142,14 +213,21 @@ export default function Home() {
       };
 
       ws.onmessage = (ev) => {
-        try {
-          const data =
-            typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
-          if (!data?.datetime && !data?.time) return;
-          setRawEvents((prev) => [data, ...prev]);
-        } catch {
-          // ไม่ใช่ JSON -> ข้าม
-        }
+        (async () => {
+          try {
+            const data =
+              typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
+            if (!data?.datetime && !data?.time) return;
+
+            // เติมข้อมูล member_role/check/member_name ให้ event ตัวนี้
+            const enrichedArr = await enrichEventsWithMember([data]);
+            const enriched = enrichedArr[0] || data;
+
+            setRawEvents((prev) => [enriched, ...prev]);
+          } catch (err) {
+            console.error(err);
+          }
+        })();
       };
 
       ws.onerror = () => {
@@ -170,32 +248,35 @@ export default function Home() {
       stopRef.current = true;
       try {
         wsRef.current?.close();
-      } catch {}
+      } catch {
+        // ignore
+      }
     };
   }, []);
 
   // ===== โหลดข้อมูลย้อนหลัง 30 วันจาก /events =====
   const loadRecentEvents = async () => {
     try {
-      const endDate = new Date(); // วันนี้
+      const endDate = new Date();
       const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 30); // ย้อนหลัง 30 วัน
+      startDate.setDate(startDate.getDate() - 30);
 
-      const params = new URLSearchParams();
-      params.set("start_date", dateToYMD(startDate));
-      params.set("end_date", dateToYMD(endDate));
-      params.set("limit", "10000");
+      const startStr = dateToYMD(startDate);
+      const endStr = dateToYMD(endDate);
 
-      const res = await fetch(`${API}/events?${params.toString()}`, {
-        cache: "no-store",
+      const data = await fetchEvents({
+        start: startStr,
+        end: endStr,
+        limit: 10000,
       });
-      if (!res.ok) {
-        throw new Error(`API error: ${res.status}`);
-      }
 
-      const data = await res.json();
       const list = Array.isArray(data) ? data : data?.data || [];
-      setRawEvents(list);
+
+      // เติมข้อมูลคนใน/คนนอก + ชื่อ จาก /check_plate
+      const enriched = await enrichEventsWithMember(list);
+
+      // ให้ useEffect(rawEvents, dailyDate) ไป rebuild ตาราง / กราฟ / stats เอง
+      setRawEvents(enriched);
     } catch (e) {
       console.error(e);
       setRawEvents([]);
@@ -261,7 +342,7 @@ export default function Home() {
 
       const dirCode = getDirectionCode(e);
 
-      for (let i = 0; i < weeks.length; i++) {
+      for (let i = 0; i < weeks.length; i += 1) {
         const { start, end } = weeks[i];
         if (dt >= start && dt < end) {
           if (dirCode === "IN") out[i].in += 1;
@@ -283,12 +364,14 @@ export default function Home() {
       setDailySeries([]);
       return;
     }
+
     const [y, m, d] = dateStr.split("-").map((n) => parseInt(n, 10));
     const day = new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0);
 
+    // filter event เฉพาะวันที่เลือก
     const filtered = events.filter((e) => {
       const dt = new Date(e.datetime || e.time);
-      if (isNaN(dt)) return false;
+      if (Number.isNaN(+dt)) return false;
       return (
         dt.getFullYear() === day.getFullYear() &&
         dt.getMonth() === day.getMonth() &&
@@ -296,7 +379,7 @@ export default function Home() {
       );
     });
 
-    // ===== กราฟรายวัน: ใช้ข้อมูลเดียวกับตาราง (realtime 100%) =====
+    // ===== กราฟรายวัน (0-23 น.) =====
     const buckets = Array.from({ length: 24 }, (_, hour) => ({
       label: `${pad2(hour)}:00`,
       in: 0,
@@ -317,54 +400,71 @@ export default function Home() {
 
     // ===== ตาราง =====
     const mapped = filtered.map((e) => {
-  const dirCode = getDirectionCode(e);
-  const status =
-    dirCode === "IN" ? "เข้า" : dirCode === "OUT" ? "ออก" : "-";
+      const dirCode = getDirectionCode(e);
+      const status =
+        dirCode === "IN" ? "เข้า" : dirCode === "OUT" ? "ออก" : "-";
 
-  const check = isInsideRole(e.role) ? "บุคคลภายใน" : "บุคคลภายนอก";
-  const formattedTime = formatThaiDateTime(e.datetime || e.time);
+      const baseRole = e.member_role || e.role || "";
+      let check = e.check || "";
 
-  const memberName =
-    e.member_name ||
-    e.driver_name ||
-    e.owner_name ||
-    e.full_name ||
-    e.name ||
-    null;
+      if (baseRole) {
+        // ถ้ามี role จาก Member → ใช้ตัดสินคนใน/คนนอก
+        check = isInsideRole(baseRole) ? "บุคคลภายใน" : "บุคคลภายนอก";
+      } else if (!check) {
+        // ไม่มีทั้ง role และ check จาก backend → ถือเป็นภายนอก
+        check = "บุคคลภายนอก";
+      }
 
-  const memberDept = e.member_department || e.department || e.dept || null;
-  const plateStr = isUnknownPlate(e.plate)
-    ? "ไม่มีป้ายทะเบียน"
-    : e.plate || "-";
+      const formattedTime = formatThaiDateTime(e.datetime || e.time);
 
-  return {
-    time: formattedTime,
-    // ✅ ไม่ต่อจังหวัดแล้ว
-    plate: plateStr,
-    // ✅ ใส่จังหวัดให้คอลัมน์ "จังหวัด" ใช้
-    province: e.province || "",
-    status,
-    check,
-    imgUrl: e.image || e.blob || null,
-    member_name: memberName,
-    member_department: memberDept,
-    _raw: {
-      ...e,
-      member_name: memberName,
-      member_department: memberDept,
-    },
-  };
-});
+      const memberName =
+        e.member_name ||
+        e.driver_name ||
+        e.owner_name ||
+        e.full_name ||
+        e.name ||
+        null;
 
+      const memberDept =
+        e.member_department || e.department || e.dept || null;
+
+      const plateStr = isUnknownPlate(e.plate)
+        ? "ไม่มีป้ายทะเบียน"
+        : e.plate || "-";
+
+      return {
+        time: formattedTime,
+        plate: plateStr,
+        province: e.province || "",
+        status,
+        check,
+        imgUrl: e.image || e.blob || null,
+        member_name: memberName,
+        member_department: memberDept,
+        personType: e.personType || null,
+        member_role: baseRole || null,
+        direction: dirCode,
+        isoTime: e.datetime || e.time,
+        _raw: {
+          ...e,
+          member_name: memberName,
+          member_department: memberDept,
+        },
+      };
+    });
 
     setRecordsRawForDay(mapped);
 
     // ===== การ์ดสถิติ =====
-    const inCount = filtered.filter((x) => getDirectionCode(x) === "IN").length;
-    const outCount = filtered.filter((x) => getDirectionCode(x) === "OUT")
-      .length;
-    const unknownCount = filtered.filter((x) => isUnknownPlate(x.plate))
-      .length;
+    const inCount = filtered.filter(
+      (x) => getDirectionCode(x) === "IN"
+    ).length;
+    const outCount = filtered.filter(
+      (x) => getDirectionCode(x) === "OUT"
+    ).length;
+    const unknownCount = filtered.filter((x) =>
+      isUnknownPlate(x.plate)
+    ).length;
 
     setStats({
       total: filtered.length,
@@ -373,7 +473,14 @@ export default function Home() {
       unknown: unknownCount,
     });
 
-    const insideCount = filtered.filter((x) => isInsideRole(x.role)).length;
+    const insideCount = filtered.filter((x) => {
+      const baseRole = x.member_role || x.role || "";
+      if (baseRole) return isInsideRole(baseRole);
+
+      const chk = (x.check || "").toString();
+      return chk.includes("ภายใน") || chk.toLowerCase().includes("internal");
+    }).length;
+
     const outsideCount = filtered.length - insideCount;
     setCountsByRole({ inside: insideCount, outside: outsideCount });
   };
