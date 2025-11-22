@@ -31,11 +31,25 @@ from utils import upload_image_to_storage
 #  2. LOGGING & TIMEZONE
 # ===
 import logging
+import sys
 
+# ตั้งค่า logging ให้แสดงเฉพาะ WARNING ขึ้นไป
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.WARNING,  # แสดงเฉพาะ WARNING ขึ้นไป
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
-logger = logging.getLogger(__name__)
+
+# Logger สำหรับ app (ยังคงเห็น INFO)
+logger = logging.getLogger("app")
+logger.setLevel(logging.INFO)
+
+# ปิด logging ของ libraries
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("supabase").setLevel(logging.WARNING)
+
 
 try:
     from zoneinfo import ZoneInfo
@@ -490,12 +504,15 @@ def get_events(
     query: str | None = Query(None, description="Plate query"),
 ):
     try:
-        # Query พร้อม JOIN
+        # Query พร้อม JOIN Member ในครั้งเดียว
         qb = (
             supabase.table("Event")
             .select(
                 "event_id, datetime, plate, province, direction, blob, vehicle_id, "
-                "Vehicle!Event_vehicle_id_fkey(member:Member!Vehicle_member_id_fkey(role))"
+                "Vehicle!Event_vehicle_id_fkey("
+                "  plate, province, "
+                "  Member!Vehicle_member_id_fkey(firstname, lastname, role, std_id)"
+                ")"
             )
             .order("datetime", desc=True)
             .limit(limit)
@@ -515,23 +532,28 @@ def get_events(
         results = []
 
         for e in resp.data or []:
-            # ดึง role จาก JOIN ที่ query มาแล้ว
             vehicle = e.get("Vehicle") or {}
             if isinstance(vehicle, list):
                 vehicle = vehicle[0] if vehicle else {}
-            member_obj = vehicle.get("member") or {}
-            if isinstance(member_obj, list):
-                member_obj = member_obj[0] if member_obj else {}
 
-            role = member_obj.get("role")
+            member = vehicle.get("Member") or {}
+            if isinstance(member, list):
+                member = member[0] if member else {}
 
+            role = member.get("role")
             check_status = (
-                "บุคคลภายนอก"
+                "บุคคล ภายนอก"
                 if not role or str(role).lower() == "visitor"
-                else "บุคคลภายใน"
+                else "บุคคล ภายใน"
             )
+
             direction_en = (e.get("direction") or "").upper()
             direction_th = dir_th.get(direction_en, "ไม่ทราบ")
+
+            # สร้างชื่อเต็ม
+            member_name = None
+            if member.get("firstname") or member.get("lastname"):
+                member_name = f"{member.get('firstname', '')} {member.get('lastname', '')}".strip()
 
             results.append(
                 {
@@ -542,10 +564,17 @@ def get_events(
                     "status": direction_th,
                     "check": check_status,
                     "imgUrl": e.get("blob") or None,
+                    # ส่งข้อมูล member มาให้ครบ
+                    "member_name": member_name,
+                    "member_role": role,
+                    "member_firstname": member.get("firstname"),
+                    "member_lastname": member.get("lastname"),
+                    "member_std_id": member.get("std_id"),
                 }
             )
 
-        logger.info(f"Returned {len(results)} events")
+        # ✅ Log แค่สรุป
+        logger.info(f"GET /events: {len(results)} records returned")
         return results
 
     except Exception as ex:
@@ -638,6 +667,67 @@ async def record_entry(event: EventIn):
     except Exception as e:
         logger.error(f"Error in record_entry: {str(e)}")
         raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาด: {str(e)}")
+
+
+@app.post("/members/batch")
+def get_members_batch(plates: list[str]):
+    """ดึงข้อมูลสมาชิกจากหลาย plates พร้อมกัน"""
+    try:
+        if not plates or len(plates) > 100:  # จำกัดไม่เกิน 100 plates ต่อครั้ง
+            raise HTTPException(status_code=400, detail="Please provide 1-100 plates")
+
+        # สร้าง OR condition สำหรับ Supabase
+        # ใช้ in operator แทนการ ilike หลายๆ ครั้ง
+        response = (
+            supabase.table("Member")
+            .select(
+                "member_id, firstname, lastname, std_id, faculty, major, role, "
+                "Vehicle(plate, province)"
+            )
+            .execute()
+        )
+
+        # Filter ใน Python แทน (เพราะ Supabase ไม่รองรับ OR + ILIKE ที่ซับซ้อน)
+        all_members = response.data or []
+
+        # สร้าง dict สำหรับค้นหาเร็ว
+        plate_map = {}
+        for plate in plates:
+            plate_clean = plate.strip().lower()
+            plate_map[plate_clean] = None
+
+        results = {}
+        for row in all_members:
+            vehicle = row.get("Vehicle")
+            if isinstance(vehicle, list) and vehicle:
+                vehicle = vehicle[0]
+            elif isinstance(vehicle, list):
+                continue
+
+            vehicle_plate = vehicle.get("plate", "").strip().lower()
+
+            # เช็คว่า plate ตรงกับที่ขอหรือไม่
+            if vehicle_plate in plate_map:
+                results[vehicle.get("plate")] = {
+                    "member_id": row.get("member_id"),
+                    "firstname": row.get("firstname"),
+                    "lastname": row.get("lastname"),
+                    "std_id": row.get("std_id"),
+                    "faculty": row.get("faculty"),
+                    "major": row.get("major"),
+                    "role": row.get("role"),
+                    "plate": vehicle.get("plate"),
+                    "province": vehicle.get("province"),
+                }
+
+        logger.info(
+            f"Batch query: {len(plates)} plates requested, {len(results)} found"
+        )
+        return results
+
+    except Exception as e:
+        logger.error(f"Error in batch query: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ===

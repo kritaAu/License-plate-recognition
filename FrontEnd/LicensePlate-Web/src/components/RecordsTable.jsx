@@ -93,11 +93,7 @@ const THAI_PROVINCES = [
 
 // แปลงป้ายทะเบียนให้ใช้เทียบได้แบบไม่สนช่องว่าง / ขีด / ตัวเล็กตัวใหญ่
 function normalizePlateKey(value = "") {
-  return value
-    .toString()
-    .replace(/\s+/g, "")
-    .replace(/-/g, "")
-    .toUpperCase();
+  return value.toString().replace(/\s+/g, "").replace(/-/g, "").toUpperCase();
 }
 
 // URL รูปจาก record / _raw
@@ -131,8 +127,7 @@ function getDirectionUI(rec = {}) {
     return {
       code: "IN",
       label: "เข้า (IN)",
-      chipClass:
-        "bg-emerald-50 text-emerald-700 border border-emerald-200",
+      chipClass: "bg-emerald-50 text-emerald-700 border border-emerald-200",
     };
   }
   if (dir === "OUT") {
@@ -270,11 +265,7 @@ function normalizeSession(rec = {}) {
   const dir = getDirection(rec);
 
   const fallbackTime =
-    raw.datetime ||
-    raw.time ||
-    rec.datetime ||
-    rec.time ||
-    "";
+    raw.datetime || raw.time || rec.datetime || rec.time || "";
 
   const entryTime =
     rec.entry_time ||
@@ -304,9 +295,7 @@ function normalizeSession(rec = {}) {
     getImageUrl(rec) ||
     null;
 
-  const rawStatus = (rec.status || raw.status || "")
-    .toString()
-    .toLowerCase();
+  const rawStatus = (rec.status || raw.status || "").toString().toLowerCase();
 
   let statusKey = "unknown";
   if (entryTime && exitTime) {
@@ -372,15 +361,13 @@ function getSessionStatusUI(session) {
   if (rawStatus === "completed" || key === "completed") {
     return {
       label: "ออกแล้ว",
-      chipClass:
-        "bg-emerald-50 text-emerald-700 border border-emerald-200",
+      chipClass: "bg-emerald-50 text-emerald-700 border border-emerald-200",
     };
   }
   if (rawStatus === "parked" || key === "parking") {
     return {
       label: "กำลังจอด",
-      chipClass:
-        "bg-amber-50 text-amber-700 border border-amber-200",
+      chipClass: "bg-amber-50 text-amber-700 border border-amber-200",
     };
   }
   if (rawStatus === "unmatched" || key === "exit_only") {
@@ -403,13 +390,7 @@ function getSessionStatusUI(session) {
 
 // ใช้หาตัว event_id จาก record / _raw
 function getEventId(rec = {}) {
-  return (
-    rec._raw?.event_id ??
-    rec._raw?.id ??
-    rec.event_id ??
-    rec.id ??
-    null
-  );
+  return rec._raw?.event_id ?? rec._raw?.id ?? rec.event_id ?? rec.id ?? null;
 }
 
 // ใช้หาตัว session_id ถ้า record มาจาก /api/parking-sessions
@@ -691,10 +672,8 @@ function buildSessionRows(records) {
     const sa = normalizeSession(a);
     const sb = normalizeSession(b);
 
-    const ta =
-      parseDateSafe(sa.exitTime || sa.entryTime) ?? 0;
-    const tb =
-      parseDateSafe(sb.exitTime || sb.entryTime) ?? 0;
+    const ta = parseDateSafe(sa.exitTime || sa.entryTime) ?? 0;
+    const tb = parseDateSafe(sb.exitTime || sb.entryTime) ?? 0;
 
     // ใหม่สุดอยู่บน
     return tb - ta;
@@ -741,10 +720,7 @@ function DetailModal({ record, onClose, onUpdated }) {
     record.plate_entry ??
     "";
   const rawProvince =
-    record._raw?.province ??
-    record.province ??
-    record.province_entry ??
-    "";
+    record._raw?.province ?? record.province ?? record.province_entry ?? "";
 
   const eventId = getEventId(record);
   const sessionId = getSessionId(record);
@@ -814,14 +790,8 @@ function DetailModal({ record, onClose, onUpdated }) {
 
       const updated = isSessionFix
         ? {
-            plate:
-              data.plate_number_entry ??
-              trimmedPlate ??
-              rawPlate,
-            province:
-              data.province ??
-              trimmedProvince ??
-              rawProvince,
+            plate: data.plate_number_entry ?? trimmedPlate ?? rawPlate,
+            province: data.province ?? trimmedProvince ?? rawProvince,
             entry_time: data.entry_time,
             exit_time: data.exit_time,
             status: data.status,
@@ -945,9 +915,7 @@ function DetailModal({ record, onClose, onUpdated }) {
                         {entryParts.date && `• ${entryParts.date}`}
                       </span>
                       {session.entryImage && (
-                        <span className="text-emerald-300">
-                          Entry Image
-                        </span>
+                        <span className="text-emerald-300">Entry Image</span>
                       )}
                     </div>
                   </div>
@@ -993,9 +961,7 @@ function DetailModal({ record, onClose, onUpdated }) {
                         {exitParts.date && `• ${exitParts.date}`}
                       </span>
                       {session.exitImage && (
-                        <span className="text-amber-200">
-                          Exit Image
-                        </span>
+                        <span className="text-amber-200">Exit Image</span>
                       )}
                     </div>
                   </div>
@@ -1086,10 +1052,7 @@ function DetailModal({ record, onClose, onUpdated }) {
                         }}
                         onFocus={() => setShowProvinceList(true)}
                         onBlur={() =>
-                          setTimeout(
-                            () => setShowProvinceList(false),
-                            150
-                          )
+                          setTimeout(() => setShowProvinceList(false), 150)
                         }
                         className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-800 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
                         placeholder="เลือกจังหวัด"
@@ -1116,11 +1079,9 @@ function DetailModal({ record, onClose, onUpdated }) {
                     </div>
                   </div>
 
-                                    {/* สถานะคนใน/คนนอก + ชื่อ (ถ้ามี) */}
+                  {/* สถานะคนใน/คนนอก + ชื่อ (ถ้ามี) */}
                   <div className="flex items-center gap-2">
-                    <span className="w-20 shrink-0 text-slate-500">
-                      สถานะ
-                    </span>
+                    <span className="w-20 shrink-0 text-slate-500">สถานะ</span>
                     <div className="flex flex-col gap-0.5">
                       <span
                         className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${personUI.chipClass}`}
@@ -1135,14 +1096,11 @@ function DetailModal({ record, onClose, onUpdated }) {
                     </div>
                   </div>
 
-
                   {errorMsg && (
                     <p className="text-xs text-red-600">{errorMsg}</p>
                   )}
                   {successMsg && (
-                    <p className="text-xs text-emerald-600">
-                      {successMsg}
-                    </p>
+                    <p className="text-xs text-emerald-600">{successMsg}</p>
                   )}
                 </div>
 
@@ -1257,8 +1215,7 @@ export default function RecordsTable({ records }) {
 
         const matchBySession =
           key.sessionId != null && recSessionId === key.sessionId;
-        const matchByEvent =
-          key.eventId != null && recEventId === key.eventId;
+        const matchByEvent = key.eventId != null && recEventId === key.eventId;
 
         if (!matchBySession && !matchByEvent) return rec;
 
@@ -1282,8 +1239,7 @@ export default function RecordsTable({ records }) {
 
       const matchBySession =
         key.sessionId != null && recSessionId === key.sessionId;
-      const matchByEvent =
-        key.eventId != null && recEventId === key.eventId;
+      const matchByEvent = key.eventId != null && recEventId === key.eventId;
 
       if (!matchBySession && !matchByEvent) return prev;
 
@@ -1449,11 +1405,9 @@ export default function RecordsTable({ records }) {
         <div>
           แสดง{" "}
           <span className="font-semibold">
-            {startIndex + 1} -{" "}
-            {Math.min(startIndex + PAGE_SIZE, rows.length)}
+            {startIndex + 1} - {Math.min(startIndex + PAGE_SIZE, rows.length)}
           </span>{" "}
-          จาก{" "}
-          <span className="font-semibold">{rows.length}</span> รายการ
+          จาก <span className="font-semibold">{rows.length}</span> รายการ
         </div>
 
         <div className="flex items-center gap-1">
@@ -1469,9 +1423,7 @@ export default function RecordsTable({ records }) {
           {/* ก่อนหน้า */}
           <button
             type="button"
-            onClick={() =>
-              setCurrentPage((p) => Math.max(1, p - 1))
-            }
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={safePage === 1}
             className="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -1497,9 +1449,7 @@ export default function RecordsTable({ records }) {
           {/* ถัดไป */}
           <button
             type="button"
-            onClick={() =>
-              setCurrentPage((p) => Math.min(totalPages, p + 1))
-            }
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={safePage === totalPages}
             className="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
