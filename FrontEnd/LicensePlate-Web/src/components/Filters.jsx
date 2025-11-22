@@ -6,89 +6,119 @@ export default function Filters({
   onReset,
   onExport,
 }) {
-  const set = (name) => (e) =>
-    setFilters((s) => ({ ...s, [name]: e.target.value }));
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFilters((s) => ({
+      ...s,
+      [name]: value,
+    }));
+  };
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        onApply();
-      }}
-      className="grid gap-4 md:grid-cols-4 items-end"
-    >
-      <div>
-        <label className="block text-sm text-slate-600 mb-1">วันที่เริ่ม</label>
-        <input
-          type="date"
-          value={filters.start}
-          onChange={set("start")}
-          className="w-full rounded-lg border bg-white px-3 py-2"
-        />
+    <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      {/* ช่องฟิลเตอร์ด้านซ้าย */}
+      <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-4 lg:grid-cols-5">
+        {/* วันที่เริ่ม */}
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-slate-600">วันที่เริ่ม</label>
+          <input
+            type="date"
+            name="start"
+            value={filters.start || ""}
+            onChange={handleChange}
+            className="h-11 rounded-xl border border-sky-200 bg-white px-3 text-sm text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
+          />
+        </div>
+
+        {/* วันที่สิ้นสุด */}
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-slate-600">
+            วันที่สิ้นสุด
+          </label>
+          <input
+            type="date"
+            name="end"
+            value={filters.end || ""}
+            onChange={handleChange}
+            className="h-11 rounded-xl border border-sky-200 bg-white px-3 text-sm text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
+          />
+        </div>
+
+        {/* สถานะรถ */}
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-slate-600">
+            สถานะรถ
+          </label>
+          <select
+            name="direction" // ใช้ชื่อเดิมแต่ความหมายคือ status
+            value={filters.direction || "all"}
+            onChange={handleChange}
+            className="h-11 rounded-xl border border-sky-200 bg-white px-3 text-sm text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
+          >
+            <option value="all">ทั้งหมด</option>
+            <option value="parked">กำลังจอด</option>
+            <option value="completed">ออกแล้ว</option>
+            <option value="unmatched">ไม่พบข้อมูลขาเข้า</option>
+          </select>
+        </div>
+
+        {/* ประเภทบุคคล */}
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-slate-600">
+            ประเภทบุคคล
+          </label>
+          <select
+            name="personType"
+            value={filters.personType || "all"}
+            onChange={handleChange}
+            className="h-11 rounded-xl border border-sky-200 bg-white px-3 text-sm text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
+          >
+            <option value="all">ทั้งหมด</option>
+            <option value="inside">บุคคลภายใน</option>
+            <option value="outside">บุคคลภายนอก</option>
+          </select>
+        </div>
+
+        {/* ค้นหาทะเบียน */}
+        <div className="flex flex-col gap-1 lg:col-span-1">
+          <label className="text-xs font-medium text-slate-600">
+            ค้นหาทะเบียน
+          </label>
+          <input
+            type="text"
+            name="query"
+            placeholder="เช่น 6ษษ9272"
+            value={filters.query || ""}
+            onChange={handleChange}
+            className="h-11 rounded-xl border border-sky-200 bg-white px-3 text-sm text-slate-700 shadow-sm placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
+          />
+        </div>
       </div>
 
-      <div>
-        <label className="block text-sm text-slate-600 mb-1">
-          วันที่สิ้นสุด
-        </label>
-        <input
-          type="date"
-          value={filters.end}
-          onChange={set("end")}
-          className="w-full rounded-lg border bg-white px-3 py-2"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm text-slate-600 mb-1">ทิศทาง</label>
-        <select
-          value={filters.direction}
-          onChange={set("direction")}
-          className="w-full rounded-lg border bg-white px-3 py-2"
-        >
-          <option value="all">ทั้งหมด</option>
-          <option value="IN">เข้า</option>
-          <option value="OUT">ออก</option>
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-sm text-slate-600 mb-1">
-          ค้นหาทะเบียน
-        </label>
-        <input
-          placeholder="เช่น 6ษย9272"
-          value={filters.query}
-          onChange={set("query")}
-          className="w-full rounded-lg border bg-white px-3 py-2"
-        />
-      </div>
-
-      <div className="md:col-span-4 flex gap-3">
+      {/* ปุ่มด้านขวา */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
         <button
-          type="submit"
-          className="rounded-lg bg-[#2a567b] px-6 py-2 font-medium text-white hover:brightness-110"
+          type="button"
+          onClick={onApply}
+          className="h-11 rounded-xl bg-sky-700 px-5 text-sm font-medium text-white shadow hover:bg-sky-800 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-1"
         >
           ใช้ฟิลเตอร์
         </button>
-
         <button
           type="button"
           onClick={onReset}
-          className="rounded-lg bg-white px-6 py-2 font-medium text-[#2a567b] ring-1 ring-[#2a567b]"
+          className="h-11 rounded-xl border border-slate-300 bg-white px-5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-1"
         >
           ล้างฟิลเตอร์
         </button>
-
         <button
-  type="button"
-  onClick={() => onExport?.()}              
-  className="rounded-full px-5 py-2 bg-sky-600 text-white font-medium shadow-sm hover:bg-sky-700 transition-colors"
->
-  Export CSV
-</button>
-
+          type="button"
+          onClick={onExport}
+          className="h-11 rounded-xl bg-emerald-500 px-5 text-sm font-medium text-white shadow hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+        >
+          Export CSV
+        </button>
       </div>
-    </form>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 // src/components/RecordsTable.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
 /* ================= CONFIG ================= */
@@ -93,21 +93,49 @@ const THAI_PROVINCES = [
 
 // แปลงป้ายทะเบียนให้ใช้เทียบได้แบบไม่สนช่องว่าง / ขีด / ตัวเล็กตัวใหญ่
 function normalizePlateKey(value = "") {
-  return value.toString().replace(/\s+/g, "").replace(/-/g, "").toUpperCase();
+  return value
+    .toString()
+    .replace(/\s+/g, "")
+    .replace(/-/g, "")
+    .toUpperCase();
 }
 
 // URL รูปจาก record / _raw
+// แปลง path จาก backend -> URL เต็มที่ browser เปิดได้
+function buildImageUrl(path) {
+  if (!path) return null;
+  const s = String(path || "").trim();
+  if (!s) return null;
+
+  // ถ้าเป็น URL เต็มอยู่แล้ว (เช่น https://... จาก Supabase) ก็ใช้เลย
+  if (/^https?:\/\//i.test(s)) return s;
+
+  // กันกรณีสตริงเริ่มด้วย API อยู่แล้ว
+  if (s.startsWith(API)) return s;
+
+  // ถ้าเป็น path เปล่า ๆ เช่น "plates/xxx.jpg" ให้เติม API เข้าไป
+  if (!s.startsWith("/")) {
+    return `${API}/${s}`;
+  }
+
+  // ถ้าเป็น /something ให้ใช้ API + path
+  return `${API}${s}`;
+}
+
+// helper ดึง URL รูปจาก record (รองรับหลาย field)
 function getImageUrl(rec = {}) {
-  return (
+  const raw =
     rec.imgUrl ||
     rec.image ||
     rec.blob ||
     rec._raw?.imgUrl ||
     rec._raw?.image ||
     rec._raw?.blob ||
-    null
-  );
+    null;
+
+  return buildImageUrl(raw);
 }
+
 
 // ทิศทาง IN / OUT / UNKNOWN
 function getDirection(rec = {}) {
@@ -127,7 +155,8 @@ function getDirectionUI(rec = {}) {
     return {
       code: "IN",
       label: "เข้า (IN)",
-      chipClass: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+      chipClass:
+        "bg-emerald-50 text-emerald-700 border border-emerald-200",
     };
   }
   if (dir === "OUT") {
@@ -158,16 +187,21 @@ function getPersonType(rec = {}) {
   const chk = rec.check || rec._raw?.check || "";
 
   let text = "";
-  if (memberRole) text = memberRole.toString().toLowerCase();
+  // เดิม: memberRole -> role -> chk
+  // ใหม่: ใช้ chk ก่อน เพราะเป็นผลสรุป “บุคคลภายใน/ภายนอก” ที่เราตั้งใจไว้
+  if (chk) text = chk.toString().toLowerCase();
+  else if (memberRole) text = memberRole.toString().toLowerCase();
   else if (role) text = role.toString().toLowerCase();
-  else if (chk) text = chk.toString().toLowerCase();
 
   if (
     text.includes("ภายใน") ||
     text.includes("internal") ||
     text.includes("นักศึกษา") ||
     text.includes("อาจารย์") ||
-    text.includes("เจ้าหน้าที่")
+    text.includes("เจ้าหน้าที่") ||
+    text.includes("inside") ||
+    text.includes("staff") ||
+    text.includes("employee")
   ) {
     return "inside";
   }
@@ -175,7 +209,8 @@ function getPersonType(rec = {}) {
   if (
     text.includes("ภายนอก") ||
     text.includes("outside") ||
-    text.includes("visitor")
+    text.includes("visitor") ||
+    text.includes("guest")
   ) {
     return "outside";
   }
@@ -183,12 +218,13 @@ function getPersonType(rec = {}) {
   return "unknown";
 }
 
+
 function getPersonTypeUI(rec = {}) {
   const type = getPersonType(rec);
   if (type === "inside") {
     return {
       type,
-      label: "คนใน",
+      label: "บุคคลภายใน",
       chipClass: "bg-indigo-50 text-indigo-700 border border-indigo-200",
       iconBg: "bg-indigo-100 text-indigo-600",
       textClass: "text-indigo-600",
@@ -197,7 +233,7 @@ function getPersonTypeUI(rec = {}) {
   if (type === "outside") {
     return {
       type,
-      label: "คนนอก",
+      label: "บุคคลภายนอก",
       chipClass: "bg-amber-50 text-amber-700 border border-amber-200",
       iconBg: "bg-amber-100 text-amber-600",
       textClass: "text-amber-600",
@@ -259,43 +295,95 @@ function isSameProvince(a, b) {
   return aa === bb;
 }
 
+// ===== helper สำหรับ sort ป้ายทะเบียน =====
+function getPlateSortKey(plate) {
+  const s = String(plate || "").trim();
+  if (!s) return { group: 3, key: "" };
+
+  const ch = s[0];
+  const code = ch.charCodeAt(0);
+  const isThai = code >= 0x0E00 && code <= 0x0E7F;
+  const isDigit = ch >= "0" && ch <= "9";
+  const isLatin =
+    (ch >= "A" && ch <= "Z") || (ch >= "a" && ch <= "z");
+
+  // group: 0=ไทย, 1=อังกฤษ, 2=ตัวเลข, 3=อื่น ๆ
+  let group = 3;
+  if (isThai) group = 0;
+  else if (isLatin) group = 1;
+  else if (isDigit) group = 2;
+
+  return { group, key: s };
+}
+
+function comparePlates(aPlate, bPlate) {
+  const a = getPlateSortKey(aPlate);
+  const b = getPlateSortKey(bPlate);
+
+  if (a.group !== b.group) return a.group - b.group;
+
+  if (a.group === 0) {
+    // ใช้ลำดับตัวอักษรไทย (ก ก่อน ข ก่อน ค ...)
+    return a.key.localeCompare(b.key, "th-TH");
+  }
+  return a.key.localeCompare(b.key);
+}
+
 // แปลง record ให้เป็น session แบบเดียวกัน
 function normalizeSession(rec = {}) {
   const raw = rec._raw || {};
   const dir = getDirection(rec);
 
+  const rawStatus = (rec.status || raw.status || "")
+    .toString()
+    .toLowerCase();
+  const rawType = (raw.type || rec.type || "")
+    .toString()
+    .toLowerCase();
+
   const fallbackTime =
-    raw.datetime || raw.time || rec.datetime || rec.time || "";
+    raw.datetime ||
+    raw.time ||
+    rec.datetime ||
+    rec.time ||
+    "";
+
+  const isEntryLike =
+    dir === "IN" ||
+    rawStatus === "parked" ||
+    rawType === "entry";
+
+  const isExitLike =
+    dir === "OUT" ||
+    rawStatus === "unmatched" ||
+    rawStatus === "completed" ||
+    rawType === "exit";
 
   const entryTime =
     rec.entry_time ||
     raw.entry_time ||
     raw.checkin_time ||
-    (dir === "IN" ? fallbackTime : "") ||
+    (isEntryLike ? fallbackTime : "") ||
     "";
 
   const exitTime =
     rec.exit_time ||
     raw.exit_time ||
     raw.checkout_time ||
-    (dir === "OUT" ? fallbackTime : "") ||
+    (isExitLike ? fallbackTime : "") ||
     "";
 
-  const entryImage =
+ const entryImage =
     rec.entry_image ||
     raw.entry_image ||
     raw.entry_img ||
-    getImageUrl(rec) ||
-    null;
+    (dir === "IN" ? getImageUrl(rec) : null);   
 
   const exitImage =
     rec.exit_image ||
     raw.exit_image ||
     raw.exit_img ||
-    getImageUrl(rec) ||
-    null;
-
-  const rawStatus = (rec.status || raw.status || "").toString().toLowerCase();
+    (dir === "OUT" ? getImageUrl(rec) : null);
 
   let statusKey = "unknown";
   if (entryTime && exitTime) {
@@ -303,13 +391,13 @@ function normalizeSession(rec = {}) {
   } else if (
     entryTime &&
     !exitTime &&
-    (dir === "IN" || rawStatus === "parked")
+    (dir === "IN" || rawStatus === "parked" || isEntryLike)
   ) {
     statusKey = "parking"; // ยังจอดอยู่
   } else if (
     !entryTime &&
     exitTime &&
-    (dir === "OUT" || rawStatus === "unmatched")
+    (dir === "OUT" || rawStatus === "unmatched" || isExitLike)
   ) {
     statusKey = "exit_only"; // มีแต่ข้อมูลออก
   } else if (entryTime && !exitTime && dir === "OUT") {
@@ -354,6 +442,7 @@ function normalizeSession(rec = {}) {
   };
 }
 
+
 function getSessionStatusUI(session) {
   const rawStatus = (session.rawStatus || "").toString().toLowerCase();
   const key = session.statusKey;
@@ -361,13 +450,15 @@ function getSessionStatusUI(session) {
   if (rawStatus === "completed" || key === "completed") {
     return {
       label: "ออกแล้ว",
-      chipClass: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+      chipClass:
+        "bg-emerald-50 text-emerald-700 border border-emerald-200",
     };
   }
   if (rawStatus === "parked" || key === "parking") {
     return {
       label: "กำลังจอด",
-      chipClass: "bg-amber-50 text-amber-700 border border-amber-200",
+      chipClass:
+        "bg-amber-50 text-amber-700 border border-amber-200",
     };
   }
   if (rawStatus === "unmatched" || key === "exit_only") {
@@ -390,7 +481,13 @@ function getSessionStatusUI(session) {
 
 // ใช้หาตัว event_id จาก record / _raw
 function getEventId(rec = {}) {
-  return rec._raw?.event_id ?? rec._raw?.id ?? rec.event_id ?? rec.id ?? null;
+  return (
+    rec._raw?.event_id ??
+    rec._raw?.id ??
+    rec.event_id ??
+    rec.id ??
+    null
+  );
 }
 
 // ใช้หาตัว session_id ถ้า record มาจาก /api/parking-sessions
@@ -672,8 +769,10 @@ function buildSessionRows(records) {
     const sa = normalizeSession(a);
     const sb = normalizeSession(b);
 
-    const ta = parseDateSafe(sa.exitTime || sa.entryTime) ?? 0;
-    const tb = parseDateSafe(sb.exitTime || sb.entryTime) ?? 0;
+    const ta =
+      parseDateSafe(sa.exitTime || sa.entryTime) ?? 0;
+    const tb =
+      parseDateSafe(sb.exitTime || sb.entryTime) ?? 0;
 
     // ใหม่สุดอยู่บน
     return tb - ta;
@@ -681,6 +780,55 @@ function buildSessionRows(records) {
 
   return sortedResult;
 }
+
+// ===== sort helper สำหรับทั้งแถว session =====
+function compareSessionsForSort(a, b, sortConfig) {
+  const dirFactor = sortConfig.direction === "asc" ? 1 : -1;
+  const sa = normalizeSession(a);
+  const sb = normalizeSession(b);
+
+  if (sortConfig.field === "plate") {
+    return dirFactor * comparePlates(sa.plate || "", sb.plate || "");
+  }
+
+  if (sortConfig.field === "entryTime") {
+    const ta = parseDateSafe(sa.entryTime) ?? 0;
+    const tb = parseDateSafe(sb.entryTime) ?? 0;
+    return dirFactor * (ta - tb);
+  }
+
+  if (sortConfig.field === "exitTime") {
+    const ta = parseDateSafe(sa.exitTime) ?? 0;
+    const tb = parseDateSafe(sb.exitTime) ?? 0;
+    return dirFactor * (ta - tb);
+  }
+
+  if (sortConfig.field === "status") {
+    // ลำดับสถานะที่ต้องการ
+    const STATUS_ORDER = {
+      completed: 0,  // ออกแล้ว
+      parking: 1,    // กำลังจอด
+      exit_only: 2,  // ไม่พบข้อมูลเข้า
+      entry_only: 3, // ไม่พบข้อมูลออก
+      unknown: 4,    // ไม่ทราบ
+    };
+
+    const va = STATUS_ORDER[sa.statusKey] ?? 999;
+    const vb = STATUS_ORDER[sb.statusKey] ?? 999;
+
+    if (va !== vb) {
+      return dirFactor * (va - vb);
+    }
+
+    // ถ้าค่าเท่ากันค่อย fallback ไปเทียบตามข้อความ
+    const la = getSessionStatusUI(sa).label;
+    const lb = getSessionStatusUI(sb).label;
+    return dirFactor * la.localeCompare(lb, "th-TH");
+  }
+
+  return 0;
+}
+
 
 /* ================= MODAL PORTAL ================= */
 
@@ -720,7 +868,10 @@ function DetailModal({ record, onClose, onUpdated }) {
     record.plate_entry ??
     "";
   const rawProvince =
-    record._raw?.province ?? record.province ?? record.province_entry ?? "";
+    record._raw?.province ??
+    record.province ??
+    record.province_entry ??
+    "";
 
   const eventId = getEventId(record);
   const sessionId = getSessionId(record);
@@ -790,8 +941,10 @@ function DetailModal({ record, onClose, onUpdated }) {
 
       const updated = isSessionFix
         ? {
-            plate: data.plate_number_entry ?? trimmedPlate ?? rawPlate,
-            province: data.province ?? trimmedProvince ?? rawProvince,
+            plate:
+              data.plate_number_entry ?? trimmedPlate ?? rawPlate,
+            province:
+              data.province ?? trimmedProvince ?? rawProvince,
             entry_time: data.entry_time,
             exit_time: data.exit_time,
             status: data.status,
@@ -860,6 +1013,11 @@ function DetailModal({ record, onClose, onUpdated }) {
                 >
                   {dirUI.label}
                 </span>
+                {personUI.type === "inside" && memberName && (
+                  <span className="inline-flex items-center rounded-full bg-sky-50 px-3 py-1 font-medium text-sky-700">
+                    {memberName}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -915,7 +1073,9 @@ function DetailModal({ record, onClose, onUpdated }) {
                         {entryParts.date && `• ${entryParts.date}`}
                       </span>
                       {session.entryImage && (
-                        <span className="text-emerald-300">Entry Image</span>
+                        <span className="text-emerald-300">
+                          Entry Image
+                        </span>
                       )}
                     </div>
                   </div>
@@ -961,7 +1121,9 @@ function DetailModal({ record, onClose, onUpdated }) {
                         {exitParts.date && `• ${exitParts.date}`}
                       </span>
                       {session.exitImage && (
-                        <span className="text-amber-200">Exit Image</span>
+                        <span className="text-amber-200">
+                          Exit Image
+                        </span>
                       )}
                     </div>
                   </div>
@@ -1052,7 +1214,10 @@ function DetailModal({ record, onClose, onUpdated }) {
                         }}
                         onFocus={() => setShowProvinceList(true)}
                         onBlur={() =>
-                          setTimeout(() => setShowProvinceList(false), 150)
+                          setTimeout(
+                            () => setShowProvinceList(false),
+                            150
+                          )
                         }
                         className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-800 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
                         placeholder="เลือกจังหวัด"
@@ -1081,7 +1246,9 @@ function DetailModal({ record, onClose, onUpdated }) {
 
                   {/* สถานะคนใน/คนนอก + ชื่อ (ถ้ามี) */}
                   <div className="flex items-center gap-2">
-                    <span className="w-20 shrink-0 text-slate-500">สถานะ</span>
+                    <span className="w-20 shrink-0 text-slate-500">
+                      สถานะ
+                    </span>
                     <div className="flex flex-col gap-0.5">
                       <span
                         className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${personUI.chipClass}`}
@@ -1100,7 +1267,9 @@ function DetailModal({ record, onClose, onUpdated }) {
                     <p className="text-xs text-red-600">{errorMsg}</p>
                   )}
                   {successMsg && (
-                    <p className="text-xs text-emerald-600">{successMsg}</p>
+                    <p className="text-xs text-emerald-600">
+                      {successMsg}
+                    </p>
                   )}
                 </div>
 
@@ -1164,10 +1333,15 @@ function Td({ children, className = "" }) {
   );
 }
 
-export default function RecordsTable({ records }) {
+export default function RecordsTable({ records, filters = {} }) {
   const [rows, setRows] = useState([]);
   const [selected, setSelected] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  const [sortConfig, setSortConfig] = useState({
+    field: null, // "plate" | "entryTime" | "exitTime" | "status"
+    direction: "asc",
+  });
 
   // sync rows กับ props (รวมคู่เข้า/ออกใหม่ทุกครั้งเมื่อ records เปลี่ยน)
   useEffect(() => {
@@ -1177,7 +1351,68 @@ export default function RecordsTable({ records }) {
     setCurrentPage(1);
   }, [records]);
 
-  if (!Array.isArray(rows) || rows.length === 0) {
+  const filteredRows = useMemo(() => {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+
+  const statusFilter = filters?.direction || "all";
+  const personFilter = filters?.personType || "all";
+
+  if (
+    (!statusFilter || statusFilter === "all") &&
+    (!personFilter || personFilter === "all")
+  ) {
+    return rows;
+  }
+
+  return rows.filter((rec) => {
+    const session = normalizeSession(rec);
+    const personType = getPersonType(rec);
+
+    if (statusFilter && statusFilter !== "all") {
+      const key = session.statusKey;
+      const rawStatus = (session.rawStatus || "")
+        .toString()
+        .toLowerCase();
+
+      if (statusFilter === "parked") {
+        if (!(key === "parking" || rawStatus === "parked")) {
+          return false;
+        }
+      } else if (statusFilter === "completed") {
+        if (!(key === "completed" || rawStatus === "completed")) {
+          return false;
+        }
+      } else if (statusFilter === "unmatched") {
+        if (!(key === "exit_only" || rawStatus === "unmatched")) {
+          return false;
+        }
+      }
+    }
+
+    if (personFilter && personFilter !== "all") {
+      if (personFilter === "inside" && personType !== "inside") {
+        return false;
+      }
+      if (personFilter === "outside" && personType !== "outside") {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}, [rows, filters]);
+
+const sortedRows = useMemo(() => {
+  if (!Array.isArray(filteredRows) || filteredRows.length === 0) return [];
+  if (!sortConfig.field) return filteredRows;
+
+  const copy = [...filteredRows];
+  copy.sort((a, b) => compareSessionsForSort(a, b, sortConfig));
+  return copy;
+}, [filteredRows, sortConfig]);
+
+
+  if (!Array.isArray(sortedRows) || sortedRows.length === 0) {
     return (
       <div className="px-4 py-6 text-center text-sm text-slate-500">
         ไม่พบข้อมูล
@@ -1185,10 +1420,10 @@ export default function RecordsTable({ records }) {
     );
   }
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
   const safePage = Math.min(Math.max(1, currentPage), totalPages);
   const startIndex = (safePage - 1) * PAGE_SIZE;
-  const pageRows = rows.slice(startIndex, startIndex + PAGE_SIZE);
+  const pageRows = sortedRows.slice(startIndex, startIndex + PAGE_SIZE);
 
   function getPageNumbers(current, total) {
     const windowSize = 5;
@@ -1215,7 +1450,8 @@ export default function RecordsTable({ records }) {
 
         const matchBySession =
           key.sessionId != null && recSessionId === key.sessionId;
-        const matchByEvent = key.eventId != null && recEventId === key.eventId;
+        const matchByEvent =
+          key.eventId != null && recEventId === key.eventId;
 
         if (!matchBySession && !matchByEvent) return rec;
 
@@ -1239,7 +1475,8 @@ export default function RecordsTable({ records }) {
 
       const matchBySession =
         key.sessionId != null && recSessionId === key.sessionId;
-      const matchByEvent = key.eventId != null && recEventId === key.eventId;
+      const matchByEvent =
+        key.eventId != null && recEventId === key.eventId;
 
       if (!matchBySession && !matchByEvent) return prev;
 
@@ -1255,6 +1492,32 @@ export default function RecordsTable({ records }) {
     });
   };
 
+  const handleSort = (field) => {
+    setSortConfig((prev) => {
+      if (prev.field === field) {
+        return {
+          field,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { field, direction: "asc" };
+    });
+    setCurrentPage(1);
+  };
+
+  const renderSortIcon = (field) => {
+    if (sortConfig.field !== field) {
+      return (
+        <span className="ml-1 text-[10px] text-slate-400">↕</span>
+      );
+    }
+    return (
+      <span className="ml-1 text-[10px] text-sky-600">
+        {sortConfig.direction === "asc" ? "▲" : "▼"}
+      </span>
+    );
+  };
+
   return (
     <>
       <div className="overflow-x-auto bg-white">
@@ -1262,10 +1525,46 @@ export default function RecordsTable({ records }) {
           <thead className="bg-slate-50">
             <tr>
               <Th>ประเภท</Th>
-              <Th>ทะเบียนรถ</Th>
-              <Th>ขาเข้า (CHECK-IN)</Th>
-              <Th>ขาออก (CHECK-OUT)</Th>
-              <Th>สถานะ</Th>
+              <Th>
+                <button
+                  type="button"
+                  onClick={() => handleSort("plate")}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-sky-700"
+                >
+                  ทะเบียนรถ
+                  {renderSortIcon("plate")}
+                </button>
+              </Th>
+              <Th>
+                <button
+                  type="button"
+                  onClick={() => handleSort("entryTime")}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-sky-700"
+                >
+                  ขาเข้า (CHECK-IN)
+                  {renderSortIcon("entryTime")}
+                </button>
+              </Th>
+              <Th>
+                <button
+                  type="button"
+                  onClick={() => handleSort("exitTime")}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-sky-700"
+                >
+                  ขาออก (CHECK-OUT)
+                  {renderSortIcon("exitTime")}
+                </button>
+              </Th>
+              <Th>
+                <button
+                  type="button"
+                  onClick={() => handleSort("status")}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-sky-700"
+                >
+                  สถานะ
+                  {renderSortIcon("status")}
+                </button>
+              </Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
@@ -1321,12 +1620,23 @@ export default function RecordsTable({ records }) {
                     </div>
                   </Td>
 
-                  {/* ขาเข้า */}
+                                    {/* ขาเข้า */}
                   <Td className="w-[320px]">
                     <div className="flex items-center gap-3 rounded-2xl bg-slate-50 px-3 py-3">
-                      <div className="flex h-16 w-24 items-center justify-center rounded-xl bg-slate-100 text-xs font-semibold text-slate-500 shadow-sm">
-                        Entry Img
+                      {/* กล่องรูปขาเข้า */}
+                      <div className="flex h-16 w-24 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-xs font-semibold text-slate-500 shadow-sm">
+                        {session.entryImage ? (
+                          <img
+                            src={session.entryImage}
+                            alt={`Entry ${session.plate || ""}`}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          "Entry Img"
+                        )}
                       </div>
+
+                      {/* ข้อมูลเวลาเข้า */}
                       <div className="flex flex-col">
                         <div className="flex items-center gap-1 text-xs">
                           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-[11px] text-emerald-600">
@@ -1351,9 +1661,20 @@ export default function RecordsTable({ records }) {
                     {hasExit ? (
                       <div className="flex flex-col gap-1 rounded-2xl bg-slate-50 px-3 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-16 w-24 items-center justify-center rounded-xl bg-slate-100 text-xs font-semibold text-slate-500 shadow-sm">
-                            Exit Img
+                          {/* กล่องรูปขาออก */}
+                          <div className="flex h-16 w-24 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-xs font-semibold text-slate-500 shadow-sm">
+                            {session.exitImage ? (
+                              <img
+                                src={session.exitImage}
+                                alt={`Exit ${session.plate || ""}`}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              "Exit Img"
+                            )}
                           </div>
+
+                          {/* ข้อมูลเวลาออก */}
                           <div className="flex flex-col">
                             <div className="flex items-center gap-1 text-xs">
                               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-100 text-[11px] text-rose-600">
@@ -1372,6 +1693,7 @@ export default function RecordsTable({ records }) {
                           </div>
                         </div>
 
+                        {/* รวมเวลาจอด */}
                         {durationLabel && (
                           <div className="mt-1 inline-flex max-w-max rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-500">
                             {durationLabel}
@@ -1384,6 +1706,7 @@ export default function RecordsTable({ records }) {
                       </div>
                     )}
                   </Td>
+
 
                   {/* สถานะ */}
                   <Td>
@@ -1405,9 +1728,12 @@ export default function RecordsTable({ records }) {
         <div>
           แสดง{" "}
           <span className="font-semibold">
-            {startIndex + 1} - {Math.min(startIndex + PAGE_SIZE, rows.length)}
+            {startIndex + 1} -{" "}
+            {Math.min(startIndex + PAGE_SIZE, sortedRows.length)}
           </span>{" "}
-          จาก <span className="font-semibold">{rows.length}</span> รายการ
+          จาก{" "}
+          <span className="font-semibold">{sortedRows.length}</span>{" "}
+          รายการ
         </div>
 
         <div className="flex items-center gap-1">
@@ -1423,7 +1749,9 @@ export default function RecordsTable({ records }) {
           {/* ก่อนหน้า */}
           <button
             type="button"
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            onClick={() =>
+              setCurrentPage((p) => Math.max(1, p - 1))
+            }
             disabled={safePage === 1}
             className="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -1449,7 +1777,9 @@ export default function RecordsTable({ records }) {
           {/* ถัดไป */}
           <button
             type="button"
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() =>
+              setCurrentPage((p) => Math.min(totalPages, p + 1))
+            }
             disabled={safePage === totalPages}
             className="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
           >

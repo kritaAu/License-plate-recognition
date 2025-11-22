@@ -8,7 +8,14 @@ export const EVENTS_WS_URL =
   "/ws/events";
 
 // ===== shared helpers =====
-
+// ดูว่า role นี้ถือเป็นบุคคลภายในไหม
+function isInsideRole(role) {
+  const r = String(role || "").trim();
+  const rl = r.toLowerCase();
+  if (["นักศึกษา", "อาจารย์", "เจ้าหน้าที่"].includes(r)) return true;
+  if (["staff", "employee", "internal", "insider"].includes(rl)) return true;
+  return false;
+}
 // จัดการ response + error ของ FastAPI ให้เป็นข้อความอ่านง่าย
 async function handle(res) {
   if (res.ok) {
@@ -135,22 +142,29 @@ export async function fetchEventsForDay(dateStr, limit = 10000) {
   const rows = await handle(res);
 
   // แปลงให้ field ที่มักใช้ในหน้า Dashboard ครบ ๆ
-  return (Array.isArray(rows) ? rows : []).map((e) => ({
+  return (Array.isArray(rows) ? rows : []).map((e) => {
+  // ใช้ logic เดียวกับหน้า Search
+  const role = e.role || e.member_role || e.person_role || "";
+  const check =
+    e.check ||
+    (role ? (isInsideRole(role) ? "บุคคลภายใน" : "บุคคลภายนอก") : "");
+
+  return {
     ...e,
     datetime: e.datetime || e.time || null,
     direction:
       e.direction ||
       (e.status === "เข้า"
-        ? "in"
+        ? "IN"
         : e.status === "ออก"
-        ? "out"
+        ? "OUT"
         : e.direction || ""),
-    role:
-      e.role ||
-      (String(e.check || "").includes("ภายใน") ? "internal" : "visitor"),
+    role,
+    check,
     image: e.image || e.imgUrl || e.blob || null,
     blob: e.blob || e.image || e.imgUrl || null,
-  }));
+  };
+});
 }
 // ===== PARKING SESSIONS (Session Log) =====
 

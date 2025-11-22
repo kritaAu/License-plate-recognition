@@ -80,44 +80,57 @@ for (const e of events) {
   const byKey = new Map(checks);
 
   // ผูก role / member_role / check / member_name / member_department / personType กลับเข้าแต่ละ event
-  return events.map((e) => {
-    if (!e?.plate) return e;
+return events.map((e) => {
+  if (!e?.plate) return e;
 
-    const key = `${normalizePlateKey(e.plate)}|${(e.province || "").trim()}`;
-    const cp = byKey.get(key);
+  const key = `${normalizePlateKey(e.plate)}|${(e.province || "").trim()}`;
+  const cp = byKey.get(key) || null;
 
-    if (!cp || !cp.role) return e; // ไม่มีข้อมูลสมาชิก → ใช้ค่าเดิม
+  // role หลัก: ใช้จาก event ก่อน ถ้าไม่มีค่อย fallback เป็นของ member
+  const role =
+    e.role || e.member_role || e.person_role || cp?.role || "";
 
-    const role = cp.role;
-    const inside = isInsideRole(role);
-    const personType = inside ? "inside" : "outside";
+  const inside = isInsideRole(role);
 
-    const memberName =
-      cp.name ??
-      e.member_name ??
-      e.driver_name ??
-      e.owner_name ??
-      e.full_name ??
-      e.name ??
-      null;
+  // ถ้ามี e.check อยู่แล้ว (เช่น จาก backend หรือหน้า Search) → อย่า override
+  const check =
+    e.check ||
+    (role ? (inside ? "บุคคลภายใน" : "บุคคลภายนอก") : "");
 
-    const memberDept =
-      cp.department ??
-      e.member_department ??
-      e.department ??
-      e.dept ??
-      null;
+  const personType =
+    e.personType ||
+    (check.includes("ภายใน")
+      ? "inside"
+      : check.includes("ภายนอก")
+      ? "outside"
+      : null);
 
-    return {
-      ...e,
-      role,
-      member_role: role,
-      check: inside ? "บุคคลภายใน" : "บุคคลภายนอก",
-      personType,
-      member_name: memberName,
-      member_department: memberDept,
-    };
-  });
+  const memberName =
+    e.member_name ??
+    cp?.name ??
+    e.driver_name ??
+    e.owner_name ??
+    e.full_name ??
+    e.name ??
+    null;
+
+  const memberDept =
+    e.member_department ??
+    cp?.department ??
+    e.department ??
+    e.dept ??
+    null;
+
+  return {
+    ...e,
+    role,
+    member_role: e.member_role || role || null,
+    check,
+    personType,
+    member_name: memberName,
+    member_department: memberDept,
+  };
+});
 }
 
 // direction ปรับให้เป็น "IN" | "OUT" | "UNKNOWN" ใช้ที่เดียวทุกที่
@@ -407,13 +420,9 @@ export default function Home() {
       const baseRole = e.member_role || e.role || "";
       let check = e.check || "";
 
-      if (baseRole) {
-        // ถ้ามี role จาก Member → ใช้ตัดสินคนใน/คนนอก
-        check = isInsideRole(baseRole) ? "บุคคลภายใน" : "บุคคลภายนอก";
-      } else if (!check) {
-        // ไม่มีทั้ง role และ check จาก backend → ถือเป็นภายนอก
-        check = "บุคคลภายนอก";
-      }
+      if (!check && baseRole) {
+  check = isInsideRole(baseRole) ? "บุคคลภายใน" : "บุคคลภายนอก";
+}
 
       const formattedTime = formatThaiDateTime(e.datetime || e.time);
 
@@ -433,24 +442,30 @@ export default function Home() {
         : e.plate || "-";
 
       return {
-        time: formattedTime,
-        plate: plateStr,
-        province: e.province || "",
-        status,
-        check,
-        imgUrl: e.image || e.blob || null,
-        member_name: memberName,
-        member_department: memberDept,
-        personType: e.personType || null,
-        member_role: baseRole || null,
-        direction: dirCode,
-        isoTime: e.datetime || e.time,
-        _raw: {
-          ...e,
-          member_name: memberName,
-          member_department: memberDept,
-        },
-      };
+  time: formattedTime,
+  plate: plateStr,
+  province: e.province || "",
+  status,
+  check,
+  imgUrl: e.image || e.blob || null,
+  member_name: memberName,
+  member_department: memberDept,
+  personType:
+    e.personType ||
+    (check.includes("ภายใน")
+      ? "inside"
+      : check.includes("ภายนอก")
+      ? "outside"
+      : null),
+  member_role: baseRole || null,
+  direction: dirCode,
+  isoTime: e.datetime || e.time,
+  _raw: {
+    ...e,
+    member_name: memberName,
+    member_department: memberDept,
+  },
+};
     });
 
     setRecordsRawForDay(mapped);
