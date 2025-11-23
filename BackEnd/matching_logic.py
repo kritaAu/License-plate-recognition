@@ -2,6 +2,11 @@ from rapidfuzz import fuzz
 from datetime import datetime
 from supabase import Client
 import re
+import logging
+
+# ตั้งค่า Logger
+logger = logging.getLogger("matching_logic")
+logger.setLevel(logging.INFO)
 
 
 def extract_plate_parts(plate: str):
@@ -9,10 +14,10 @@ def extract_plate_parts(plate: str):
     if not plate:
         return None, None
 
-    # ลบช่องว่างทั้งหมด
-    clean = "".join(plate.split())
+    # ลบช่องว่างทั้งหมด และอักขระพิเศษ
+    clean = "".join(e for e in plate if e.isalnum())
 
-    # หาตัวเลข 4 ตัวท้าย (มักจะเป็นเลขทะเบียนหลัก)
+    # หาตัวเลขกลุ่มสุดท้าย (เลขทะเบียนหลัก)
     numbers = re.findall(r"\d+", clean)
     last_number = numbers[-1] if numbers else ""
 
@@ -25,11 +30,7 @@ def extract_plate_parts(plate: str):
 def find_best_match(plate_out: str, province: str, supabase: Client):
     """
     หาคู่ที่ตรงที่สุดจาก status='parked'
-
-    ลำดับความแม่นยำ:
-    1. Exact Match (100%) - ทุกอย่างตรงเป๊ะ
-    2. Number Match (95%) - เลข 4 ตัว + จังหวัดตรง, ตัวอักษรคล้าย
-    3. Fuzzy Match (80%+) - ใช้ fuzzy matching
+    เน้นความแม่นยำของตัวเลขมากกว่าตัวอักษร (แก้ปัญหากง/กว)
     """
 
     # 1. ค้นหา sessions ที่ยังจอดอยู่
@@ -42,11 +43,16 @@ def find_best_match(plate_out: str, province: str, supabase: Client):
     )
 
     if not parked.data:
+        # logger.info(f"❌ No parked sessions found for {plate_out}")
         return None
 
-    # แยกส่วนของป้ายทะเบียนออก
+    # แยกส่วนของป้ายทะเบียนขาออก
     prefix_out, number_out = extract_plate_parts(plate_out)
     province_out = (province or "").strip().lower()
+
+    logger.info(
+        f"Matching: {plate_out} (Pre:{prefix_out}, Num:{number_out}) Prov:{province_out}"
+    )
 
     best_match = None
     highest_score = 0
@@ -56,50 +62,73 @@ def find_best_match(plate_out: str, province: str, supabase: Client):
         plate_entry = session.get("plate_number_entry", "")
         province_entry = (session.get("province", "") or "").strip().lower()
 
-        # === EXACT MATCH (100%) ===
+        # === 1. EXACT MATCH (100%) ===
+        # ถ้าตรงกันเป๊ะ ให้คะแนนเต็มเลย
         if (
-            plate_out.strip().lower() == plate_entry.strip().lower()
+            plate_out.replace(" ", "") == plate_entry.replace(" ", "")
             and province_out == province_entry
         ):
             return {"session": session, "match_type": "exact", "confidence": 1.0}
 
-        # === NUMBER MATCH (95%) ===
-        # ถ้าเลข 4 ตัว + จังหวัดตรง → ถือว่าเป็นคันเดียวกัน
-        if number_out and province_out and province_entry:
+        # === 2. NUMBER PRIORITY MATCH (Case กง vs กว) ===
+        if number_out:
             prefix_entry, number_entry = extract_plate_parts(plate_entry)
 
-            # เช็คว่าเลขตรงและจังหวัดตรง
-            if number_out == number_entry and province_out == province_entry:
-                # ให้ score สูงมาก แต่ลดหน่อยถ้าตัวอักษรต่างกันมาก
-                prefix_similarity = (
-                    fuzz.ratio(prefix_out or "", prefix_entry or "") / 100.0
-                )
-                confidence = 0.95 if prefix_similarity > 0.5 else 0.90
+            # เช็คว่าเลขทะเบียนตรงกันหรือไม่ (สำคัญที่สุด)
+            if number_out == number_entry:
 
-                if confidence > highest_score:
-                    highest_score = confidence
-                    best_match = session
-                    match_type = "number_match"
-                    continue
+                # เช็คความเหมือนของจังหวัด (เผื่อ OCR อ่านจังหวัดเพี้ยนเล็กน้อย หรือมีการตัดคำว่า จังหวัด ออก)
+                prov_score = fuzz.ratio(province_out, province_entry)
 
-        # === FUZZY MATCH (80%+) ===
-        # ใช้เมื่อไม่มี exact หรือ number match
+                # เช็คความเหมือนของหมวดอักษร (Prefix)
+                prefix_score = fuzz.ratio(prefix_out, prefix_entry)
+
+                # คำนวณ Score ใหม่
+                # ถ้าเลขตรง + จังหวัดตรง (หรือใกล้เคียงมาก > 80%)
+                if prov_score > 80:
+                    current_conf = 0.0
+                    m_type = "fuzzy"
+
+                    if prefix_score > 70:
+                        # หมวดอักษรใกล้กันมาก (เช่น กง/กว) -> มั่นใจสูง
+                        current_conf = 0.95
+                        m_type = "number_strong_fuzzy"
+                    elif prefix_score > 40:
+                        # หมวดอักษรเพี้ยนแต่ยังพอมีเค้าโครง -> มั่นใจปานกลาง
+                        current_conf = 0.85
+                        m_type = "number_weak_fuzzy"
+                    else:
+                        # หมวดอักษรต่างกันเลย (เช่น กง vs ญญ) -> แต่อาจจะเป็นคันเดิมถ้าจังหวัดตรงและเลขตรง
+                        current_conf = 0.75
+                        m_type = "number_only"
+
+                    if current_conf > highest_score:
+                        highest_score = current_conf
+                        best_match = session
+                        match_type = m_type
+                        continue
+
+        # === 3. PURE FUZZY MATCH (Fallback) ===
+        # กรณีเลขอ่านผิดด้วย (เช่น 7405 อ่านเป็น 740S)
         plate_score = fuzz.ratio(plate_out, plate_entry) / 100.0
         province_score = fuzz.ratio(province_out, province_entry) / 100.0
 
-        # คำนวณ weighted score (ป้ายทะเบียนสำคัญกว่าจังหวัด)
-        combined_score = (plate_score * 0.8) + (province_score * 0.2)
+        # ให้ความสำคัญกับป้ายทะเบียนมากกว่าจังหวัด
+        combined_score = (plate_score * 0.85) + (province_score * 0.15)
 
         if combined_score > 0.80 and combined_score > highest_score:
             highest_score = combined_score
             best_match = session
             match_type = "fuzzy"
 
-    # ส่งค่ากลับ
-    if best_match:
+    # ตัดสินใจส่งค่ากลับ (Threshold = 0.75)
+    if best_match and highest_score >= 0.75:
+        logger.info(
+            f"Match Found: {best_match['plate_number_entry']} (Score: {highest_score:.2f})"
+        )
         return {
             "session": best_match,
-            "match_type": match_type or "fuzzy",
+            "match_type": match_type,
             "confidence": round(highest_score, 2),
         }
 
