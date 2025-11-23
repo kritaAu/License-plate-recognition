@@ -1,4 +1,3 @@
-// src/pages/Search.jsx
 import {
   useEffect,
   useState,
@@ -9,19 +8,20 @@ import {
 import Filters from "../components/Filters";
 import RecordsTable from "../components/RecordsTable";
 import ExportModal from "../components/ExportModal";
-import { formatThaiDateTime } from "../utils/date";
-
-const API = (
-  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
-).replace(/\/$/, "");
-const WS_URL =
-  (import.meta.env.VITE_WS_URL || API.replace(/^http/i, "ws")) + "/ws/events";
+import {
+  formatThaiDateTime,
+  addDays,
+  toLocalDateKey,
+} from "../utils/date";
+import { fetchEvents, EVENTS_WS_URL } from "../services/api";
 
 // จำกัดจำนวนรายการในหน้าเพื่อลดงานเรนเดอร์
 const LIST_LIMIT = 300;
+const BKK_TZ = "Asia/Bangkok";
 
-/* ===== Helpers ===== */
-// ภายใน/ภายนอก (fallback เมื่อ backend ไม่ส่ง check มา)
+/* ================= Helpers ================= */
+
+// ใช้ดูว่า role เป็นคนในหรือคนนอก
 function isInsideRole(role) {
   const r = String(role || "").trim();
   const rl = r.toLowerCase();
@@ -41,96 +41,157 @@ function toThaiDirection(v) {
 
 // ดึง URL รูป (ทนทานกับ schema เก่า/ใหม่)
 function extractImage(e = {}) {
-  return e.blob ?? null;
+  return (
+    e.imgUrl ||
+    e.image ||
+    e.blob ||
+    e.image_url ||
+    e.image_path ||
+    null
+  );
 }
 
-// คำนวณ limit ตามช่วงวัน (ยืดหยุ่นขึ้น แต่ไม่เกิน LIST_LIMIT)
+// คำนวณ limit ตามช่วงวัน (อิงจาก start/end ที่ผู้ใช้เลือก)
 function computeLimit(f) {
-  if (f?.start && f?.end) {
-    const ms = new Date(f.end) - new Date(f.start);
-    const days = Math.max(1, Math.round(ms / 86400000) + 1);
-    return Math.min(LIST_LIMIT, days * 120); // ประมาณ 120 รายการ/วัน
+  const hasRange = f.start && f.end;
+  if (!hasRange) return LIST_LIMIT;
+  try {
+    const start = new Date(f.start);
+    const end = new Date(f.end);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return LIST_LIMIT;
+    }
+    const diffDays =
+      Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) +
+      1;
+    // สมมติให้ 1 วันดึงได้ ~100 แถว แต่ไม่เกิน LIST_LIMIT
+    return Math.min(LIST_LIMIT, Math.max(1, diffDays) * 100);
+  } catch {
+    return LIST_LIMIT;
   }
-  return Math.min(LIST_LIMIT, 300);
 }
 
-// query ให้ตรงกับ backend (ใช้ query สำหรับป้ายทะเบียน)
-const buildQuery = (f) => {
-  const p = new URLSearchParams();
-  if (f.start) p.set("start_date", f.start);
-  if (f.end) p.set("end_date", f.end);
-  if (f.direction && f.direction !== "all") p.set("direction", f.direction);
-  if (f.query) p.set("query", f.query);
-  p.set("limit", String(computeLimit(f)));
-  return p.toString();
-};
+// map raw events จาก backend -> records ที่ใช้กับ RecordsTable
+function mapEventsToRows(raw) {
+  if (!Array.isArray(raw)) return [];
 
-// map ข้อมูลให้เข้ากับตาราง (ไม่ต่อจังหวัดใน plate)
-const mapRows = (raw) =>
-  Array.isArray(raw)
-    ? raw.map((e) => {
-        const img = extractImage(e);
-        return {
-          ...e,
-          time: formatThaiDateTime(e.time || e.datetime),
-          plate: e.plate || "-",
-          province: e.province || "-",
-          status: e.status || toThaiDirection(e.direction),
-          check:
-            e.check || (isInsideRole(e.role) ? "บุคคลภายใน" : "บุคคลภายนอก"),
-          imgUrl: img,
-          image: img,
-          _raw: e,
-        };
-      })
-    : [];
+  return raw.map((e) => {
+    const img = extractImage(e);
 
-// ตรวจว่าเรคคอร์ดจาก WS ตรงกับฟิลเตอร์ปัจจุบันไหม (กันเด้งรายการที่ไม่เกี่ยว)
-function recordPassesFilters(d, f) {
-  const dtVal = d.time || d.datetime;
-  const dt = dtVal ? new Date(dtVal) : null;
+    // ใส่ event_id / session_id ให้แน่ใจว่ามี
+    const eventId = e.event_id ?? e.id ?? null;
+    const sessionId = e.session_id ?? null;
+    const rawWithIds = { ...e, event_id: eventId, session_id: sessionId };
 
-  if (f.start && dt) {
-    const from = new Date(`${f.start}T00:00:00`);
-    if (dt < from) return false;
-  }
-  if (f.end && dt) {
-    const to = new Date(`${f.end}T23:59:59`);
-    if (dt > to) return false;
-  }
+    const isoTime =
+      e.datetime ||
+      e.time ||
+      e.entry_time ||
+      e.exit_time ||
+      e.created_at ||
+      null;
 
-  if (f.direction && f.direction !== "all") {
-    const de = String(d.direction || d.status || "").toUpperCase();
-    const norm = de === "เข้า" ? "IN" : de === "ออก" ? "OUT" : de;
-    if (norm !== f.direction.toUpperCase()) return false;
-  }
+    const plate =
+      e.plate ||
+      e.plate_entry ||
+      e.plate_exit ||
+      e.license_plate ||
+      e.plate_number ||
+      e.plate_number_entry ||
+      e.plate_number_exit ||
+      "-";
 
-  if (f.query) {
-    const q = f.query.toLowerCase();
-    if (
-      !String(d.plate || "")
-        .toLowerCase()
-        .includes(q)
-    )
-      return false;
-  }
+    const province =
+      e.province ||
+      e.province_entry ||
+      e.province_exit ||
+      e.plate_province ||
+      "";
 
-  return true;
+    let status =
+      e.status ||
+      e.parking_status ||
+      (e.direction ? toThaiDirection(e.direction) : "");
+
+    const role = e.role || e.member_role || e.person_role || "";
+    const check =
+      e.check ||
+      (role ? (isInsideRole(role) ? "บุคคลภายใน" : "บุคคลภายนอก") : "");
+
+    return {
+      ...rawWithIds,
+      isoTime,
+      time: isoTime ? formatThaiDateTime(isoTime) : "",
+      plate,
+      province,
+      status,
+      check,
+      imgUrl: img,
+      image: img,
+      _raw: rawWithIds,
+    };
+  });
 }
 
-/* ===== Page ===== */
+// ดึงวันที่ (แบบไทย / Asia-Bangkok) ทั้งหมดที่เกี่ยวข้องกับ record หนึ่งตัว
+function getRecordLocalDates(rec) {
+  const raw = rec._raw || {};
+  const candidates = [
+    rec.isoTime,
+    rec.time_iso,
+    rec.entry_time,
+    rec.exit_time,
+    rec.datetime,
+    raw.datetime,
+    raw.time,
+    raw.entry_time,
+    raw.exit_time,
+    raw.created_at,
+  ];
+
+  const result = new Set();
+  for (const val of candidates) {
+    if (!val) continue;
+    const d = new Date(val);
+    if (Number.isNaN(d.getTime())) continue;
+    const dateStr = d.toLocaleDateString("en-CA", { timeZone: BKK_TZ }); // YYYY-MM-DD
+    result.add(dateStr);
+  }
+  return Array.from(result);
+}
+
+// กรองตามช่วงวันที่ (ตีความเป็นเวลาไทย) จาก filters.start / filters.end
+function recordMatchesDateFilter(rec, filters) {
+  const start = filters?.start;
+  const end = filters?.end;
+  if (!start && !end) return true;
+
+  const dates = getRecordLocalDates(rec);
+  if (!dates.length) return true; // ถ้าไม่มีวันที่เลยก็ปล่อยผ่าน
+
+  return dates.some((d) => {
+    if (start && d < start) return false;
+    if (end && d > end) return false;
+    return true;
+  });
+}
+
+/* ================= Page ================= */
+
 export default function Search() {
   const [filters, setFilters] = useState({
     start: "",
     end: "",
+    // ตอนนี้ field นี้คือ "สถานะรถ" (ทั้งหมด / กำลังจอด / ออกแล้ว / ไม่พบข้อมูลขาเข้า)
     direction: "all",
+    // ฟิลเตอร์ประเภทบุคคล (ทั้งหมด / inside / outside)
+    personType: "all",
     query: "",
   });
   const [records, setRecords] = useState([]);
   const deferredRecords = useDeferredValue(records);
   const [loading, setLoading] = useState(true);
 
-  // state เปิด/ปิด Export Modal
   const [exportOpen, setExportOpen] = useState(false);
 
   const controllerRef = useRef(null);
@@ -143,48 +204,83 @@ export default function Search() {
     filtersRef.current = filters;
   }, [filters]);
 
-  // โหลดข้อมูลโดยยกเลิก request เก่าเสมอ (ลด overfetch)
   const load = async (f) => {
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
-    const { signal } = controller;
+  controllerRef.current?.abort();
+  const controller = new AbortController();
+  controllerRef.current = controller;
+  const { signal } = controller;
 
-    setLoading(true);
-    try {
-      const res = await fetch(`${API}/events?${buildQuery(f)}`, {
-        signal,
-        cache: "no-store",
-      });
-      if (!res.ok)
-        throw new Error(`API Error: ${res.status} ${res.statusText}`);
-      const raw = await res.json();
-      const mapped = mapRows(raw).slice(0, LIST_LIMIT);
-      startTransition(() => setRecords(mapped));
-    } catch (err) {
-      if (err.name !== "AbortError") {
-        console.error(err);
-        startTransition(() => setRecords([]));
-      }
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  try {
+    // ===== ปรับวันที่ที่จะส่งไป backend =====
+    let backendStart = f.start || undefined;
+    if (f.start) {
+      // ถ้ามีวันที่เริ่ม → ลดไป 1 วัน เพื่อกันกรณี timezone (UTC+7)
+      const d = addDays(f.start, -1);
+      backendStart = toLocalDateKey(d);
     }
-  };
 
-  // โหลดครั้งแรก
+    const params = {
+      start: backendStart,
+      end: f.end || undefined,
+      query: f.query || undefined,
+      limit: computeLimit(f),
+    };
+
+    // ไม่ส่งค่า direction ที่เป็นสถานะรถไป backend (ใช้เฉพาะ IN/OUT เท่านั้นถ้ามี)
+    if (f.direction === "IN" || f.direction === "OUT") {
+      params.direction = f.direction;
+    }
+
+    const raw = await fetchEvents(params, { signal });
+    let mapped = mapEventsToRows(raw);
+
+    // ===== กรองวันที่แบบเวลาไทย (ฝั่ง Front) =====
+    if (f.start || f.end) {
+      mapped = mapped.filter((rec) => recordMatchesDateFilter(rec, f));
+    }
+
+    // ===== กรองป้ายทะเบียน (กันกรณี backend ไม่รองรับ query) =====
+    if (f.query) {
+      const q = f.query.toLowerCase();
+      mapped = mapped.filter((rec) =>
+        String(rec.plate || rec._raw?.plate || "")
+          .toLowerCase()
+          .includes(q)
+      );
+    }
+
+    mapped = mapped.slice(0, LIST_LIMIT);
+
+    startTransition(() => setRecords(mapped));
+  } catch (err) {
+    if (err.name === "AbortError") return;
+    console.error(err);
+    startTransition(() => setRecords([]));
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+  // initial load
   useEffect(() => {
     load(filters);
-    return () => controllerRef.current?.abort();
+    return () => {
+      controllerRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // WebSocket: รับเหตุการณ์ใหม่ (ที่ผ่านฟิลเตอร์) แทรกบนสุด และจำกัดจำนวน
+  // WebSocket live update
   useEffect(() => {
+    if (!EVENTS_WS_URL) return;
+
     stopRef.current = false;
     let retry = retryRef.current;
 
-    function connect() {
-      const ws = new WebSocket(WS_URL);
+    const connect = () => {
+      const ws = new WebSocket(EVENTS_WS_URL);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -196,42 +292,52 @@ export default function Search() {
           const data =
             typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
           if (!data) return;
-          if (!recordPassesFilters(data, filtersRef.current)) return;
 
-          const dt = data.time || data.datetime;
-          if (!dt) return;
+          // map 1 แถวจาก message
+          const mappedArr = mapEventsToRows([data]);
+          const newRecord = mappedArr[0];
+          if (!newRecord) return;
 
-          const img = extractImage(data);
-          const newRecord = {
-            time: formatThaiDateTime(dt),
-            plate: data.plate || "-",
-            province: data.province || "-",
-            status: data.status || toThaiDirection(data.direction),
-            check:
-              data.check ||
-              (isInsideRole(data.role) ? "บุคคลภายใน" : "บุคคลภายนอก"),
-            imgUrl: img,
-            image: img,
-            _raw: data,
-          };
+          const currentFilters = filtersRef.current;
+
+          // กรองช่วงวันที่ด้วยเวลาไทย
+          if (!recordMatchesDateFilter(newRecord, currentFilters)) return;
+
+          // กรอง query
+          if (currentFilters.query) {
+            const q = currentFilters.query.toLowerCase();
+            const plateText = String(
+              newRecord.plate || newRecord._raw?.plate || ""
+            ).toLowerCase();
+            if (!plateText.includes(q)) return;
+          }
 
           startTransition(() => {
-            const keyOf = (r) =>
-              `${r.time}|${r.plate}|${r.province}|${r.status}`;
             setRecords((prev) => {
-              if (prev[0] && keyOf(prev[0]) === keyOf(newRecord)) return prev; // กันซ้ำหัวรายการ
+              const keyOf = (r) =>
+                `${r._raw?.event_id ?? r._raw?.id ?? ""}|${r.plate}|${
+                  r.province
+                }|${r.time}`;
+              const newKey = keyOf(newRecord);
+
+              if (prev[0] && keyOf(prev[0]) === newKey) return prev;
+
               const next = [newRecord, ...prev];
               if (next.length > LIST_LIMIT) next.length = LIST_LIMIT;
               return next;
             });
           });
-        } catch (e) {
-          console.error("WS message processing error:", e);
+        } catch (err) {
+          console.error("WS message error:", err);
         }
       };
 
       ws.onerror = () => {
-        ws.close();
+        try {
+          ws.close();
+        } catch {
+          // ignore
+        }
       };
 
       ws.onclose = () => {
@@ -240,7 +346,7 @@ export default function Search() {
         retryRef.current = retry;
         setTimeout(connect, delay);
       };
-    }
+    };
 
     connect();
 
@@ -248,57 +354,75 @@ export default function Search() {
       stopRef.current = true;
       try {
         wsRef.current?.close();
-      } catch {}
+      } catch {
+        // ignore
+      }
     };
   }, []);
 
-  // ใช้ฟิลเตอร์
   const onApply = () => {
     load(filters);
   };
 
-  // ล้างฟิลเตอร์
   const onReset = () => {
-    const f = { start: "", end: "", direction: "all", query: "" };
-    setFilters(f);
-    load(f);
+    const next = {
+      start: "",
+      end: "",
+      direction: "all",
+      personType: "all",
+      query: "",
+    };
+    setFilters(next);
+    load(next);
   };
 
-  // เปิด Export Modal
   const onExport = () => {
     setExportOpen(true);
   };
 
+  // direction สำหรับ Export CSV ยังใช้ IN/OUT/all ตาม backend
+  const exportDirection =
+    filters.direction === "IN" || filters.direction === "OUT"
+      ? filters.direction
+      : "all";
+
   return (
-    <div className="max-w-7xl mx-auto px-6 py-6 bg-gradient-to-tr from-white to-blue-400">
-      <div className="rounded-xl bg-slate-200/60 p-6">
+    <div className="max-w-7xl mx-auto px-4 pb-6 pt-4">
+      {/* กล่องฟิลเตอร์ด้านบน */}
+      <div className="mb-4 rounded-2xl bg-blue-300 p-4 shadow-sm backdrop-blur">
         <Filters
           filters={filters}
           setFilters={setFilters}
           onApply={onApply}
           onReset={onReset}
-          onExport={onExport} // ✅ เรียกเปิด CSV modal
+          onExport={onExport}
         />
       </div>
 
-      <section className="mt-6 rounded-2xl border border-slate-100 bg-white p-6 shadow">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-semibold">รายการล่าสุด</h3>
-          <span className="text-sm text-slate-600">
-            Items {deferredRecords.length} items
-          </span>
+      {/* ตารางรายการ */}
+      <section className="rounded-2xl bg-white/80 p-4 shadow-sm backdrop-blur">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800">
+              รายการล่าสุด
+            </h2>
+            <p className="text-xs text-slate-500">
+              แสดง session รถจักรยานยนต์ล่าสุดจากกล้อง
+            </p>
+          </div>
+          <div className="text-right text-xs text-slate-500">
+            <div>ทั้งหมด {deferredRecords.length} แถว</div>
+            {loading && (
+              <div className="text-[11px] text-amber-600">กำลังโหลด...</div>
+            )}
+          </div>
         </div>
 
-        <RecordsTable records={deferredRecords} />
+        <RecordsTable records={deferredRecords} filters={filters} />
 
-        {loading && (
-          <div className="py-6 text-center text-sm text-slate-600">
-            กำลังโหลด...
-          </div>
-        )}
         {!loading && deferredRecords.length === 0 && (
-          <div className="py-6 text-center text-sm text-slate-600">
-            ไม่พบข้อมูล
+          <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+            ไม่พบข้อมูลตามเงื่อนไขที่เลือก
           </div>
         )}
       </section>
@@ -310,7 +434,7 @@ export default function Search() {
         defaultFilters={{
           start: filters.start,
           end: filters.end,
-          direction: filters.direction,
+          direction: exportDirection,
           query: filters.query,
         }}
       />

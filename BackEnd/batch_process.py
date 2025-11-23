@@ -1,25 +1,20 @@
-import uvicorn
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from typing import List
-import io
-from supabase import create_client
-from PIL import Image
-import os
-from ultralytics import YOLO
-import numpy as np
-import requests
-from datetime import datetime
+import os,requests,cv2,io,base64
 from dotenv import load_dotenv
-import base64
-import cv2
+from ultralytics import YOLO
+from supabase import create_client
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+import numpy as np
+from typing import List, Optional, Tuple
+from PIL import Image
 from utils import *
-from OCR_ai import read_plate
+from datetime import datetime
+import uvicorn
+from OCR_ai import *
 
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-print("กำลังโหลดโมเดล YOLO (License Plate)...")
 try:
     model_lpr = YOLO("model/lpr_model.pt")
     model_mc = YOLO("model/motorcycle_model.pt")
@@ -38,11 +33,16 @@ except Exception as e:
 API_URL_EVENT = "http://127.0.0.1:8000/events"
 API_URL_CHECK = "http://127.0.0.1:8000/check_plate"
 PAD = 10
+MIN_CONFIDENCE = 0.3
+SCORE_WEIGHTS = {
+    'area': 0.3,
+    'sharpness': 0.3,
+    'confidence': 0.4
+}
 
 app = FastAPI()
 
-
-def send_event(payload: dict):
+def send_event(payload:dict):
     try:
         r = requests.post(API_URL_EVENT, json=payload, timeout=10)
         r.raise_for_status()
@@ -57,8 +57,7 @@ def send_event(payload: dict):
         raise HTTPException(
             status_code=503, detail=f"Cannot connect to API Server: {e}"
         )
-
-
+    
 def check_plate_in_system(plate: str, province: str):
     try:
         params = {"plate": plate, "province": province}
@@ -72,11 +71,144 @@ def check_plate_in_system(plate: str, province: str):
         print(f"[ERROR] เชื่อมต่อ API Server (/check_plate) ไม่ได้: {e}")
         return None
 
+# เปลี่ยนเป็นขาวดำแล้ววัดค่าความคม คืนเป็น float
+def blur_score(img_np):
+    gray = cv2.cvtColor(img_np,cv2.COLOR_BGR2GRAY)
+    return cv2.Laplacian(gray,cv2.CV_64F).var()
 
+def normalize_area(area: float, max_area: float = 50000) -> float:
+    return min(area / max_area, 1.0)
+
+def normalize_sharpness(sharpness: float, max_sharpness: float = 1000) -> float:
+    return min(sharpness / max_sharpness, 1.0)
+
+# คำนวณ score ของแต่ละป้าย
+def calculate_plate_score(area: float, sharpness: float, confidence: float) -> float:
+    area_norm = normalize_area(area)
+    sharp_norm = normalize_sharpness(sharpness)
+    
+    score = (
+        area_norm * SCORE_WEIGHTS['area'] +
+        sharp_norm * SCORE_WEIGHTS['sharpness'] +
+        confidence * SCORE_WEIGHTS['confidence']
+    )
+    
+    return score
+
+# ตรวจหามอไซ คืนมอไซ
+def detect_motorcycle(pil_image:Image.Image,frame_np:np.ndarray)->List[np.ndarray]:
+    mc = []
+
+    if model_mc:
+        try:
+            mc_results = model_mc(pil_image, classes=[3], verbose=False)
+            if mc_results[0].boxes and len(mc_results[0].boxes) > 0:
+                for box in mc_results[0].boxes.xyxy.cpu().numpy():
+                    x1, y1, x2, y2 = map(int, box)
+                    cropped = safe_crop(frame_np, x1, y1, x2, y2, pad=PAD)
+                    if cropped is not None:
+                        mc.append(cropped)
+        except Exception as e:
+            print(f"Error in motorcycle detection: {e}")
+    
+    if not mc:
+        mc.append(frame_np)
+    
+    return mc
+
+# หาป้ายที่ดีจากการคำนวณคะแนน
+def detect_best_plate(mc:np.ndarray)->Optional[dict]:
+    try:
+        results = model_lpr(
+            Image.fromarray(mc), 
+            classes=[0], 
+            verbose=False, 
+            conf=MIN_CONFIDENCE
+        )
+
+        if not results[0].boxes or len(results[0].boxes) == 0:
+            return None
+        
+        confs = results[0].boxes.conf.cpu().numpy()
+        boxes = results[0].boxes.xyxy.cpu().numpy()
+        areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+
+        best_idx = areas.argmax()
+        conf, box, area = confs[best_idx], boxes[best_idx], areas[best_idx]
+
+        if conf < MIN_CONFIDENCE:
+            return None
+        
+        sharpness = blur_score(mc)
+        score = calculate_plate_score(area, sharpness, conf)
+
+        plate_crop = safe_crop(mc, *map(int, box), pad=PAD)
+        if plate_crop is None:
+            return None
+        
+        return {
+            'crop': plate_crop,
+            'score': score,
+            'confidence': float(conf),
+            'area': float(area),
+            'sharpness': float(sharpness)
+        }
+    except Exception as e:
+        print(f"Error in plate detection: {e}")
+        return None
+
+# เรียกใช้สองที่หามอไซกับป้ายแล้วเปรียบเทียบคะแนน
+def process_img(image_bytes: bytes, filename: str)->Optional[dict]:
+    try:
+        pil_image = Image.open(io.BytesIO(image_bytes))
+        frame_np = np.array(pil_image)
+
+        mcs = detect_motorcycle(pil_image,frame_np)
+
+        best_plate = None
+        for mc in mcs:
+            plate_info = detect_best_plate(mc)
+
+            if plate_info and(best_plate is None or plate_info['score']>best_plate['score']):
+                best_plate = plate_info
+            
+            if best_plate:
+                return {
+                    **best_plate,
+                    'full_image_bytes': image_bytes,
+                    'filename': filename
+                }
+            return None
+    except Exception as e:
+        print(f"Error processing image {filename}: {e}")
+        return None
+
+# ส่งภาพที่ครอปไป OCR
+def perform_ocr(plate_crop: np.ndarray) -> Tuple[Optional[str], Optional[str]]:
+    try:
+        _, buffer = cv2.imencode(".jpg", plate_crop)
+        img_b64 = base64.b64encode(buffer).decode("utf-8")
+        ocr_result = read_plate(img_b64=img_b64)
+        
+        plate_text = ocr_result.get("plate")
+        province_text = ocr_result.get("province")
+        
+        return plate_text, province_text
+        
+    except Exception as e:
+        print(f"OCR error: {e}")
+        return None, None
+
+def upload_image(image_bytes: bytes) -> Optional[str]:
+    try:
+        return upload_image_to_storage(image_bytes, ext="jpg", folder="plates")
+    except Exception as e:
+        print(f"Image upload error: {e}")
+        return None
+    
 @app.get("/")
 def root():
-    return {"message": "FastAPI is running!"}
-
+    return {"message": "Hello Test"}
 
 @app.post("/batch")
 async def handle_flutter_batch(
@@ -85,68 +217,64 @@ async def handle_flutter_batch(
     cam_id: int = Form(...),
     direction: str = Form(...),
 ):
+    if not images:
+        raise HTTPException(status_code=400, detail="No images provided")
+    
+    print(f"\n{'='*60}")
+    print(f"Batch Received: {batch_id}")
+    print(f"Camera: {cam_id} | Direction: {direction} | Images: {len(images)}")
+    print(f"{'='*60}\n")
 
-    print(f"---Server: Batch Received ---")
-    print(f"Batch ID: {batch_id}, Cam ID: {cam_id}, Direction: {direction}")
-    print(f"File Count: {len(images)}")
-
-    best_plate_conf = 0.0
-    best_plate_crop_np = None
-    best_full_image_bytes = None
-    best_filename = ""
-    best_frame_np = None
+    best_result = None
     first_image_bytes = None
 
-    for i,file in enumerate(images):
-        image_bytes = await file.read()
-        if i == 0:
-            first_image_bytes = image_bytes
-        pil_image = Image.open(io.BytesIO(image_bytes))
-        frame_np = np.array(pil_image)
-        plate_candidates = []
-
-        if model_mc:
-            mc_results = model_mc(pil_image, classes=[3], verbose=False, device=0)
-            if mc_results[0].boxes and len(mc_results[0].boxes) > 0:
-                for box in mc_results[0].boxes.xyxy.cpu().numpy():
-                    x1, y1, x2, y2 = map(int, box)
-                    plate_candidates.append(safe_crop(frame_np, x1, y1, x2, y2, pad=PAD))
-
-        # fallback ตรวจป้ายเต็มภาพ
-        if not plate_candidates:
-            plate_candidates.append(frame_np)
-
-        # ตรวจป้ายทุก candidate
-        for candidate in plate_candidates:
-            results = model_lpr(Image.fromarray(candidate), classes=[0], verbose=False)
-            if results[0].boxes:
-                try:
-                    confs = results[0].boxes.conf.cpu().numpy()
-                    boxes = results[0].boxes.xyxy.cpu().numpy()
-                    best_idx = confs.argmax()
-                    conf, box = confs[best_idx], boxes[best_idx]
-
-                    if conf > best_plate_conf:
-                        best_plate_conf = conf
-                        best_plate_crop_np = safe_crop(candidate, *map(int, box), pad=PAD)
-                        best_full_image_bytes = image_bytes
-                        best_frame_np = candidate
-                        best_filename = file.filename
-                except Exception:
-                    continue
-
-    if best_plate_crop_np is not None:
-        print(f"Best file: {best_filename}")
-        print(f"Best frame shape: {best_frame_np.shape}")                
-    # หลังวนครบ batch
-    if best_plate_crop_np is None:
-        print("ไม่พบป้ายทะเบียนใน Batch นี้")
-        image_to_upload = first_image_bytes or await images[0].read()
+    for i ,file in enumerate(images):
         try:
-            image_url = upload_image_to_storage(image_to_upload, ext="jpg", folder="plates")
-        except Exception:
-            image_url = None
+            image_bytes = await file.read()
 
+            if i == 0:
+                first_image_bytes = image_bytes
+
+            result = process_img(image_bytes, file.filename)
+
+            if result and (best_result is None or result['score'] > best_result['score']):
+                best_result = result
+                print(f" New best plate found in {file.filename}")
+                print(f"  Score: {result['score']:.3f} | Conf: {result['confidence']:.2f} | Area: {result['area']:.0f}")
+        except Exception as e:
+            print(f" Failed to process {file.filename}: {e}")
+            continue
+
+    if best_result:
+        print(f"\n Best plate selected from {best_result['filename']}")
+        
+        #ส่งไป ocr
+        plate_text, province_text = perform_ocr(best_result['crop'])
+        
+        #อัพรูป
+        image_url = upload_image(best_result['full_image_bytes'])
+        
+        #เช็ครถในระบบ
+        vehicle_id = check_plate_in_system(plate_text, province_text)
+        
+        event_payload = {
+            "datetime": datetime.now().isoformat(),
+            "plate": plate_text,
+            "province": province_text,
+            "direction": direction,
+            "blob": image_url,
+            "cam_id": cam_id,
+            "vehicle_id": vehicle_id,
+        }
+        
+        print(f"Plate: {plate_text} | Province: {province_text}")
+        
+    else:
+        print("\n No license plate detected in batch")
+        
+        # Upload first image as fallback
+        image_url = upload_image(first_image_bytes) if first_image_bytes else None
+        
         event_payload = {
             "datetime": datetime.now().isoformat(),
             "plate": "ไม่มีป้ายทะเบียน",
@@ -156,30 +284,9 @@ async def handle_flutter_batch(
             "cam_id": cam_id,
             "vehicle_id": None,
         }
-        return send_event(event_payload)
-
-    # ถ้าเจอป้าย
-    _, buffer = cv2.imencode(".jpg", best_plate_crop_np)
-    img_b64 = base64.b64encode(buffer).decode("utf-8")
-    ocr_result = read_plate(img_b64=img_b64)
-    plate_text = ocr_result.get("plate", None)
-    province_text = ocr_result.get("province", None)
-
-    try:
-        image_url = upload_image_to_storage(best_full_image_bytes, ext="jpg", folder="plates")
-    except Exception:
-        image_url = None
-
-    vehicle_id = check_plate_in_system(plate_text, province_text)
-    event_payload = {
-        "datetime": datetime.now().isoformat(),
-        "plate": plate_text,
-        "province": province_text,
-        "direction": direction,
-        "blob": image_url,
-        "cam_id": cam_id,
-        "vehicle_id": vehicle_id,
-    }
+    
+    print(f"{'='*60}\n")
+    
     return send_event(event_payload)
 
 if __name__ == "__main__":

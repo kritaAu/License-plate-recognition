@@ -1,7 +1,7 @@
 // src/components/ExportModal.jsx
 import { useEffect, useMemo, useState } from "react";
 import { formatThaiDateTime } from "../utils/date";
-
+import { fetchEvents, fetchMembers } from "../services/api";
 const API = (
   import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
@@ -56,6 +56,32 @@ function computeExportLimit(start, end) {
     return Math.min(EXPORT_MAX, days * 300); // ประมาณ 300 รายการ/วัน
   }
   return EXPORT_MAX;
+}
+
+/** เพิ่ม/ลดวันที่แบบง่าย ๆ (รับ "YYYY-MM-DD" คืนค่า string เดิมถ้า parse ไม่ได้) */
+function addDays(dateStr, delta) {
+  if (!dateStr) return "";
+  const d = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+/** เช็กว่า event อยู่ในช่วงวันที่ (ตามเวลาไทย) ที่ผู้ใช้เลือกหรือไม่ */
+function isEventInLocalRange(ev, startDate, endDate) {
+  if (!startDate && !endDate) return true;
+  const iso = ev.time || ev.datetime;
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+
+  const localYMD = d.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Bangkok",
+  }); // "YYYY-MM-DD"
+
+  if (startDate && localYMD < startDate) return false;
+  if (endDate && localYMD > endDate) return false;
+  return true;
 }
 
 /* ===== Date presets ===== */
@@ -153,31 +179,41 @@ export default function ExportModal({ open, onClose, defaultFilters = {} }) {
         return;
       }
 
-      // 1) สร้าง query สำหรับ /events
+      // ===== 1) แปลงช่วงวันที่สำหรับ API (ขยาย ±1 วัน เพื่อกัน timezone) =====
+      const apiStart = addDays(startDate, -1);
+      const apiEnd = addDays(endDate, 1);
+
       const evParams = new URLSearchParams();
-      evParams.set("start_date", startDate);
-      evParams.set("end_date", endDate);
+      evParams.set("start_date", apiStart);
+      evParams.set("end_date", apiEnd);
       if (direction && direction !== "all") {
         evParams.set("direction", direction);
       }
       if (query.trim()) {
         evParams.set("query", query.trim());
       }
-      evParams.set("limit", String(computeExportLimit(startDate, endDate)));
+      evParams.set("limit", String(computeExportLimit(apiStart, apiEnd)));
 
       // 2) ดึง events + members พร้อมกัน
-      const [evRes, memRes] = await Promise.all([
-        fetch(`${API}/events?${evParams.toString()}`),
-        fetch(`${API}/members`),
-      ]);
+const [eventsRaw, membersRaw] = await Promise.all([
+  fetchEvents({
+    start: apiStart,
+    end: apiEnd,
+    direction: direction === "all" ? undefined : direction,
+    query: query.trim() || undefined,
+    limit: computeExportLimit(apiStart, apiEnd),
+  }),
+  fetchMembers(),
+]);
 
-      if (!evRes.ok) throw new Error(`Events fetch failed: ${evRes.status}`);
-      if (!memRes.ok) throw new Error(`Members fetch failed: ${memRes.status}`);
+let events = Array.isArray(eventsRaw) ? eventsRaw : [];
+let members = Array.isArray(membersRaw) ? membersRaw : [];
 
-      let events = await evRes.json();
-      let members = await memRes.json();
-      if (!Array.isArray(events)) events = [];
-      if (!Array.isArray(members)) members = [];
+
+      // ===== 2.5) กรองช่วงวันที่อีกทีตาม "วันที่ไทย" ที่ผู้ใช้เลือก =====
+      events = events.filter((e) =>
+        isEventInLocalRange(e, startDate, endDate)
+      );
 
       // 3) ทำ map plate+province -> member
       const memberMap = new Map();
@@ -207,7 +243,6 @@ export default function ExportModal({ open, onClose, defaultFilters = {} }) {
           const full = `${member.firstname || ""} ${member.lastname || ""}`.trim();
           if (full) name = full;
         } else if (inside) {
-          // ภายในแต่หา member ไม่เจอ
           name = "ไม่ทราบชื่อ";
         }
 

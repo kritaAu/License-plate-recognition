@@ -1,8 +1,9 @@
 // src/pages/LoginPage.jsx
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { login, fetchDashboardDaily } from "../services/api";
 
-// ใช้รูปแบบเดียวกับหน้า Home / Search
+
 const API = (
   import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
@@ -25,16 +26,6 @@ const AuthService = {
   },
 };
 
-// ===== ฟังก์ชันเดียวกับ Home.jsx =====
-function getDirectionCode(ev = {}) {
-  const rawDir = (ev.direction ?? "").toString().trim().toUpperCase();
-  const statusStr = (ev.status ?? "").toString();
-
-  if (rawDir === "IN" || statusStr.includes("เข้า")) return "IN";
-  if (rawDir === "OUT" || statusStr.includes("ออก")) return "OUT";
-  return "UNKNOWN";
-}
-
 const pad2 = (n) => String(n).padStart(2, "0");
 function dateToYMD(d) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -52,20 +43,10 @@ export default function LoginPage() {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // ===== ดึงสถิติวันนี้จาก /events (ใช้ useCallback ให้ ref คงที่) =====
-  const fetchTodayStatsFromEvents = useCallback(async () => {
+ const fetchTodayStatsFromEvents = useCallback(async () => {
   try {
-    const todayStr = dateToYMD(new Date()); // YYYY-MM-DD แบบเดียวกับ backend
-
-    // ✓ เปลี่ยนมาใช้ /dashboard/daily แทน /events
-    const res = await fetch(`${API}/dashboard/daily?date=${todayStr}`, {
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
-      throw new Error(`API error: ${res.status}`);
-    }
-
-    const hourly = await res.json(); // รูปแบบ: [{ label, inside, outside }, ... ]
+    const todayStr = dateToYMD(new Date());
+    const hourly = await fetchDashboardDaily(todayStr);
 
     const inCount = hourly.reduce(
       (sum, h) => sum + (h.inside ?? h.in ?? 0),
@@ -82,6 +63,7 @@ export default function LoginPage() {
     setTodayStats({ in: 0, out: 0 });
   }
 }, []);
+
 
   // ===== initial effect =====
   useEffect(() => {

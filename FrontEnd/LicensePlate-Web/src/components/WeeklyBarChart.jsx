@@ -1,4 +1,3 @@
-// src/components/WeeklyBarChart.jsx
 import {
   ResponsiveContainer,
   BarChart,
@@ -12,8 +11,9 @@ import {
 
 function Tip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
-  const pIn  = payload.find((p) => p.dataKey === "in")?.value ?? 0;
+  const pIn = payload.find((p) => p.dataKey === "in")?.value ?? 0;
   const pOut = payload.find((p) => p.dataKey === "out")?.value ?? 0;
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow">
       <div className="text-xs font-semibold text-slate-700">{label}</div>
@@ -35,7 +35,12 @@ export default function WeeklyBarChart({ data = [] }) {
   // รองรับ data แบบเก่า {label,count} โดยแปลงเป็น {label,in,out}
   const normalized = (Array.isArray(data) ? data : []).map((d) => ({
     label: d.label,
-    in: typeof d.in === "number" ? d.in : (typeof d.count === "number" ? d.count : 0),
+    in:
+      typeof d.in === "number"
+        ? d.in
+        : typeof d.count === "number"
+        ? d.count
+        : 0,
     out: typeof d.out === "number" ? d.out : 0,
   }));
 
@@ -69,12 +74,24 @@ export default function WeeklyBarChart({ data = [] }) {
             <Tooltip content={<Tip />} />
             <Legend
               wrapperStyle={{ fontSize: 12 }}
-              formatter={(v) => (v === "in" ? "รถเข้า (IN)" : "รถออก (OUT)")}
+              formatter={(value, entry) =>
+                entry.dataKey === "in" ? "รถเข้า (IN)" : "รถออก (OUT)"
+              }
             />
             {/* เขียว = เข้า */}
-            <Bar dataKey="in" name="รถเข้า (IN)" fill="#22c55e" radius={[8, 8, 0, 0]} />
+            <Bar
+              dataKey="in"
+              name="รถเข้า (IN)"
+              fill="#22c55e"
+              radius={[8, 8, 0, 0]}
+            />
             {/* แดง = ออก */}
-            <Bar dataKey="out" name="รถออก (OUT)" fill="#ef4444" radius={[8, 8, 0, 0]} />
+            <Bar
+              dataKey="out"
+              name="รถออก (OUT)"
+              fill="#ef4444"
+              radius={[8, 8, 0, 0]}
+            />
           </BarChart>
         </ResponsiveContainer>
       )}
