@@ -24,9 +24,8 @@ def normalize_province(province: str) -> str:
         "กทม": "กรุงเทพมหานคร",
         "กรุงเทพฯ": "กรุงเทพมหานคร",
         "กรุงเทพ": "กรุงเทพมหานคร",
-        "ระยอง": "ระยอง",
-        "ชลบุรี": "ชลบุรี",
-        "เชียงใหม่": "เชียงใหม่",
+        "โคราช": "นครราชสีมา",
+        "เมืองหลวง": "กรุงเทพมหานคร",
     }
 
     for key, value in province_map.items():
@@ -36,19 +35,32 @@ def normalize_province(province: str) -> str:
     return province_lower
 
 
+def extract_numbers_only(plate: str) -> str:
+    """
+    ดึงเฉพาะตัวเลขออกจากทะเบียน
+    เช่น "8ฟม 4325" -> "4325"
+    เช่น "1กก 1234" -> "1234" (เอาเฉพาะชุดหลัง)
+    """
+    if not plate:
+        return ""
+
+    # ดึงเลขทุกตัว
+    numbers = re.findall(r"\d+", plate)
+
+    # ถ้ามีเลขหลายชุด ให้เอาชุดสุดท้าย (ปกติทะเบียนคือ 1กก 1234 -> เอา 1234)
+    if numbers:
+        return numbers[-1]
+    return ""
+
+
 def extract_plate_parts(plate: str):
     """แยกส่วนของป้ายทะเบียน: ตัวเลข vs ตัวอักษร"""
     if not plate:
         return None, None
 
-    # ลบช่องว่างทั้งหมด และอักขระพิเศษ
     clean = "".join(e for e in plate if e.isalnum())
-
-    # หาตัวเลขกลุ่มสุดท้าย (เลขทะเบียนหลัก)
     numbers = re.findall(r"\d+", clean)
     last_number = numbers[-1] if numbers else ""
-
-    # ส่วนที่เหลือคือตัวอักษร + เลขหน้า
     prefix = clean.replace(last_number, "") if last_number else clean
 
     return prefix, last_number
@@ -57,15 +69,11 @@ def extract_plate_parts(plate: str):
 def check_recent_entries(
     plate_out: str, province: str, supabase: Client, hours_back: int = 24
 ):
-    """
-    เช็คว่ามี Event เข้า (IN) ที่คล้ายกันในช่วง X ชั่วโมงที่ผ่านมาหรือไม่
-    ช่วยเพิ่มความมั่นใจในการ match
-    """
+    """เช็ค Event ย้อนหลังเพื่อช่วย Match"""
     try:
-        # คำนวณเวลาย้อนหลัง
         time_threshold = (datetime.now() - timedelta(hours=hours_back)).isoformat()
 
-        # ดึง Event ที่เป็น IN ในช่วงเวลาที่กำหนด
+        # ดึง Event ขาเข้าล่าสุด
         recent_entries = (
             supabase.table("Event")
             .select("event_id, datetime, plate, province, direction")
@@ -77,28 +85,23 @@ def check_recent_entries(
         if not recent_entries.data:
             return []
 
-        # หาป้ายที่คล้ายกัน
-        prefix_out, number_out = extract_plate_parts(plate_out)
-        province_out = (province or "").strip().lower()
+        # หาเฉพาะเลขทะเบียน
+        number_out = extract_numbers_only(plate_out)
+        province_out = normalize_province(province)
 
         matching_entries = []
 
         for event in recent_entries.data:
             plate_entry = event.get("plate", "")
-            province_entry = (event.get("province", "") or "").strip().lower()
+            province_entry = normalize_province(event.get("province", ""))
+            number_entry = extract_numbers_only(plate_entry)
 
-            # เช็คความคล้าย
-            prefix_entry, number_entry = extract_plate_parts(plate_entry)
-
-            # ถ้าเลขทะเบียนตรงกัน + จังหวัดใกล้เคียง
+            # Logic: เลขตรง + จังหวัดตรง = เก็บไว้พิจารณา
             if number_out == number_entry:
                 prov_score = fuzz.ratio(province_out, province_entry)
-                if prov_score >= 70:
+                if prov_score >= 80:  # จังหวัดต้องค่อนข้างชัวร์
                     matching_entries.append({"event": event, "similarity": prov_score})
 
-        logger.info(
-            f"Found {len(matching_entries)} similar entries in last {hours_back}h"
-        )
         return matching_entries
 
     except Exception as e:
@@ -106,33 +109,8 @@ def check_recent_entries(
         return []
 
 
-def _calculate_number_match_score(prefix_score: float, event_boost: float):
-    """คำนวณคะแนนจากการ match เลขทะเบียน"""
-    if prefix_score >= 75:
-        return 0.95 + event_boost, "number_strong_fuzzy"
-    elif prefix_score >= 50:
-        return 0.88 + event_boost, "number_medium_fuzzy"
-    elif prefix_score >= 30:
-        return 0.82 + event_boost, "number_weak_fuzzy"
-    else:
-        return 0.75 + event_boost, "number_only"
-
-
-def _check_event_boost(entry_event_id, recent_entries, session_id):
-    """เช็คว่า session มี Event ID ที่ตรงกับ recent_entries หรือไม่"""
-    if not entry_event_id or not recent_entries:
-        return 0.0
-
-    for entry in recent_entries:
-        if entry["event"]["event_id"] == entry_event_id:
-            logger.debug(f"  Event match bonus for session {session_id}")
-            return 0.05
-
-    return 0.0
-
-
 def _check_exact_match(plate_out: str, province_out: str, session: dict):
-    """เช็ค Exact Match"""
+    """1. เช็คเป๊ะทุกตัวอักษร"""
     plate_entry = session.get("plate_number_entry", "")
     province_entry = normalize_province(session.get("province", ""))
 
@@ -142,97 +120,76 @@ def _check_exact_match(plate_out: str, province_out: str, session: dict):
     province_match = province_out == province_entry
 
     if plate_match and province_match:
-        logger.info(f"Exact match found: {plate_entry}")
         return {"session": session, "match_type": "exact", "confidence": 1.0}
 
     return None
 
 
-def _check_number_priority_match(
-    plate_out: str,
-    province_out: str,
-    prefix_out: str,
-    number_out: str,
-    session: dict,
-    event_boost: float,
+def _check_numeric_ignore_thai(
+    plate_out: str, province_out: str, session: dict, event_boost: float
 ):
-    """เช็ค Number-Priority Match (เน้นเลขทะเบียน)"""
-    if not number_out:
-        return None, 0.0, None
-
+    """
+    2. เช็คแบบไม่สนอักษรไทย (Numeric Match)
+    Logic: เลขตรงเป๊ะ + จังหวัดตรงเป๊ะ = Match เลย (Confidence สูง)
+    """
     plate_entry = session.get("plate_number_entry", "")
     province_entry = normalize_province(session.get("province", ""))
 
-    prefix_entry, number_entry = extract_plate_parts(plate_entry)
+    # ดึงเฉพาะตัวเลข
+    num_out = extract_numbers_only(plate_out)
+    num_entry = extract_numbers_only(plate_entry)
 
-    # เช็คว่าเลขทะเบียนตรงกันหรือไม่
-    if number_out != number_entry:
+    # 1. เลขต้องมีค่าและต้องตรงกันเป๊ะๆ
+    if not num_out or not num_entry or num_out != num_entry:
         return None, 0.0, None
 
-    # เช็คความเหมือนของจังหวัด
+    # 2. จังหวัดต้องตรงกัน (หรือใกล้เคียงมากๆ)
     prov_score = fuzz.ratio(province_out, province_entry)
 
-    # ถ้าเลขตรง + จังหวัดตรง (หรือใกล้เคียงมาก)
-    if prov_score < 60:
-        return None, 0.0, None
+    if prov_score >= 85:  # ยอมให้ผิดนิดเดียว เช่น กทม. vs กรุงเทพ
+        # คำนวณความเหมือนของ Prefix (อักษรหน้า) ไว้ประดับบารมี แต่ไม่ได้ใช้ตัดเกรดโหด
+        # เพื่อแยกกรณีรถคนละคันแต่เลขเหมือนกัน (1กก 1234 vs 2ขข 1234)
+        # แต่ User บอกว่าไม่ต้องสนอักษรไทย ดังนั้นเราให้ Score สูงเลยถ้าเลขตรง
 
-    # เช็คความเหมือนของหมวดอักษร
-    prefix_score = fuzz.ratio(prefix_out.lower(), prefix_entry.lower())
+        base_score = 0.90  # ให้คะแนนเริ่มต้นสูงมากเพราะเลขตรง+จังหวัดตรง
+        final_score = base_score + event_boost
 
-    # คำนวณคะแนน
-    current_conf, m_type = _calculate_number_match_score(prefix_score, event_boost)
+        logger.info(f"Numeric Match Found! {plate_entry} == {plate_out} (Ignore Thai)")
+        return session, final_score, "numeric_ignore_thai"
 
-    logger.debug(
-        f"  → Candidate: {plate_entry} | "
-        f"Prefix:{prefix_score:.1f}% Province:{prov_score:.1f}% | "
-        f"Score:{current_conf:.2f} Type:{m_type}"
-    )
-
-    return session, current_conf, m_type
+    return None, 0.0, None
 
 
 def _check_fuzzy_match(
     plate_out: str, province_out: str, session: dict, event_boost: float
 ):
-    """เช็ค Pure Fuzzy Match (Fallback)"""
+    """3. เช็คแบบคล้ายคลึง (Fuzzy - กรณีเลขอาจจะเพี้ยนด้วย)"""
     plate_entry = session.get("plate_number_entry", "")
     province_entry = normalize_province(session.get("province", ""))
 
     plate_score = (
-        fuzz.ratio(
-            plate_out.replace(" ", "").lower(), plate_entry.replace(" ", "").lower()
-        )
-        / 100.0
+        fuzz.ratio(plate_out.replace(" ", ""), plate_entry.replace(" ", "")) / 100.0
     )
-
     province_score = fuzz.ratio(province_out, province_entry) / 100.0
 
-    # ให้ความสำคัญกับป้ายทะเบียนมากกว่าจังหวัด
-    combined_score = (plate_score * 0.85) + (province_score * 0.15) + event_boost
+    combined_score = (plate_score * 0.7) + (province_score * 0.3) + event_boost
 
-    if combined_score < 0.70:
-        return None, 0.0, None
+    if combined_score > 0.75:
+        return session, combined_score, "fuzzy"
 
-    logger.debug(
-        f"  → Fuzzy candidate: {plate_entry} | "
-        f"Plate:{plate_score:.2f} Province:{province_score:.2f} | "
-        f"Combined:{combined_score:.2f}"
-    )
-
-    return session, combined_score, "fuzzy"
+    return None, 0.0, None
 
 
 def find_best_match(plate_out: str, province: str, supabase: Client):
     """
-    หาคู่ที่ตรงที่สุดจาก status='parked'
-    ปรับปรุง: เช็ค Event table ก่อน แล้วค่อย match กับ parkingsession
-    เน้นความแม่นยำของตัวเลขมากกว่าตัวอักษร
-    รองรับกรณี OCR อ่านหมวดอักษรผิด (เช่น กม/กพ)
+    หาคู่ที่ตรงที่สุด โดยเรียงลำดับความสำคัญ:
+    1. ตรงเป๊ะ (Exact)
+    2. เลขตรง+จังหวัดตรง (Numeric Ignore Thai) **ตามที่ user ขอ**
+    3. คล้ายคลึง (Fuzzy)
     """
-    # เพิ่มการเช็ค Event table ก่อน
-    recent_entries = check_recent_entries(plate_out, province, supabase, hours_back=24)
+    # 1. เตรียมข้อมูล
+    recent_entries = check_recent_entries(plate_out, province, supabase)
 
-    # ค้นหา sessions ที่ยังจอดอยู่
     parked = (
         supabase.table("parkingsession")
         .select("*")
@@ -242,76 +199,56 @@ def find_best_match(plate_out: str, province: str, supabase: Client):
     )
 
     if not parked.data:
-        logger.warning("No parked sessions available")
         return None
 
-    logger.info(f"Found {len(parked.data)} parked sessions to match against")
-
-    # แยกส่วนของป้ายทะเบียนขาออก
-    prefix_out, number_out = extract_plate_parts(plate_out)
     province_out = normalize_province(province)
-
-    logger.info(
-        f"🔍 Matching: {plate_out} (Pre:{prefix_out}, Num:{number_out}) "
-        f"Prov:{province_out}"
-    )
 
     best_match = None
     highest_score = 0
     match_type = None
 
-    logger.debug(f"Checking {len(parked.data)} parked sessions...")
-
+    # วนลูปเช็คทุกคันที่จอดอยู่
     for session in parked.data:
-        logger.debug(
-            f"  Comparing with: {session.get('plate_number_entry', '')} "
-            f"({normalize_province(session.get('province', ''))})"
+        # Boost คะแนนถ้า Event ID ตรงกับประวัติที่ดึงมา
+        event_boost = (
+            0.05
+            if any(
+                r["event"]["event_id"] == session.get("entry_event_id")
+                for r in recent_entries
+            )
+            else 0.0
         )
 
-        # 1. EXACT MATCH (100%)
-        exact_result = _check_exact_match(plate_out, province_out, session)
-        if exact_result:
-            return exact_result
+        # Step 1: Exact Match
+        res = _check_exact_match(plate_out, province_out, session)
+        if res:
+            return res  # เจอเป๊ะ คืนค่าเลย
 
-        # 2. เช็คว่า session นี้มี Event ID ที่ตรงกับ recent_entries หรือไม่
-        event_boost = _check_event_boost(
-            session.get("entry_event_id"), recent_entries, session.get("session_id")
-        )
-
-        # 3. NUMBER-PRIORITY MATCH (เน้นเลขทะเบียน)
-        num_session, num_score, num_type = _check_number_priority_match(
-            plate_out, province_out, prefix_out, number_out, session, event_boost
-        )
-
-        if num_session and num_score > highest_score:
-            highest_score = num_score
-            best_match = num_session
-            match_type = num_type
-            continue
-
-        # 4. PURE FUZZY MATCH (Fallback)
-        fuzzy_session, fuzzy_score, fuzzy_type = _check_fuzzy_match(
+        # Step 2: Numeric Match (Ignore Thai Chars) <-- ไฮไลท์ของคำถามนี้
+        num_sess, num_score, num_type = _check_numeric_ignore_thai(
             plate_out, province_out, session, event_boost
         )
+        if num_sess and num_score > highest_score:
+            highest_score = num_score
+            best_match = num_sess
+            match_type = num_type
+            continue  # ถ้าเจอแบบนี้แล้ว ไม่ต้องไปเช็ค Fuzzy ธรรมดา
 
-        if fuzzy_session and fuzzy_score > highest_score:
-            highest_score = fuzzy_score
-            best_match = fuzzy_session
-            match_type = fuzzy_type
-
-    # ตัดสินใจส่งค่ากลับ (Threshold = 0.70)
-    if best_match and highest_score >= 0.70:
-        logger.info(
-            f"Match found: {best_match['plate_number_entry']} | "
-            f"Type: {match_type} | Score: {highest_score:.2f}"
+        # Step 3: Fuzzy Match (เก็บตก)
+        fuz_sess, fuz_score, fuz_type = _check_fuzzy_match(
+            plate_out, province_out, session, event_boost
         )
+        if fuz_sess and fuz_score > highest_score:
+            highest_score = fuz_score
+            best_match = fuz_sess
+            match_type = fuz_type
+
+    # สรุปผล
+    if best_match and highest_score >= 0.70:
         return {
             "session": best_match,
             "match_type": match_type,
             "confidence": round(highest_score, 2),
         }
 
-    logger.warning(
-        f"No match found for {plate_out} (highest score: {highest_score:.2f})"
-    )
     return None

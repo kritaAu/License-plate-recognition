@@ -11,82 +11,17 @@ const PAGE_SIZE = 10;
 
 // รายชื่อจังหวัดไทย (เอาไว้ autocomplete)
 const THAI_PROVINCES = [
-  "กรุงเทพมหานคร",
-  "กระบี่",
-  "กาญจนบุรี",
-  "กาฬสินธุ์",
-  "กำแพงเพชร",
-  "ขอนแก่น",
-  "จันทบุรี",
-  "ฉะเชิงเทรา",
-  "ชลบุรี",
-  "ชัยนาท",
-  "ชัยภูมิ",
-  "ชุมพร",
-  "เชียงราย",
-  "เชียงใหม่",
-  "ตรัง",
-  "ตราด",
-  "ตาก",
-  "นครนายก",
-  "นครปฐม",
-  "นครพนม",
-  "นครราชสีมา",
-  "นครศรีธรรมราช",
-  "นครสวรรค์",
-  "นนทบุรี",
-  "นราธิวาส",
-  "น่าน",
-  "บึงกาฬ",
-  "บุรีรัมย์",
-  "ปทุมธานี",
-  "ประจวบคีรีขันธ์",
-  "ปราจีนบุรี",
-  "ปัตตานี",
-  "พระนครศรีอยุธยา",
-  "พะเยา",
-  "พังงา",
-  "พัทลุง",
-  "พิจิตร",
-  "พิษณุโลก",
-  "เพชรบุรี",
-  "เพชรบูรณ์",
-  "แพร่",
-  "ภูเก็ต",
-  "มหาสารคาม",
-  "มุกดาหาร",
-  "ยะลา",
-  "ยโสธร",
-  "ระนอง",
-  "ระยอง",
-  "ราชบุรี",
-  "ร้อยเอ็ด",
-  "ลพบุรี",
-  "ลำปาง",
-  "ลำพูน",
-  "เลย",
-  "ศรีสะเกษ",
-  "สกลนคร",
-  "สงขลา",
-  "สตูล",
-  "สมุทรปราการ",
-  "สมุทรสงคราม",
-  "สมุทรสาคร",
-  "สระบุรี",
-  "สระแก้ว",
-  "สิงห์บุรี",
-  "สุโขทัย",
-  "สุพรรณบุรี",
-  "สุราษฎร์ธานี",
-  "สุรินทร์",
-  "หนองคาย",
-  "หนองบัวลำภู",
-  "อ่างทอง",
-  "อำนาจเจริญ",
-  "อุดรธานี",
-  "อุตรดิตถ์",
-  "อุทัยธานี",
-  "อุบลราชธานี",
+  "กรุงเทพมหานคร", "กระบี่", "กาญจนบุรี", "กาฬสินธุ์", "กำแพงเพชร", "ขอนแก่น",
+  "จันทบุรี", "ฉะเชิงเทรา", "ชลบุรี", "ชัยนาท", "ชัยภูมิ", "ชุมพร", "เชียงราย",
+  "เชียงใหม่", "ตรัง", "ตราด", "ตาก", "นครนายก", "นครปฐม", "นครพนม", "นครราชสีมา",
+  "นครศรีธรรมราช", "นครสวรรค์", "นนทบุรี", "นราธิวาส", "น่าน", "บึงกาฬ", "บุรีรัมย์",
+  "ปทุมธานี", "ประจวบคีรีขันธ์", "ปราจีนบุรี", "ปัตตานี", "พระนครศรีอยุธยา", "พะเยา",
+  "พังงา", "พัทลุง", "พิจิตร", "พิษณุโลก", "เพชรบุรี", "เพชรบูรณ์", "แพร่", "ภูเก็ต",
+  "มหาสารคาม", "มุกดาหาร", "ยะลา", "ยโสธร", "ระนอง", "ระยอง", "ราชบุรี", "ร้อยเอ็ด",
+  "ลพบุรี", "ลำปาง", "ลำพูน", "เลย", "ศรีสะเกษ", "สกลนคร", "สงขลา", "สตูล",
+  "สมุทรปราการ", "สมุทรสงคราม", "สมุทรสาคร", "สระบุรี", "สระแก้ว", "สิงห์บุรี",
+  "สุโขทัย", "สุพรรณบุรี", "สุราษฎร์ธานี", "สุรินทร์", "หนองคาย", "หนองบัวลำภู",
+  "อ่างทอง", "อำนาจเจริญ", "อุดรธานี", "อุตรดิตถ์", "อุทัยธานี", "อุบลราชธานี",
 ];
 
 /* ================= HELPERS ================= */
@@ -100,29 +35,24 @@ function normalizePlateKey(value = "") {
     .toUpperCase();
 }
 
+// [NEW] ดึงเฉพาะตัวเลขจากป้ายทะเบียน (เพื่อใช้จับคู่แบบไม่สนอักษร)
+function extractNumbers(value = "") {
+  return value.toString().replace(/\D/g, "");
+}
+
 // URL รูปจาก record / _raw
-// แปลง path จาก backend -> URL เต็มที่ browser เปิดได้
 function buildImageUrl(path) {
   if (!path) return null;
   const s = String(path || "").trim();
   if (!s) return null;
-
-  // ถ้าเป็น URL เต็มอยู่แล้ว (เช่น https://... จาก Supabase) ก็ใช้เลย
   if (/^https?:\/\//i.test(s)) return s;
-
-  // กันกรณีสตริงเริ่มด้วย API อยู่แล้ว
   if (s.startsWith(API)) return s;
-
-  // ถ้าเป็น path เปล่า ๆ เช่น "plates/xxx.jpg" ให้เติม API เข้าไป
   if (!s.startsWith("/")) {
     return `${API}/${s}`;
   }
-
-  // ถ้าเป็น /something ให้ใช้ API + path
   return `${API}${s}`;
 }
 
-// helper ดึง URL รูปจาก record (รองรับหลาย field)
 function getImageUrl(rec = {}) {
   const raw =
     rec.imgUrl ||
@@ -135,7 +65,6 @@ function getImageUrl(rec = {}) {
 
   return buildImageUrl(raw);
 }
-
 
 // ทิศทาง IN / OUT / UNKNOWN
 function getDirection(rec = {}) {
@@ -155,8 +84,7 @@ function getDirectionUI(rec = {}) {
     return {
       code: "IN",
       label: "เข้า (IN)",
-      chipClass:
-        "bg-emerald-50 text-emerald-700 border border-emerald-200",
+      chipClass: "bg-emerald-50 text-emerald-700 border border-emerald-200",
     };
   }
   if (dir === "OUT") {
@@ -187,8 +115,6 @@ function getPersonType(rec = {}) {
   const chk = rec.check || rec._raw?.check || "";
 
   let text = "";
-  // เดิม: memberRole -> role -> chk
-  // ใหม่: ใช้ chk ก่อน เพราะเป็นผลสรุป “บุคคลภายใน/ภายนอก” ที่เราตั้งใจไว้
   if (chk) text = chk.toString().toLowerCase();
   else if (memberRole) text = memberRole.toString().toLowerCase();
   else if (role) text = role.toString().toLowerCase();
@@ -217,7 +143,6 @@ function getPersonType(rec = {}) {
 
   return "unknown";
 }
-
 
 function getPersonTypeUI(rec = {}) {
   const type = getPersonType(rec);
@@ -271,7 +196,6 @@ function splitDateTime(iso) {
   }
 }
 
-// แปลงนาที → "รวม: 2 ชม. 30 น."
 function formatDurationLabel(minutes) {
   if (minutes == null) return "";
   const m = Number(minutes);
@@ -287,7 +211,6 @@ function formatDurationLabel(minutes) {
   return label.trim();
 }
 
-// province: ถ้าอย่างใดอย่างหนึ่งว่าง ให้ถือว่า "ไม่บังคับต้องเท่ากัน"
 function isSameProvince(a, b) {
   const aa = (a || "").trim();
   const bb = (b || "").trim();
@@ -295,7 +218,6 @@ function isSameProvince(a, b) {
   return aa === bb;
 }
 
-// ===== helper สำหรับ sort ป้ายทะเบียน =====
 function getPlateSortKey(plate) {
   const s = String(plate || "").trim();
   if (!s) return { group: 3, key: "" };
@@ -304,10 +226,8 @@ function getPlateSortKey(plate) {
   const code = ch.charCodeAt(0);
   const isThai = code >= 0x0E00 && code <= 0x0E7F;
   const isDigit = ch >= "0" && ch <= "9";
-  const isLatin =
-    (ch >= "A" && ch <= "Z") || (ch >= "a" && ch <= "z");
+  const isLatin = (ch >= "A" && ch <= "Z") || (ch >= "a" && ch <= "z");
 
-  // group: 0=ไทย, 1=อังกฤษ, 2=ตัวเลข, 3=อื่น ๆ
   let group = 3;
   if (isThai) group = 0;
   else if (isLatin) group = 1;
@@ -319,13 +239,8 @@ function getPlateSortKey(plate) {
 function comparePlates(aPlate, bPlate) {
   const a = getPlateSortKey(aPlate);
   const b = getPlateSortKey(bPlate);
-
   if (a.group !== b.group) return a.group - b.group;
-
-  if (a.group === 0) {
-    // ใช้ลำดับตัวอักษรไทย (ก ก่อน ข ก่อน ค ...)
-    return a.key.localeCompare(b.key, "th-TH");
-  }
+  if (a.group === 0) return a.key.localeCompare(b.key, "th-TH");
   return a.key.localeCompare(b.key);
 }
 
@@ -334,25 +249,14 @@ function normalizeSession(rec = {}) {
   const raw = rec._raw || {};
   const dir = getDirection(rec);
 
-  const rawStatus = (rec.status || raw.status || "")
-    .toString()
-    .toLowerCase();
-  const rawType = (raw.type || rec.type || "")
-    .toString()
-    .toLowerCase();
+  const rawStatus = (rec.status || raw.status || "").toString().toLowerCase();
+  const rawType = (raw.type || rec.type || "").toString().toLowerCase();
 
   const fallbackTime =
-    raw.datetime ||
-    raw.time ||
-    rec.datetime ||
-    rec.time ||
-    "";
+    raw.datetime || raw.time || rec.datetime || rec.time || "";
 
   const isEntryLike =
-    dir === "IN" ||
-    rawStatus === "parked" ||
-    rawType === "entry";
-
+    dir === "IN" || rawStatus === "parked" || rawType === "entry";
   const isExitLike =
     dir === "OUT" ||
     rawStatus === "unmatched" ||
@@ -373,11 +277,11 @@ function normalizeSession(rec = {}) {
     (isExitLike ? fallbackTime : "") ||
     "";
 
- const entryImage =
+  const entryImage =
     rec.entry_image ||
     raw.entry_image ||
     raw.entry_img ||
-    (dir === "IN" ? getImageUrl(rec) : null);   
+    (dir === "IN" ? getImageUrl(rec) : null);
 
   const exitImage =
     rec.exit_image ||
@@ -393,25 +297,38 @@ function normalizeSession(rec = {}) {
     !exitTime &&
     (dir === "IN" || rawStatus === "parked" || isEntryLike)
   ) {
-    statusKey = "parking"; // ยังจอดอยู่
+    statusKey = "parking";
   } else if (
     !entryTime &&
     exitTime &&
     (dir === "OUT" || rawStatus === "unmatched" || isExitLike)
   ) {
-    statusKey = "exit_only"; // มีแต่ข้อมูลออก
+    statusKey = "exit_only";
   } else if (entryTime && !exitTime && dir === "OUT") {
     statusKey = "entry_only";
   }
 
-  const plate =
-    rec.plate ||
+  // [UPDATED] ดึง plateEntry และ plateExit แยกกัน
+  const plateEntry =
+    rec.plate_number_entry ||
     rec.plate_entry ||
+    raw.plate_number_entry ||
+    raw.plate_entry ||
+    (isEntryLike ? rec.plate || raw.plate : null);
+
+  const plateExit =
+    rec.plate_number_exit ||
     rec.plate_exit ||
+    raw.plate_number_exit ||
+    raw.plate_exit ||
+    (isExitLike ? rec.plate || raw.plate : null);
+
+  // ใช้ plateEntry เป็นหลัก ถ้าไม่มีค่อยใช้ plateExit หรือ rec.plate รวม
+  const plate =
+    plateEntry ||
+    rec.plate ||
     raw.plate ||
     raw.license_plate ||
-    raw.plate_number_entry ||
-    raw.plate_number_exit ||
     "ไม่ทราบป้ายทะเบียน";
 
   const province =
@@ -430,6 +347,8 @@ function normalizeSession(rec = {}) {
 
   return {
     plate,
+    plateEntry, // [NEW]
+    plateExit, // [NEW]
     province,
     entryTime,
     exitTime,
@@ -442,7 +361,6 @@ function normalizeSession(rec = {}) {
   };
 }
 
-
 function getSessionStatusUI(session) {
   const rawStatus = (session.rawStatus || "").toString().toLowerCase();
   const key = session.statusKey;
@@ -450,15 +368,13 @@ function getSessionStatusUI(session) {
   if (rawStatus === "completed" || key === "completed") {
     return {
       label: "ออกแล้ว",
-      chipClass:
-        "bg-emerald-50 text-emerald-700 border border-emerald-200",
+      chipClass: "bg-emerald-50 text-emerald-700 border border-emerald-200",
     };
   }
   if (rawStatus === "parked" || key === "parking") {
     return {
       label: "กำลังจอด",
-      chipClass:
-        "bg-amber-50 text-amber-700 border border-amber-200",
+      chipClass: "bg-amber-50 text-amber-700 border border-amber-200",
     };
   }
   if (rawStatus === "unmatched" || key === "exit_only") {
@@ -479,7 +395,6 @@ function getSessionStatusUI(session) {
   };
 }
 
-// ใช้หาตัว event_id จาก record / _raw
 function getEventId(rec = {}) {
   return (
     rec._raw?.event_id ??
@@ -490,15 +405,12 @@ function getEventId(rec = {}) {
   );
 }
 
-// ใช้หาตัว session_id ถ้า record มาจาก /api/parking-sessions
 function getSessionId(rec = {}) {
   return rec.session_id ?? rec._raw?.session_id ?? null;
 }
 
-// จำกัดช่วงเวลาที่จะยอมจับคู่เข้า/ออก (24 ชม.)
 const MAX_DIFF_MS = 1000 * 60 * 60 * 24;
 
-// แปลงวันที่เป็น ms แบบปลอดภัย
 function parseDateSafe(value) {
   if (!value) return null;
   const d = new Date(value);
@@ -548,6 +460,7 @@ function mergeEntryExitRecords(entryItem, exitItem) {
     durationMinutes = Math.round((exitMs - entryMs) / 60000);
   }
 
+  // [UPDATED] เก็บ plate_entry และ plate_exit ไว้ใน mergedRaw
   const mergedRaw = {
     ...rawEntry,
     ...rawExit,
@@ -565,16 +478,10 @@ function mergeEntryExitRecords(entryItem, exitItem) {
       rawExit.exit_img ||
       getImageUrl(exitRec) ||
       null,
-    plate:
-      entrySession.plate ||
-      exitSession.plate ||
-      rawEntry.plate ||
-      rawExit.plate ||
-      entryRec.plate ||
-      entryRec.plate_entry ||
-      exitRec.plate ||
-      exitRec.plate_entry ||
-      exitRec.plate_exit,
+    plate_number_entry:
+      entrySession.plateEntry || rawEntry.plate || entryRec.plate,
+    plate_number_exit: exitSession.plateExit || rawExit.plate || exitRec.plate,
+    plate: entrySession.plate || rawEntry.plate || entryRec.plate, // ยึดขาเข้าเป็นหลัก
     license_plate:
       entrySession.plate ||
       exitSession.plate ||
@@ -600,30 +507,11 @@ function mergeEntryExitRecords(entryItem, exitItem) {
     ...entryRec,
     ...exitRec,
     _raw: mergedRaw,
-    plate:
-      mergedRaw.plate ??
-      entrySession.plate ??
-      exitSession.plate ??
-      entryRec.plate ??
-      exitRec.plate,
-    plate_entry:
-      entryRec.plate_entry ??
-      exitRec.plate_entry ??
-      mergedRaw.plate ??
-      entrySession.plate ??
-      exitSession.plate,
-    plate_exit:
-      exitRec.plate_exit ??
-      entryRec.plate_exit ??
-      mergedRaw.plate ??
-      exitSession.plate ??
-      entrySession.plate,
-    province:
-      mergedRaw.province ??
-      entrySession.province ??
-      exitSession.province ??
-      entryRec.province ??
-      exitRec.province,
+    // map fields ให้ normalizeSession เรียกใช้ง่ายๆ
+    plate_number_entry: mergedRaw.plate_number_entry,
+    plate_number_exit: mergedRaw.plate_number_exit,
+    plate: mergedRaw.plate,
+    province: mergedRaw.province,
     entry_time: entryTime,
     exit_time: exitTime,
     status: "completed",
@@ -637,10 +525,8 @@ function mergeEntryExitRecords(entryItem, exitItem) {
 function buildSessionRows(records) {
   if (!Array.isArray(records) || records.length === 0) return [];
 
-  // กันค่า null/undefined
   const list = records.filter((r) => r && typeof r === "object");
 
-  // ถ้าเป็นข้อมูลจาก /api/parking-sessions อยู่แล้ว (ไม่มี _raw) ให้ใช้ตามเดิม
   const looksLikeSession = list.some(
     (r) =>
       r.session_id != null ||
@@ -651,11 +537,12 @@ function buildSessionRows(records) {
   );
   const hasRaw = list.some((r) => r._raw);
 
+  // ถ้าเป็นข้อมูล session แล้ว ให้ใช้ได้เลย
   if (looksLikeSession && !hasRaw) {
     return list;
   }
 
-  // เตรียม items พร้อมเวลาเข้า/ออก แล้ว "เรียงตามเวลาเก่า→ใหม่"
+  // เตรียม items
   const items = list
     .map((rec, index) => {
       const session = normalizeSession(rec);
@@ -690,7 +577,6 @@ function buildSessionRows(records) {
     const hasEntry = !!session.entryTime;
     const hasExit = !!session.exitTime;
 
-    // ให้ถือว่าเป็น "ฝั่งเข้า" เมื่อมีเวลาเข้า แต่ไม่มีเวลาออก
     const entryLike =
       hasEntry &&
       !hasExit &&
@@ -698,7 +584,6 @@ function buildSessionRows(records) {
         session.statusKey === "parking" ||
         session.statusKey === "entry_only");
 
-    // ถ้าไม่ใช่ฝั่งเข้า (หรือเป็น session ที่มีเข้า/ออกครบอยู่แล้ว) → ไม่ต้องจับคู่
     if (!entryLike) {
       result.push(item.rec);
       continue;
@@ -710,12 +595,12 @@ function buildSessionRows(records) {
       continue;
     }
 
-    const plateKey = normalizePlateKey(session.plate);
+    // [UPDATED] ใช้เฉพาะตัวเลขในการเทียบ (Numeric Match)
+    const plateNum1 = extractNumbers(session.plate);
     const provinceKey = (session.province || "").trim();
 
     let partnerIndex = -1;
 
-    // หา "ขาออก" แรกที่เวลา >= เวลาเข้า, ป้าย/จังหวัดตรงกัน, อยู่ใน 24 ชม.
     for (let j = i + 1; j < items.length; j += 1) {
       if (used.has(j)) continue;
 
@@ -733,10 +618,13 @@ function buildSessionRows(records) {
 
       if (!exitLike) continue;
 
-      const plateKey2 = normalizePlateKey(s2.plate);
+      // [UPDATED] Logic การจับคู่ที่ยืดหยุ่นขึ้น (เหมือน Backend)
+      const plateNum2 = extractNumbers(s2.plate);
       const provinceKey2 = (s2.province || "").trim();
 
-      if (plateKey2 !== plateKey) continue;
+      // เทียบเฉพาะตัวเลข (เช่น 8ฟม 4325 vs 8พม 4325 -> 4325 == 4325)
+      if (plateNum2 !== plateNum1) continue;
+      // เทียบจังหวัด
       if (!isSameProvince(provinceKey, provinceKey2)) continue;
 
       const exitMs = other.exitMs;
@@ -746,7 +634,7 @@ function buildSessionRows(records) {
       if (diff < 0 || diff > MAX_DIFF_MS) continue;
 
       partnerIndex = j;
-      break; // ใช้ตัวแรกที่เจอ เพราะ items ถูก sort ตามเวลาแล้ว
+      break;
     }
 
     if (partnerIndex === -1) {
@@ -764,24 +652,17 @@ function buildSessionRows(records) {
     result.push(merged);
   }
 
-  // จัดลำดับผลลัพธ์ให้ "รายการล่าสุด" อยู่บนสุด (ดูจาก exitTime ถ้ามี, ไม่งั้นดู entryTime)
   const sortedResult = result.slice().sort((a, b) => {
     const sa = normalizeSession(a);
     const sb = normalizeSession(b);
-
-    const ta =
-      parseDateSafe(sa.exitTime || sa.entryTime) ?? 0;
-    const tb =
-      parseDateSafe(sb.exitTime || sb.entryTime) ?? 0;
-
-    // ใหม่สุดอยู่บน
+    const ta = parseDateSafe(sa.exitTime || sa.entryTime) ?? 0;
+    const tb = parseDateSafe(sb.exitTime || sb.entryTime) ?? 0;
     return tb - ta;
   });
 
   return sortedResult;
 }
 
-// ===== sort helper สำหรับทั้งแถว session =====
 function compareSessionsForSort(a, b, sortConfig) {
   const dirFactor = sortConfig.direction === "asc" ? 1 : -1;
   const sa = normalizeSession(a);
@@ -804,13 +685,12 @@ function compareSessionsForSort(a, b, sortConfig) {
   }
 
   if (sortConfig.field === "status") {
-    // ลำดับสถานะที่ต้องการ
     const STATUS_ORDER = {
-      completed: 0,  // ออกแล้ว
-      parking: 1,    // กำลังจอด
-      exit_only: 2,  // ไม่พบข้อมูลเข้า
-      entry_only: 3, // ไม่พบข้อมูลออก
-      unknown: 4,    // ไม่ทราบ
+      completed: 0,
+      parking: 1,
+      exit_only: 2,
+      entry_only: 3,
+      unknown: 4,
     };
 
     const va = STATUS_ORDER[sa.statusKey] ?? 999;
@@ -820,7 +700,6 @@ function compareSessionsForSort(a, b, sortConfig) {
       return dirFactor * (va - vb);
     }
 
-    // ถ้าค่าเท่ากันค่อย fallback ไปเทียบตามข้อความ
     const la = getSessionStatusUI(sa).label;
     const lb = getSessionStatusUI(sb).label;
     return dirFactor * la.localeCompare(lb, "th-TH");
@@ -829,29 +708,32 @@ function compareSessionsForSort(a, b, sortConfig) {
   return 0;
 }
 
-
-/* ================= MODAL PORTAL ================= */
-
 function ModalPortal({ children }) {
   if (typeof document === "undefined") return null;
   return createPortal(children, document.body);
 }
 
-/* ================= DETAIL MODAL ================= */
-
 function DetailModal({ record, onClose, onUpdated }) {
+  // ... (DetailModal logic remains mostly the same, omitted for brevity but ensuring imports work)
+  // เพื่อความชัวร์และไม่ให้ไฟล์ยาวเกินไป ผมขอละส่วน DetailModal ไว้
+  // เพราะส่วนที่กระทบ Logic การแสดงผลหลักๆ อยู่ที่ Table
+  // แต่ถ้าคุณ Copy ไปแปะทับ ให้ Copy DetailModal จากไฟล์เดิมมาแปะต่อที่นี่ได้เลยครับ
+  // หรือถ้าต้องการ full file แจ้งได้ครับ
+  // (สมมติว่าใช้ DetailModal ตัวเดิม)
   const [plateInput, setPlateInput] = useState("");
   const [provinceInput, setProvinceInput] = useState("");
   const [showProvinceList, setShowProvinceList] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
-  const [fullImageTarget, setFullImageTarget] = useState(null); // "entry" | "exit" | null
+  const [fullImageTarget, setFullImageTarget] = useState(null);
 
   const session = normalizeSession(record);
   const dirUI = getDirectionUI(record);
   const personUI = getPersonTypeUI(record);
-
+  
+  // ... (use existing DetailModal code logic here) ...
+  // [Placeholder for DetailModal Code - Use original or provided snippet if needed]
   const memberName =
     record.member_name ||
     record._raw?.member_name ||
@@ -882,10 +764,9 @@ function DetailModal({ record, onClose, onUpdated }) {
     setErrorMsg("");
     setSuccessMsg("");
   }, [rawPlate, rawProvince, eventId, sessionId]);
-
+  
   const trimmedPlate = plateInput.trim();
   const trimmedProvince = provinceInput.trim();
-
   const hasChanged =
     trimmedPlate !== (rawPlate || "").trim() ||
     trimmedProvince !== (rawProvince || "").trim();
@@ -894,7 +775,7 @@ function DetailModal({ record, onClose, onUpdated }) {
     p.includes(trimmedProvince || "")
   ).slice(0, 6);
 
-  async function handleSave() {
+    async function handleSave() {
     try {
       setErrorMsg("");
       setSuccessMsg("");
@@ -980,7 +861,6 @@ function DetailModal({ record, onClose, onUpdated }) {
 
   return (
     <>
-      {/* overlay */}
       <div
         className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4 py-6"
         onClick={onClose}
@@ -989,7 +869,6 @@ function DetailModal({ record, onClose, onUpdated }) {
           className="relative max-h-full w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-xl"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* header */}
           <header className="flex items-start justify-between gap-4 border-b px-6 py-4">
             <div className="space-y-1">
               <div className="inline-flex items-center gap-3">
@@ -1003,7 +882,7 @@ function DetailModal({ record, onClose, onUpdated }) {
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span
+                 <span
                   className={`inline-flex items-center rounded-full px-3 py-1 font-medium ${personUI.chipClass}`}
                 >
                   {personUI.label}
@@ -1020,8 +899,7 @@ function DetailModal({ record, onClose, onUpdated }) {
                 )}
               </div>
             </div>
-
-            <button
+             <button
               type="button"
               onClick={onClose}
               className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-700"
@@ -1029,8 +907,8 @@ function DetailModal({ record, onClose, onUpdated }) {
               <span className="sr-only">ปิด</span>×
             </button>
           </header>
-
-          {/* body main */}
+          
+           {/* body main */}
           <div className="flex flex-col gap-6 px-6 py-4">
             {/* Entry / Exit panel */}
             <div className="grid gap-4 md:grid-cols-2">
@@ -1131,7 +1009,7 @@ function DetailModal({ record, onClose, onUpdated }) {
               </div>
             </div>
 
-            {/* Timeline + edit form */}
+             {/* Timeline + edit form */}
             <div className="grid gap-4 md:grid-cols-[minmax(0,2fr),minmax(0,1.4fr)]">
               {/* Timeline */}
               <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
@@ -1295,9 +1173,8 @@ function DetailModal({ record, onClose, onUpdated }) {
           </div>
         </div>
       </div>
-
-      {/* full image overlay */}
-      {fullImageUrl && (
+      
+       {fullImageUrl && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
           onClick={() => setFullImageTarget(null)}
@@ -1312,8 +1189,6 @@ function DetailModal({ record, onClose, onUpdated }) {
     </>
   );
 }
-
-/* ================= TABLE ================= */
 
 function Th({ children }) {
   return (
@@ -1339,11 +1214,10 @@ export default function RecordsTable({ records, filters = {} }) {
   const [currentPage, setCurrentPage] = useState(1);
 
   const [sortConfig, setSortConfig] = useState({
-    field: null, // "plate" | "entryTime" | "exitTime" | "status"
+    field: null,
     direction: "asc",
   });
 
-  // sync rows กับ props (รวมคู่เข้า/ออกใหม่ทุกครั้งเมื่อ records เปลี่ยน)
   useEffect(() => {
     const list = Array.isArray(records) ? records : [];
     const merged = buildSessionRows(list);
@@ -1352,65 +1226,51 @@ export default function RecordsTable({ records, filters = {} }) {
   }, [records]);
 
   const filteredRows = useMemo(() => {
-  if (!Array.isArray(rows) || rows.length === 0) return [];
+    if (!Array.isArray(rows) || rows.length === 0) return [];
 
-  const statusFilter = filters?.direction || "all";
-  const personFilter = filters?.personType || "all";
+    const statusFilter = filters?.direction || "all";
+    const personFilter = filters?.personType || "all";
 
-  if (
-    (!statusFilter || statusFilter === "all") &&
-    (!personFilter || personFilter === "all")
-  ) {
-    return rows;
-  }
-
-  return rows.filter((rec) => {
-    const session = normalizeSession(rec);
-    const personType = getPersonType(rec);
-
-    if (statusFilter && statusFilter !== "all") {
-      const key = session.statusKey;
-      const rawStatus = (session.rawStatus || "")
-        .toString()
-        .toLowerCase();
-
-      if (statusFilter === "parked") {
-        if (!(key === "parking" || rawStatus === "parked")) {
-          return false;
-        }
-      } else if (statusFilter === "completed") {
-        if (!(key === "completed" || rawStatus === "completed")) {
-          return false;
-        }
-      } else if (statusFilter === "unmatched") {
-        if (!(key === "exit_only" || rawStatus === "unmatched")) {
-          return false;
-        }
-      }
+    if (
+      (!statusFilter || statusFilter === "all") &&
+      (!personFilter || personFilter === "all")
+    ) {
+      return rows;
     }
 
-    if (personFilter && personFilter !== "all") {
-      if (personFilter === "inside" && personType !== "inside") {
-        return false;
+    return rows.filter((rec) => {
+      const session = normalizeSession(rec);
+      const personType = getPersonType(rec);
+
+      if (statusFilter && statusFilter !== "all") {
+        const key = session.statusKey;
+        const rawStatus = (session.rawStatus || "").toString().toLowerCase();
+
+        if (statusFilter === "parked") {
+          if (!(key === "parking" || rawStatus === "parked")) return false;
+        } else if (statusFilter === "completed") {
+          if (!(key === "completed" || rawStatus === "completed")) return false;
+        } else if (statusFilter === "unmatched") {
+          if (!(key === "exit_only" || rawStatus === "unmatched")) return false;
+        }
       }
-      if (personFilter === "outside" && personType !== "outside") {
-        return false;
+
+      if (personFilter && personFilter !== "all") {
+        if (personFilter === "inside" && personType !== "inside") return false;
+        if (personFilter === "outside" && personType !== "outside") return false;
       }
-    }
+      return true;
+    });
+  }, [rows, filters]);
 
-    return true;
-  });
-}, [rows, filters]);
+  const sortedRows = useMemo(() => {
+    if (!Array.isArray(filteredRows) || filteredRows.length === 0) return [];
+    if (!sortConfig.field) return filteredRows;
 
-const sortedRows = useMemo(() => {
-  if (!Array.isArray(filteredRows) || filteredRows.length === 0) return [];
-  if (!sortConfig.field) return filteredRows;
-
-  const copy = [...filteredRows];
-  copy.sort((a, b) => compareSessionsForSort(a, b, sortConfig));
-  return copy;
-}, [filteredRows, sortConfig]);
-
+    const copy = [...filteredRows];
+    copy.sort((a, b) => compareSessionsForSort(a, b, sortConfig));
+    return copy;
+  }, [filteredRows, sortConfig]);
 
   if (!Array.isArray(sortedRows) || sortedRows.length === 0) {
     return (
@@ -1442,7 +1302,6 @@ const sortedRows = useMemo(() => {
   const pageNumbers = getPageNumbers(safePage, totalPages);
 
   const handleRecordUpdated = (key, updated) => {
-    // อัปเดตในตาราง
     setRows((prev) =>
       prev.map((rec) => {
         const recEventId = getEventId(rec);
@@ -1467,19 +1326,16 @@ const sortedRows = useMemo(() => {
       })
     );
 
-    // อัปเดตใน modal ถ้ากำลังเปิดอยู่ record เดียวกัน
     setSelected((prev) => {
       if (!prev) return prev;
       const recEventId = getEventId(prev);
       const recSessionId = getSessionId(prev);
-
       const matchBySession =
         key.sessionId != null && recSessionId === key.sessionId;
       const matchByEvent =
         key.eventId != null && recEventId === key.eventId;
 
       if (!matchBySession && !matchByEvent) return prev;
-
       const newRaw = { ...(prev._raw || {}), ...updated };
 
       return {
@@ -1608,22 +1464,30 @@ const sortedRows = useMemo(() => {
                     </div>
                   </Td>
 
-                  {/* ทะเบียนรถ */}
+                  {/* ทะเบียนรถ [UPDATED UI] */}
                   <Td>
                     <div className="flex flex-col gap-1">
                       <div className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-base font-semibold tracking-wide text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
                         {session.plate || "-"}
                       </div>
+                      
+                      {/* ถ้าเลขทะเบียนเข้า/ออกไม่ตรงกัน ให้โชว์ Warning */}
+                      {session.statusKey === 'completed' && session.plateEntry && session.plateExit && session.plateEntry !== session.plateExit && (
+                        <div className="inline-flex items-center gap-1 text-[11px] text-rose-500">
+                          <span className="font-bold">⚠ ออก:</span>
+                          <span>{session.plateExit}</span>
+                        </div>
+                      )}
+
                       <div className="text-xs text-slate-500">
                         {session.province || "ไม่ทราบจังหวัด"}
                       </div>
                     </div>
                   </Td>
 
-                                    {/* ขาเข้า */}
+                  {/* ขาเข้า */}
                   <Td className="w-[320px]">
                     <div className="flex items-center gap-3 rounded-2xl bg-slate-50 px-3 py-3">
-                      {/* กล่องรูปขาเข้า */}
                       <div className="flex h-16 w-24 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-xs font-semibold text-slate-500 shadow-sm">
                         {session.entryImage ? (
                           <img
@@ -1635,8 +1499,6 @@ const sortedRows = useMemo(() => {
                           "Entry Img"
                         )}
                       </div>
-
-                      {/* ข้อมูลเวลาเข้า */}
                       <div className="flex flex-col">
                         <div className="flex items-center gap-1 text-xs">
                           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-[11px] text-emerald-600">
@@ -1661,7 +1523,6 @@ const sortedRows = useMemo(() => {
                     {hasExit ? (
                       <div className="flex flex-col gap-1 rounded-2xl bg-slate-50 px-3 py-3">
                         <div className="flex items-center gap-3">
-                          {/* กล่องรูปขาออก */}
                           <div className="flex h-16 w-24 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-xs font-semibold text-slate-500 shadow-sm">
                             {session.exitImage ? (
                               <img
@@ -1673,8 +1534,6 @@ const sortedRows = useMemo(() => {
                               "Exit Img"
                             )}
                           </div>
-
-                          {/* ข้อมูลเวลาออก */}
                           <div className="flex flex-col">
                             <div className="flex items-center gap-1 text-xs">
                               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-100 text-[11px] text-rose-600">
@@ -1692,8 +1551,6 @@ const sortedRows = useMemo(() => {
                             </div>
                           </div>
                         </div>
-
-                        {/* รวมเวลาจอด */}
                         {durationLabel && (
                           <div className="mt-1 inline-flex max-w-max rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-500">
                             {durationLabel}
@@ -1706,7 +1563,6 @@ const sortedRows = useMemo(() => {
                       </div>
                     )}
                   </Td>
-
 
                   {/* สถานะ */}
                   <Td>
@@ -1723,7 +1579,6 @@ const sortedRows = useMemo(() => {
         </table>
       </div>
 
-      {/* pagination */}
       <div className="flex items-center justify-between gap-3 px-4 py-3 text-xs text-slate-600">
         <div>
           แสดง{" "}
@@ -1731,13 +1586,11 @@ const sortedRows = useMemo(() => {
             {startIndex + 1} -{" "}
             {Math.min(startIndex + PAGE_SIZE, sortedRows.length)}
           </span>{" "}
-          จาก{" "}
-          <span className="font-semibold">{sortedRows.length}</span>{" "}
+          จาก <span className="font-semibold">{sortedRows.length}</span>{" "}
           รายการ
         </div>
 
         <div className="flex items-center gap-1">
-          {/* หน้าแรก */}
           <button
             type="button"
             onClick={() => setCurrentPage(1)}
@@ -1746,19 +1599,14 @@ const sortedRows = useMemo(() => {
           >
             «
           </button>
-          {/* ก่อนหน้า */}
           <button
             type="button"
-            onClick={() =>
-              setCurrentPage((p) => Math.max(1, p - 1))
-            }
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={safePage === 1}
             className="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ‹
           </button>
-
-          {/* เลขหน้า */}
           {pageNumbers.map((p) => (
             <button
               key={p}
@@ -1773,19 +1621,14 @@ const sortedRows = useMemo(() => {
               {p}
             </button>
           ))}
-
-          {/* ถัดไป */}
           <button
             type="button"
-            onClick={() =>
-              setCurrentPage((p) => Math.min(totalPages, p + 1))
-            }
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={safePage === totalPages}
             className="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ›
           </button>
-          {/* หน้าสุดท้าย */}
           <button
             type="button"
             onClick={() => setCurrentPage(totalPages)}
@@ -1797,7 +1640,6 @@ const sortedRows = useMemo(() => {
         </div>
       </div>
 
-      {/* detail modal */}
       {selected && (
         <ModalPortal>
           <DetailModal
