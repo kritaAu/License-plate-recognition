@@ -15,7 +15,7 @@ export default function Filters({
   };
 
   return (
-    <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between bg-blue-300">
       {/* ช่องฟิลเตอร์ด้านซ้าย */}
       <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-4 lg:grid-cols-5">
         {/* วันที่เริ่ม */}
