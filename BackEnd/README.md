@@ -18,6 +18,8 @@ pip install rapidfuzz
 
 # run api use this
 
+python -m uvicorn main_api:app --reload --port 8000
+python -m uvicorn batch_process:app --reload --host 0.0.0.0 --port 8001
 uvicorn main_api:app --host 0.0.0.0 --port 8000 --log-level warning
 
 Docs

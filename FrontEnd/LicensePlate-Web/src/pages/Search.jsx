@@ -389,7 +389,7 @@ export default function Search() {
   return (
     <div className="max-w-7xl mx-auto px-4 pb-6 pt-4">
       {/* กล่องฟิลเตอร์ด้านบน */}
-      <div className="mb-4 rounded-2xl bg-white/70 p-4 shadow-sm backdrop-blur">
+      <div className="mb-4 rounded-2xl bg-blue-300 p-4 shadow-sm backdrop-blur">
         <Filters
           filters={filters}
           setFilters={setFilters}
