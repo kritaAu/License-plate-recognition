@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatThaiDateTime } from "../utils/date";
 import { fetchEvents, fetchMembers } from "../services/api";
 const API = (
-  import.meta.env?.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+  import.meta.env?.VITE_API_BASE_URL || "https://lrp-api.onrender.com"
 ).replace(/\/$/, "");
 
 /* ===== Helpers เหมือนฝั่ง Search + join member ===== */
