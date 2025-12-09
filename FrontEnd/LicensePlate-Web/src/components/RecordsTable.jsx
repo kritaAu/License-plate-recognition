@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 
 /* ================= CONFIG ================= */
 const API = (
-  import.meta.env?.VITE_API_BASE_URL || "https://lrp-api.onrender.com"
+  import.meta.env?.VITE_API_BASE_URL || "https://license-plate-recognition-wlxn.onrender.com"
 ).replace(/\/$/, "");
 
 const PAGE_SIZE = 10;

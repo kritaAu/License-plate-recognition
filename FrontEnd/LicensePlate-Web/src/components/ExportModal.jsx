@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatThaiDateTime } from "../utils/date";
 import { fetchEvents, fetchMembers } from "../services/api";
 const API = (
-  import.meta.env?.VITE_API_BASE_URL || "https://lrp-api.onrender.com"
+  import.meta.env?.VITE_API_BASE_URL || "https://license-plate-recognition-wlxn.onrender.com"
 ).replace(/\/$/, "");
 
 /* ===== Helpers เหมือนฝั่ง Search + join member ===== */

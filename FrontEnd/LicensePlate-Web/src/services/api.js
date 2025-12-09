@@ -1,6 +1,6 @@
 // ===== BASE URL / WS URL =====
 export const API_BASE_URL = (
-  import.meta.env?.VITE_API_BASE_URL || "https://lrp-api.onrender.com"
+  import.meta.env?.VITE_API_BASE_URL || "https://license-plate-recognition-wlxn.onrender.com"
 ).replace(/\/$/, "");
 
 export const EVENTS_WS_URL =
