@@ -1,0 +1,14 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+gunicorn
+uvicorn
+ultralytics
+opencv-python-headless
+torch
+torchvision
+python-dotenv
+openai
+fastapi[standard]
+supabase
+bcrypt==4.0.1
+passlib[bcrypt]
