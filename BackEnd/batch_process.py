@@ -30,8 +30,8 @@ except Exception as e:
     print(f"!!! ไม่สามารถเชื่อมต่อ Supabase: {e}")
     supabase = None
 
-API_URL_EVENT = "http://127.0.0.1:8000/events"
-API_URL_CHECK = "http://127.0.0.1:8000/check_plate"
+API_URL_EVENT = "https://license-plate-recognition-wlxn.onrender.com/events"
+API_URL_CHECK = "https://license-plate-recognition-wlxn.onrender.com/check_plate"
 PAD = 10
 MIN_CONFIDENCE = 0.3
 SCORE_WEIGHTS = {
