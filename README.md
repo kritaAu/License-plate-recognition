@@ -1,66 +1,66 @@
-# 🚗 License Plate Recognition System
+# 🚗 License Plate Recognition System (ALPR)
 
 ## 🌟 Overview
 
-This is a comprehensive, full-stack project implementing an **Automatic License Plate Recognition (ALPR)** system.
-
-This project demonstrates strong capabilities in modern software architecture, high-performance machine learning implementation, and data visualization—key skills for a Computer Science student and Data Analyst.
-
-
-The system is modularly composed of two main services:
-1.  **Backend (Python/FastAPI):** Handles the core ALPR logic using machine learning models (YOLO, PyTorch) and provides an API for data processing and storage (Supabase).
-2.  **Frontend (React/Vite):** A modern, responsive web dashboard for users to upload images, view results, and visualize data related to the recognized plates.
+โครงการนี้คือการพัฒนา **ระบบจดจำป้ายทะเบียนรถยนต์อัตโนมัติ (ALPR)** แบบ Full-Stack ที่สมบูรณ์ ซึ่งแสดงให้เห็นถึงความสามารถในการประยุกต์ใช้ **สถาปัตยกรรมซอฟต์แวร์สมัยใหม่**, การใช้งาน **Machine Learning ที่มีประสิทธิภาพสูง**, และ **การวิเคราะห์ข้อมูล** ซึ่งเป็นทักษะสำคัญสำหรับนักศึกษา Computer Science และ Data Analyst
 
 ---
 
 ## 🚀 Key Features
 
-* **High-Performance ALPR:** Utilizes advanced computer vision models (YOLO family) for fast and accurate detection.
-* **Modern API:** Built with FastAPI for speed and easy integration.
-* **Data Visualization:** Incorporates Recharts for analytical display of recognition data.
-* **Database Integration:** Uses Supabase for scalable data storage and user authentication.
+* **High-Performance ALPR:** ใช้โมเดล Computer Vision ขั้นสูง (ตระกูล **YOLO**) เพื่อการตรวจจับและจดจำที่รวดเร็วและแม่นยำ.
+* **Modern API:** พัฒนาด้วย **FastAPI** เพื่อความเร็วในการตอบสนองและการเชื่อมต่อที่ง่าย.
+* **Data Visualization:** นำ **Recharts** มาใช้ในการแสดงผลข้อมูลการจดจำในรูปแบบแผนภูมิและกราฟ.
+* **Scalable Database:** ใช้ **Supabase** (PostgreSQL) สำหรับการจัดการข้อมูลและการยืนยันตัวตนของผู้ใช้.
 
 ---
 
 ## 🛠️ Tech Stack
 
+ระบบแบ่งออกเป็นสองส่วนหลักที่ทำงานร่วมกัน:
+
+### 1. ⚙️ Back-End Services
+
 | Component | Technology | Role |
 | :--- | :--- | :--- |
-| **Backend** | Python, FastAPI | Core API, ML Inference, Database Interface |
-| **Frontend** | React, Vite | User Interface, Client-Side Routing |
-| **Computer Vision** | Ultralytics (YOLO), PyTorch, OpenCV | License Plate Detection and OCR |
-| **Styling** | Tailwind CSS, Bootstrap | UI Design and Responsiveness |
-| **Database/Auth** | Supabase | Data Storage (PostgreSQL) and Authentication |
-| **Visualization** | Recharts | Charting and Graphing |
+| **Core API** | Python, **FastAPI** | ให้บริการ API หลัก, จัดการการเชื่อมต่อฐานข้อมูล |
+| **Computer Vision** | **Ultralytics (YOLO)**, PyTorch, OpenCV | ตรวจจับป้ายทะเบียนและทำ OCR |
+| **Database/Auth** | **Supabase** | PostgreSQL Database และระบบ Authentication |
+
+### 2. 🖥️ Front-End Interface
+
+| Component | Technology | Role |
+| :--- | :--- | :--- |
+| **User Interface** | **React**, **Vite** | สร้างส่วนต่อประสานผู้ใช้ที่ทันสมัยและรวดเร็ว |
+| **Styling** | **Tailwind CSS**, Bootstrap | จัดการ Design และความ Responsive ของหน้าจอ |
+| **Visualization** | **Recharts** | สร้าง Chart สำหรับแสดงผลข้อมูลเชิงวิเคราะห์ |
 
 ---
 
 ## 💻 Setup and Installation Guide
 
-You must set up both the Backend and the Frontend separately.
+การตั้งค่าระบบจำเป็นต้องดำเนินการติดตั้งทั้งส่วน Backend และ Frontend แยกกัน โปรดทำตามคำแนะนำในไฟล์ `README.md` ที่เกี่ยวข้องสำหรับแต่ละส่วน:
 
-### A. Backend Setup (`./BackEnd` folder)
+### A. Backend Setup
 
-The backend handles the core ALPR processing and API services.
+ส่วน Backend รับผิดชอบการประมวลผล ALPR หลักและการให้บริการ API
 
-#### 1. Prerequisites
+* **รายละเอียดการติดตั้ง:** โปรดดูคำแนะนำทั้งหมดในไฟล์:
+    $$\text{./BackEnd/README.md}$$
+* **เทคโนโลยีหลัก:** Python, FastAPI, YOLO, PyTorch, Supabase
 
-* Python (3.8+)
-* **Optional (for GPU acceleration):** NVIDIA CUDA Toolkit. Download from [https://developer.nvidia.com/cuda-downloads](https://developer.nvidia.com/cuda-downloads)
+### B. Frontend Setup
 
-#### 2. Environment & Dependencies
+ส่วน Frontend คือหน้า Dashboard สำหรับผู้ใช้ในการจัดการภาพและดูผลการวิเคราะห์ข้อมูล
 
-Navigate to the backend directory and install all required Python libraries.
+* **รายละเอียดการติดตั้ง:** โปรดดูคำแนะนำทั้งหมดในไฟล์:
+    $$\text{./FrontEnd/README.md}$$
+* **เทคโนโลยีหลัก:** React, Vite, Tailwind CSS, Recharts
 
-```bash
-# Navigate to the backend directory
-cd BackEnd
+---
 
-# Install Core Vision, ML, and API dependencies
-pip install ultralytics opencv-python filterpy yolox
-pip install "fastapi[standard]" supabase bcrypt==4.0.1 passlib[bcrypt] python-dotenv openai rapidfuzz
+## Contribution
 
+ยินดีรับข้อเสนอแนะและการปรับปรุง!
 
-GPU Note: If you installed CUDA, install PyTorch with the specific CUDA index URL. Please verify the CUDA version.
-# Example for CUDA 12.1 (cu121). 
-pip3 install torch torchvision --index-url [https://download.pytorch.org/whl/cu129](https://download.pytorch.org/whl/cu129)
+---
