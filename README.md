@@ -177,15 +177,7 @@ Bash
 pip3 install torch torchvision --index-url [https://download.pytorch.org/whl/cu129](https://download.pytorch.org/whl/cu129)
 <h4 style="color:#007ACC;">3. Configuration</h4>
 
-Create a .env file in the ./BackEnd directory to store your credentials:
-
-ข้อมูลโค้ด
-# Supabase Configuration
-SUPABASE_URL=YOUR_SUPABASE_URL
-SUPABASE_KEY=YOUR_SUPABASE_ANON_KEY
-
-# Other API keys (e.g., OpenAI)
-OPENAI_API_KEY=YOUR_OPENAI_KEY
+Create a .env file in the ./BackEnd directory to store your credentials
 <h4 style="color:#007ACC;">4. Running the Backend</h4>
 
 Start the FastAPI server on port 8000:
