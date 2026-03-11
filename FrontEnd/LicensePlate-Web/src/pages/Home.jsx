@@ -533,11 +533,12 @@ export default function Home() {
       : "ทั้งหมด";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white to-blue-400">
+    <div className="min-h-screen bg-transparent relative">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-earth-900/40 via-earth-950 to-earth-950 -z-10" />
       <div className="mx-auto max-w-5xl px-3" />
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* ฟิลเตอร์ (ซ่อน) */}
-        <div className="mb-6 hidden rounded-2xl border border-sky-100 bg-white/70 p-6 shadow-sm backdrop-blur">
+        <div className="mb-6 hidden rounded-2xl border border-earth-800 bg-earth-900/50 p-6 shadow-sm backdrop-blur-xl">
           <Filters
             filters={filters}
             setFilters={setFilters}
@@ -547,89 +548,90 @@ export default function Home() {
         </div>
 
         {/* การ์ดสถิติ */}
-        <div className="mb-3">
+        <div className="mb-6">
           <StatsCards stats={stats} />
         </div>
 
         {/* แถบจำนวน session + ปุ่มกรองสถานะรถ */} 
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           {/* ด้านซ้าย: แสดงยอดสรุป 4 อัน */}
           <div className="flex flex-wrap gap-2">
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+            <span className="inline-flex items-center rounded-full bg-earth-800/80 px-3 py-1 text-xs font-semibold text-earth-300 border border-earth-700/50 shadow-inner">
               ทั้งหมด: {statusCounts.total}
             </span>
-            <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-700">
+            <span className="inline-flex items-center rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-400 border border-amber-500/20 shadow-inner">
               กำลังจอด: {statusCounts.parked}
             </span>
-            <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
+            <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400 border border-emerald-500/20 shadow-inner">
               ออกแล้ว: {statusCounts.completed}
             </span>
-            <span className="inline-flex items-center rounded-full bg-rose-100 px-3 py-1 text-xs font-medium text-rose-700">
+            <span className="inline-flex items-center rounded-full bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-400 border border-rose-500/20 shadow-inner">
               ไม่พบข้อมูลเข้า: {statusCounts.unmatched}
             </span>
           </div>
 
           {/* ด้านขวา: ปุ่ม filter ตาราง */}
-          <div className="inline-flex rounded-xl border border-sky-200 bg-white px-1 text-sm">
+          <div className="inline-flex rounded-xl border border-earth-700/60 bg-earth-900/80 p-1 shadow-inner backdrop-blur-md">
             <button
-              type="button"
-              onClick={() => setStatusFilter("all")}
-              className={`px-3 py-1 !rounded-full ${
-                statusFilter === "all"
-                  ? "bg-sky-600 text-white"
-                  : "text-slate-700 hover:bg-sky-50"
-              }`}
-            >
-              ทั้งหมด
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStatusFilter("parked")}
-              className={`px-3 py-1 !rounded-full ${
-                statusFilter === "parked"
-                  ? "bg-sky-600 text-white"
-                  : "text-slate-700 hover:bg-sky-50"
-              }`}
-            >
-              กำลังจอด
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStatusFilter("completed")}
-              className={`px-3 py-1 !rounded-full ${
-                statusFilter === "completed"
-                  ? "bg-sky-600 text-white"
-                  : "text-slate-700 hover:bg-sky-50"
-              }`}
-            >
-              ออกแล้ว
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStatusFilter("unmatched")}
-              className={`px-3 py-1 !rounded-full ${
-                statusFilter === "unmatched"
-                  ? "bg-sky-600 text-white"
-                  : "text-slate-700 hover:bg-sky-50"
-              }`}
-            >
-              ไม่พบข้อมูลเข้า
-            </button>
+               type="button"
+               onClick={() => setStatusFilter("all")}
+               className={`px-4 py-1.5 text-xs font-medium !rounded-lg transition-all ${
+                 statusFilter === "all"
+                   ? "bg-earth-600/30 text-earth-200 shadow-[0_0_10px_rgba(88,129,87,0.3)] border border-earth-600/50"
+                   : "text-earth-400 hover:text-earth-100 hover:bg-earth-800"
+               }`}
+             >
+               ทั้งหมด
+             </button>
+ 
+             <button
+               type="button"
+               onClick={() => setStatusFilter("parked")}
+               className={`px-4 py-1.5 text-xs font-medium !rounded-lg transition-all ${
+                 statusFilter === "parked"
+                   ? "bg-terra-400/20 text-terra-400 shadow-[0_0_10px_rgba(217,140,107,0.3)] border border-terra-400/30"
+                   : "text-earth-400 hover:text-earth-100 hover:bg-earth-800"
+               }`}
+             >
+               กำลังจอด
+             </button>
+ 
+             <button
+               type="button"
+               onClick={() => setStatusFilter("completed")}
+               className={`px-4 py-1.5 text-xs font-medium !rounded-lg transition-all ${
+                 statusFilter === "completed"
+                   ? "bg-[#10b981]/20 text-[#10b981] shadow-[0_0_10px_rgba(16,185,129,0.3)] border border-[#10b981]/30"
+                   : "text-earth-400 hover:text-earth-100 hover:bg-earth-800"
+               }`}
+             >
+               ออกแล้ว
+             </button>
+ 
+             <button
+               type="button"
+               onClick={() => setStatusFilter("unmatched")}
+               className={`px-4 py-1.5 text-xs font-medium !rounded-lg transition-all ${
+                 statusFilter === "unmatched"
+                   ? "bg-terra-500/20 text-terra-500 shadow-[0_0_10px_rgba(192,107,77,0.3)] border border-terra-500/30"
+                   : "text-earth-400 hover:text-earth-100 hover:bg-earth-800"
+               }`}
+             >
+               ไม่พบข้อมูลเข้า
+             </button>
           </div>
         </div>
 
         {/* กราฟสองคอลัมน์ */}
         <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* รายสัปดาห์ */}
-          <section className="rounded-2xl border border-sky-100 bg-white/90 p-6 shadow-[0_8px_24px_-10px_rgba(30,64,175,0.25)] backdrop-blur">
+          <section className="rounded-2xl border border-earth-800/80 bg-earth-900/60 p-6 shadow-2xl backdrop-blur-xl relative overflow-hidden group">
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-earth-600/40 to-transparent" />
             <header className="mb-4">
-              <h3 className="text-lg font-semibold tracking-tight text-indigo-900">
+              <h3 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                <span className="w-1.5 h-5 rounded-full bg-earth-600 shadow-[0_0_10px_rgba(88,129,87,0.8)]"></span>
                 สถิติรายสัปดาห์ (เข้า-ออก)
               </h3>
-              <div className="mt-2 h-px bg-gradient-to-r from-sky-200 via-indigo-200 to-transparent" />
             </header>
             <div className="pt-2">
               <WeeklyBarChart data={weeklyInOutData} />
@@ -637,21 +639,20 @@ export default function Home() {
           </section>
 
           {/* รายวัน */}
-          <section className="rounded-2xl border border-sky-100 bg-white/90 p-6 shadow-[0_8px_24px_-10px_rgba(30,64,175,0.25)] backdrop-blur">
+          <section className="rounded-2xl border border-earth-800/80 bg-earth-900/60 p-6 shadow-2xl backdrop-blur-xl relative overflow-hidden group">
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-earth-400/40 to-transparent" />
             <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h3 className="text-lg font-semibold tracking-tight text-indigo-900">
+              <h3 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                <span className="w-1.5 h-5 rounded-full bg-earth-400 shadow-[0_0_10px_rgba(163,177,138,0.8)]"></span>
                 สถิติรายวัน (เข้า-ออก)
-                <span className="ml-2 inline-flex items-center rounded-full bg-indigo-100 px-1 py-0.5 text-xs font-medium text-indigo-700">
-                  {dailyDate}
-                </span>
               </h3>
-              <label className="inline-flex items-center gap-2">
-                <span className="text-xs text-slate-500">เลือกวันที่</span>
+              <label className="inline-flex items-center gap-2 bg-earth-800/50 px-3 py-1.5 rounded-lg border border-earth-700/50">
+                <span className="text-xs text-earth-400 font-medium">เลือกวันที่</span>
                 <input
                   type="date"
                   value={dailyDate}
                   onChange={(e) => setDailyDate(e.target.value)}
-                  className="rounded-lg border border-sky-200 bg-white px-2 py-2 text-sm text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                  className="bg-transparent text-sm text-earth-300 focus:outline-none [color-scheme:dark]"
                 />
               </label>
             </header>
@@ -662,20 +663,22 @@ export default function Home() {
         </div>
 
         {/* ตาราง */}
-        <section className="rounded-2xl border border-sky-100 bg-white/95 p-6 shadow-[0_8px_24px_-10px_rgba(2,132,199,0.25)] backdrop-blur">
-          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h3 className="text-lg font-semibold tracking-tight text-indigo-900">
+        <section className="rounded-2xl border border-earth-800/80 bg-earth-900/60 p-6 shadow-2xl backdrop-blur-xl relative overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#10b981]/30 to-transparent" />
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+              <span className="w-1.5 h-5 rounded-full bg-[#10b981] shadow-[0_0_10px_rgba(16,185,129,0.8)]"></span>
               รายการล่าสุด
-              <span className="ml-2 text-sm font-normal text-slate-500">
+              <span className="ml-2 text-sm font-normal text-earth-400">
                 เฉพาะ {dailyDate} ({statusLabel})
               </span>
             </h3>
-            <span className="inline-flex items-center rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
-              Items {recordsRawForDay.length} items
+            <span className="inline-flex items-center rounded-full bg-earth-800/80 px-3 py-1 text-xs font-semibold text-earth-300 border border-earth-700/50">
+              พบ {recordsRawForDay.length} รายการ
             </span>
           </div>
 
-          <div className="mt-2 overflow-hidden rounded-xl ring-1 ring-sky-100">
+          <div className="overflow-hidden rounded-xl border border-earth-700/50 bg-earth-950/50">
             <RecordsTable
               records={recordsRawForDay}
               filters={{ direction: statusFilter }}

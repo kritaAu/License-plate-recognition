@@ -133,22 +133,25 @@ function AddMemberModal({ open, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative mx-auto mt-10 w-full max-w-4xl p-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
-          <h2 className="mb-4 text-2xl font-bold">ลงทะเบียนในระบบ</h2>
+        <div className="rounded-2xl border border-earth-700 bg-earth-900 p-8 shadow-2xl text-earth-100">
+          <h2 className="mb-6 text-2xl font-bold flex items-center gap-3">
+            <span className="w-2 h-8 rounded-full bg-earth-400 shadow-[0_0_12px_rgba(163,177,138,0.8)]"></span>
+            ลงทะเบียนในระบบ
+          </h2>
 
-          <form onSubmit={submit} className="space-y-5">
+          <form onSubmit={submit} className="space-y-6">
             {/* แถว 1 */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {/* std_id เฉพาะนักศึกษา */}
               {isStudent && (
                 <div>
-                  <label className="mb-1 block text-sm text-gray-600">
+                  <label className="mb-1.5 block text-sm font-medium text-earth-300">
                     เลขทะเบียนนักศึกษา
                   </label>
                   <input
-                    className="w-full rounded-lg border px-3 py-2"
+                    className="w-full rounded-xl border border-earth-700 bg-earth-950 px-3 py-2.5 text-sm text-earth-200 shadow-inner focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50 placeholder:text-earth-600"
                     placeholder="เช่น 2310xxxxxx"
                     value={member.std_id}
                     onChange={(e) =>
@@ -159,9 +162,9 @@ function AddMemberModal({ open, onClose, onSaved }) {
                 </div>
               )}
               <div>
-                <label className="mb-1 block text-sm text-gray-600">ชื่อ</label>
+                <label className="mb-1.5 block text-sm font-medium text-earth-300">ชื่อ</label>
                 <input
-                  className="w-full rounded-lg border px-3 py-2"
+                  className="w-full rounded-xl border border-earth-700 bg-earth-950 px-3 py-2.5 text-sm text-earth-200 shadow-inner focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50 placeholder:text-earth-600"
                   value={member.firstname}
                   onChange={(e) =>
                     setMember((s) => ({ ...s, firstname: e.target.value }))
@@ -170,11 +173,11 @@ function AddMemberModal({ open, onClose, onSaved }) {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm text-gray-600">
+                <label className="mb-1.5 block text-sm font-medium text-earth-300">
                   นามสกุล
                 </label>
                 <input
-                  className="w-full rounded-lg border px-3 py-2"
+                  className="w-full rounded-xl border border-earth-700 bg-earth-950 px-3 py-2.5 text-sm text-earth-200 shadow-inner focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50 placeholder:text-earth-600"
                   value={member.lastname}
                   onChange={(e) =>
                     setMember((s) => ({ ...s, lastname: e.target.value }))
@@ -189,11 +192,11 @@ function AddMemberModal({ open, onClose, onSaved }) {
               {/* คณะ: ซ่อนเมื่อเจ้าหน้าที่ */}
               {!isStaff && (
                 <div>
-                  <label className="mb-1 block text-sm text-gray-600">
+                  <label className="mb-1.5 block text-sm font-medium text-earth-300">
                     คณะ
                   </label>
                   <input
-                    className="w-full rounded-lg border px-3 py-2"
+                    className="w-full rounded-xl border border-earth-700 bg-earth-950 px-3 py-2.5 text-sm text-earth-200 shadow-inner focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50 placeholder:text-earth-600"
                     value={member.faculty}
                     onChange={(e) =>
                       setMember((s) => ({ ...s, faculty: e.target.value }))
@@ -204,11 +207,11 @@ function AddMemberModal({ open, onClose, onSaved }) {
               {/* สาขา: เฉพาะนักศึกษา (required) */}
               {isStudent && (
                 <div>
-                  <label className="mb-1 block text-sm text-gray-600">
+                  <label className="mb-1.5 block text-sm font-medium text-earth-300">
                     สาขา
                   </label>
                   <input
-                    className="w-full rounded-lg border px-3 py-2"
+                    className="w-full rounded-xl border border-earth-700 bg-earth-950 px-3 py-2.5 text-sm text-earth-200 shadow-inner focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50 placeholder:text-earth-600"
                     value={member.major}
                     onChange={(e) =>
                       setMember((s) => ({ ...s, major: e.target.value }))
@@ -218,18 +221,17 @@ function AddMemberModal({ open, onClose, onSaved }) {
                 </div>
               )}
               <div>
-                <label className="mb-1 block text-sm text-gray-600">
+                <label className="mb-1.5 block text-sm font-medium text-earth-300">
                   ตำแหน่ง
                 </label>
                 <select
-                  className="w-full rounded-lg border bg-white px-3 py-2"
+                  className="w-full rounded-xl border border-earth-700 bg-earth-950 px-3 py-2.5 text-sm text-earth-200 shadow-inner focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50"
                   value={member.role}
                   onChange={(e) => {
                     const role = e.target.value;
                     setMember((s) => ({
                       ...s,
                       role,
-                      // เปลี่ยนเป็น อาจารย์/เจ้าหน้าที่ -> ล้าง std_id/major
                       std_id:
                         role === "อาจารย์" || role === "เจ้าหน้าที่"
                           ? ""
@@ -238,7 +240,6 @@ function AddMemberModal({ open, onClose, onSaved }) {
                         role === "อาจารย์" || role === "เจ้าหน้าที่"
                           ? ""
                           : s.major,
-                      // เปลี่ยนเป็น เจ้าหน้าที่ -> ล้าง faculty ด้วย
                       faculty: role === "เจ้าหน้าที่" ? "" : s.faculty,
                     }));
                   }}
@@ -252,51 +253,51 @@ function AddMemberModal({ open, onClose, onSaved }) {
 
             {/* ป้ายทะเบียนรถ */}
             <div>
-              <label className="mb-2 block text-sm text-gray-600">
+              <label className="mb-2 block text-sm font-medium text-earth-300">
                 ป้ายทะเบียนรถ
               </label>
-              <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-4">
+              <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-4">
                 <input
-                  className="rounded-lg border px-3 py-2"
-                  placeholder="เช่น กท / 12 (ไทย/ตัวเลข)"
+                  className="rounded-xl border border-earth-700 bg-earth-950 px-3 py-2.5 text-sm text-earth-200 shadow-inner focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50 placeholder:text-earth-600"
+                  placeholder="เช่น กท / 12 (ตัวอักษร)"
                   value={plateLetters}
                   onChange={(e) => setPlateLetters(e.target.value)}
                 />
                 <input
-                  className="rounded-lg border px-3 py-2"
+                  className="rounded-xl border border-earth-700 bg-earth-950 px-3 py-2.5 text-sm text-earth-200 shadow-inner focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50 placeholder:text-earth-600"
                   placeholder="เช่น 2058 (ตัวเลข)"
                   value={plateNumbers}
                   onChange={(e) => setPlateNumbers(e.target.value)}
                 />
                 <input
-                  className="rounded-lg border px-3 py-2"
+                  className="rounded-xl border border-earth-700 bg-earth-950 px-3 py-2.5 text-sm text-earth-200 shadow-inner focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50 placeholder:text-earth-600"
                   placeholder="จังหวัด"
                   value={province}
                   onChange={(e) => setProvince(e.target.value)}
                 />
 
                 {/* preview */}
-                <div className="rounded-xl border bg-gray-50 p-4 text-center text-sm">
-                  <div className="font-semibold">
+                <div className="rounded-xl border border-earth-700 bg-earth-950 p-4 text-center text-sm shadow-inner flex flex-col justify-center items-center gap-1">
+                  <div className="inline-flex items-center rounded-lg border border-earth-600 bg-earth-900 px-4 py-2 text-base font-semibold tracking-wide text-earth-100 shadow-inner min-w-[120px] justify-center">
                     {plateLetters || "XX"} {plateNumbers || "0000"}
                   </div>
-                  <div className="text-gray-500">{province || "จังหวัด"}</div>
+                  <div className="text-earth-400 text-[11px] mt-1">{province || "จังหวัด"}</div>
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex justify-end gap-3 pt-4 border-t border-earth-800">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg bg-rose-100 px-6 py-2 font-medium text-rose-700 hover:bg-rose-200"
+                className="h-11 rounded-xl border border-earth-700 bg-earth-800 px-6 font-medium text-earth-300 shadow-sm hover:bg-earth-700 transition-colors"
                 disabled={submitting}
               >
                 ยกเลิก
               </button>
               <button
                 type="submit"
-                className="rounded-lg bg-emerald-600 px-6 py-2 font-medium text-white hover:brightness-110 disabled:opacity-60"
+                className="h-11 rounded-xl bg-earth-600 px-6 font-bold text-white shadow-[0_0_12px_rgba(88,129,87,0.4)] hover:bg-earth-500 hover:shadow-[0_0_16px_rgba(88,129,87,0.6)] transition-all disabled:opacity-60"
                 disabled={submitting}
               >
                 {submitting ? "กำลังบันทึก..." : "บันทึก"}
@@ -350,32 +351,35 @@ function EditMemberModal({ open, onClose, member, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative mx-auto mt-20 w-full max-w-md px-4">
         <form
           onSubmit={submit}
-          className="rounded-xl border border-slate-200 bg-white p-6 shadow-xl space-y-4"
+          className="rounded-2xl border border-earth-700 bg-earth-900 p-8 shadow-2xl text-earth-100 space-y-5"
         >
-          <h3 className="text-lg font-semibold">แก้ไขข้อมูลสมาชิก</h3>
+          <h3 className="text-xl font-bold flex items-center gap-3 mb-2">
+            <span className="w-1.5 h-6 rounded-full bg-earth-400 shadow-[0_0_12px_rgba(163,177,138,0.8)]"></span>
+            แก้ไขข้อมูลสมาชิก
+          </h3>
 
           <div>
-            <label className="block text-sm text-slate-600 mb-1">ชื่อ</label>
+            <label className="block text-sm font-medium text-earth-300 mb-1.5">ชื่อ</label>
             <input
               name="firstname"
               value={form.firstname}
               onChange={onChange}
-              className="w-full rounded-lg border px-3 py-2"
+              className="w-full rounded-xl border border-earth-700 bg-earth-950 px-3 py-2.5 text-sm text-earth-200 shadow-inner focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm text-slate-600 mb-1">นามสกุล</label>
+            <label className="block text-sm font-medium text-earth-300 mb-1.5">นามสกุล</label>
             <input
               name="lastname"
               value={form.lastname}
               onChange={onChange}
-              className="w-full rounded-lg border px-3 py-2"
+              className="w-full rounded-xl border border-earth-700 bg-earth-950 px-3 py-2.5 text-sm text-earth-200 shadow-inner focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50"
               required
             />
           </div>
@@ -383,30 +387,30 @@ function EditMemberModal({ open, onClose, member, onSave }) {
           {/* std_id เฉพาะนักศึกษา */}
           {isStudent && (
             <div>
-              <label className="block text-sm text-slate-600 mb-1">
+              <label className="block text-sm font-medium text-earth-300 mb-1.5">
                 รหัสนักศึกษา
               </label>
               <input
                 name="std_id"
                 value={form.std_id}
                 onChange={onChange}
-                className="w-full rounded-lg border px-3 py-2"
+                className="w-full rounded-xl border border-earth-700 bg-earth-950 px-3 py-2.5 text-sm text-earth-200 shadow-inner focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50"
                 required
               />
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-3 pt-4 border-t border-earth-800">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border px-4 py-2"
+              className="h-11 rounded-xl border border-earth-700 bg-earth-800 px-6 font-medium text-earth-300 shadow-sm hover:bg-earth-700 transition-colors"
             >
               ยกเลิก
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-blue-600 text-white px-4 py-2"
+              className="h-11 rounded-xl bg-earth-600 px-6 font-bold text-white shadow-[0_0_12px_rgba(88,129,87,0.4)] hover:bg-earth-500 transition-all"
             >
               บันทึก
             </button>
@@ -492,15 +496,15 @@ export default function Member() {
     const r = (role || "").trim();
     const color =
       r === "นักศึกษา"
-        ? "bg-blue-100 text-blue-800"
+        ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
         : r === "อาจารย์"
-        ? "bg-emerald-100 text-emerald-800"
+        ? "bg-earth-500/10 text-earth-400 border-earth-500/20"
         : r === "เจ้าหน้าที่"
-        ? "bg-violet-100 text-violet-800"
-        : "bg-slate-100 text-slate-700";
+        ? "bg-violet-500/10 text-violet-400 border-violet-500/20"
+        : "bg-earth-700/50 text-earth-300 border-earth-600/50";
     return (
       <span
-        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${color}`}
+        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold border ${color}`}
       >
         {r || "—"}
       </span>
@@ -508,15 +512,18 @@ export default function Member() {
   };
 
   return (
-    <div className="pt-0 bg-gradient-to-br from-white to-blue-400">
-      <div className="mx-auto max-w-7xl px-4 py-6 ">
-        <h1 className="mb-4 text-3xl font-bold">ค้นหาสมาชิก</h1>
+    <div className="pt-0">
+      <div className="mx-auto max-w-7xl px-4 py-6">
+        <h1 className="mb-4 text-3xl font-bold text-white flex items-center gap-3">
+          <span className="w-2 h-8 rounded-full bg-earth-400 shadow-[0_0_12px_rgba(163,177,138,0.8)]"></span>
+          ค้นหาสมาชิก
+        </h1>
 
         {/* แผงฟิลเตอร์ */}
-        <div className="mb-6 rounded-2xl border border-slate-200 bg-[#c9d9e8] p-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="mb-6 rounded-2xl bg-earth-900/50 p-6 shadow-sm border border-earth-800 backdrop-blur-xl">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <input
-              className="rounded-lg border bg-white px-3 py-2"
+              className="h-11 rounded-xl border border-earth-700 bg-earth-800 px-3 text-sm text-earth-300 shadow-inner placeholder:text-earth-500 focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50"
               placeholder="ทะเบียนรถ"
               value={filters.plate}
               onChange={(e) =>
@@ -525,9 +532,9 @@ export default function Member() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3 mt-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mt-4">
             <input
-              className="rounded-lg border bg-white px-3 py-2"
+              className="h-11 rounded-xl border border-earth-700 bg-earth-800 px-3 text-sm text-earth-300 shadow-inner placeholder:text-earth-500 focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50"
               placeholder="ชื่อ"
               value={filters.firstname}
               onChange={(e) =>
@@ -535,7 +542,7 @@ export default function Member() {
               }
             />
             <input
-              className="rounded-lg border bg-white px-3 py-2"
+              className="h-11 rounded-xl border border-earth-700 bg-earth-800 px-3 text-sm text-earth-300 shadow-inner placeholder:text-earth-500 focus:border-earth-500 focus:outline-none focus:ring-2 focus:ring-earth-500/50"
               placeholder="นามสกุล"
               value={filters.lastname}
               onChange={(e) =>
@@ -544,10 +551,10 @@ export default function Member() {
             />
           </div>
 
-          <div className="mt-4 flex gap-3">
+          <div className="mt-6 flex gap-3">
             <button
               onClick={load}
-              className="rounded-lg bg-[#2a567b] px-6 py-2 font-medium text-white hover:brightness-110"
+              className="h-11 rounded-xl bg-earth-600 px-6 font-bold text-white shadow-[0_0_12px_rgba(88,129,87,0.4)] hover:bg-earth-500 hover:shadow-[0_0_16px_rgba(88,129,87,0.6)] focus:outline-none focus:ring-2 focus:ring-earth-400 focus:ring-offset-2 focus:ring-offset-earth-900 transition-all"
             >
               รีเฟรช
             </button>
@@ -555,7 +562,7 @@ export default function Member() {
               onClick={() =>
                 setFilters({ plate: "", firstname: "", lastname: "" })
               }
-              className="rounded-lg bg-white px-6 py-2 font-medium text-[#2a567b] ring-1 ring-[#2a567b]"
+              className="h-11 rounded-xl border border-earth-700 bg-earth-800 px-6 font-medium text-earth-300 shadow-sm hover:bg-earth-700 focus:outline-none focus:ring-2 focus:ring-earth-500 focus:ring-offset-2 focus:ring-offset-earth-900 transition-all"
             >
               ล้างฟิลเตอร์
             </button>
@@ -563,40 +570,40 @@ export default function Member() {
         </div>
 
         {/* ตาราง */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="overflow-hidden rounded-xl ring-1 ring-slate-200">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50">
+        <section className="rounded-2xl bg-earth-900/60 p-6 shadow-2xl border border-earth-800/80 backdrop-blur-xl">
+          <div className="overflow-hidden rounded-xl border border-earth-700/50 bg-earth-950/50 text-sm">
+            <table className="w-full text-left divide-y divide-earth-800/50">
+              <thead className="bg-earth-900/80 backdrop-blur-md">
                 <tr>
-                  <th className="px-3 py-3">ทะเบียนรถ</th>
-                  <th className="px-3 py-3">รหัสนักศึกษา</th>
-                  <th className="px-3 py-3">ชื่อ-นามสกุล</th>
-                  <th className="px-3 py-3">ตำแหน่ง</th>
+                  <th className="px-4 py-3 font-semibold text-earth-300 whitespace-nowrap">ทะเบียนรถ</th>
+                  <th className="px-4 py-3 font-semibold text-earth-300 whitespace-nowrap">รหัสนักศึกษา</th>
+                  <th className="px-4 py-3 font-semibold text-earth-300 whitespace-nowrap">ชื่อ-นามสกุล</th>
+                  <th className="px-4 py-3 font-semibold text-earth-300 whitespace-nowrap">ตำแหน่ง</th>
                   {/* เพิ่มคอลัมน์ */}
-                  <th className="w-16 px-3 py-3">ลบ</th>
-                  <th className="w-16 px-3 py-3">แก้ไข</th>
+                  <th className="w-16 px-4 py-3 font-semibold text-earth-300 whitespace-nowrap">ลบ</th>
+                  <th className="w-16 px-4 py-3 font-semibold text-earth-300 whitespace-nowrap">แก้ไข</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="divide-y divide-earth-800/50">
                 {filtered.map((r) => (
-                  <tr key={r.member_id} className="hover:bg-slate-50/70">
-                    <td className="px-3 py-2">
-                      <div className="flex flex-col">
-                        <span className="font-semibold">{r.plate || "—"}</span>
-                        <span className="text-xs text-slate-500">
+                  <tr key={r.member_id} className="hover:bg-earth-800/40 transition-colors">
+                    <td className="px-4 py-4 align-top">
+                      <div className="flex flex-col gap-1 w-min">
+                        <span className="inline-flex items-center rounded-xl border border-earth-700 bg-earth-900 px-4 py-2 text-base font-semibold tracking-wide text-earth-100 shadow-inner min-w-[120px] justify-center whitespace-nowrap">{r.plate || "—"}</span>
+                        <span className="text-xs text-earth-400 text-center mt-1">
                           {r.province || "ไม่ทราบจังหวัด"}
                         </span>
                       </div>
                     </td>
 
-                    <td className="px-3 py-2">{r.std_id ?? "—"}</td>
-                    <td className="px-3 py-2">{`${r.firstname ?? ""} ${
+                    <td className="px-4 py-4 align-top text-earth-200">{r.std_id ?? "—"}</td>
+                    <td className="px-4 py-4 align-top text-earth-200">{`${r.firstname ?? ""} ${
                       r.lastname ?? ""
                     }`}</td>
-                    <td className="px-3 py-2">{renderRole(r.role)}</td>
+                    <td className="px-4 py-4 align-top">{renderRole(r.role)}</td>
 
                     {/* แสดง badge */}
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-4 align-top">
                       <button
                         onClick={async () => {
                           if (
@@ -608,15 +615,15 @@ export default function Member() {
                           await deleteMember(r.member_id);
                           load();
                         }}
-                        className="rounded-md bg-rose-100 px-3 py-1 text-rose-700 hover:bg-rose-200"
+                        className="rounded-md bg-rose-500/10 px-3 py-1 text-rose-400 hover:bg-rose-500/20 border border-rose-500/20 transition-colors"
                       >
                         ลบ
                       </button>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-4 align-top">
                       <button
                         onClick={() => handleOpenEdit(r)}
-                        className="rounded-md bg-yellow-100 px-3 py-1 text-yellow-800 hover:bg-yellow-200"
+                        className="rounded-md bg-amber-500/10 px-3 py-1 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-colors"
                       >
                         แก้ไข
                       </button>
@@ -627,7 +634,7 @@ export default function Member() {
                   <tr>
                     <td
                       colSpan={6}
-                      className="px-3 py-8 text-center text-slate-500"
+                      className="px-4 py-8 text-center text-earth-400"
                     >
                       ไม่พบข้อมูล
                     </td>
@@ -637,15 +644,15 @@ export default function Member() {
             </table>
           </div>
           {loading && (
-            <div className="py-6 text-center text-sm text-slate-600">
+            <div className="py-6 text-center text-sm text-earth-500">
               กำลังโหลด...
             </div>
           )}
-        </div>
+        </section>
 
         <button
           onClick={() => setOpenAdd(true)}
-          className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg hover:brightness-110"
+          className="fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full bg-earth-600 text-white shadow-[0_0_15px_rgba(88,129,87,0.5)] hover:bg-earth-500 transition-all font-bold"
           title="เพิ่มสมาชิก"
         >
           <span className="text-2xl leading-none">＋</span>

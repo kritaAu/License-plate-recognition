@@ -389,7 +389,7 @@ export default function Search() {
   return (
     <div className="max-w-7xl mx-auto px-4 pb-6 pt-4">
       {/* กล่องฟิลเตอร์ด้านบน */}
-      <div className="mb-4 rounded-2xl bg-blue-300 p-4 shadow-sm backdrop-blur">
+      <div className="mb-4 rounded-2xl bg-earth-900/50 p-6 shadow-sm border border-earth-800 backdrop-blur-xl">
         <Filters
           filters={filters}
           setFilters={setFilters}
@@ -400,17 +400,18 @@ export default function Search() {
       </div>
 
       {/* ตารางรายการ */}
-      <section className="rounded-2xl bg-white/80 p-4 shadow-sm backdrop-blur">
-        <div className="mb-3 flex items-center justify-between gap-2">
+      <section className="rounded-2xl bg-earth-900/60 p-6 shadow-2xl border border-earth-800/80 backdrop-blur-xl">
+        <div className="mb-5 flex items-center justify-between gap-2 border-b border-earth-800/50 pb-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-800">
+            <h2 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+              <span className="w-1.5 h-5 rounded-full bg-earth-400 shadow-[0_0_10px_rgba(163,177,138,0.8)]"></span>
               รายการล่าสุด
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-earth-400 mt-1">
               แสดง session รถจักรยานยนต์ล่าสุดจากกล้อง
             </p>
           </div>
-          <div className="text-right text-xs text-slate-500">
+          <div className="text-right text-xs text-earth-400">
             <div>ทั้งหมด {deferredRecords.length} แถว</div>
             {loading && (
               <div className="text-[11px] text-amber-600">กำลังโหลด...</div>
@@ -421,7 +422,7 @@ export default function Search() {
         <RecordsTable records={deferredRecords} filters={filters} />
 
         {!loading && deferredRecords.length === 0 && (
-          <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+          <div className="mt-6 rounded-xl border border-dashed border-earth-700 bg-earth-900/30 px-4 py-8 text-center text-sm text-earth-400">
             ไม่พบข้อมูลตามเงื่อนไขที่เลือก
           </div>
         )}

@@ -1192,7 +1192,7 @@ function DetailModal({ record, onClose, onUpdated }) {
 
 function Th({ children }) {
   return (
-    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold tracking-wide text-slate-500">
+    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold tracking-wide text-earth-300">
       {children}
     </th>
   );
@@ -1201,7 +1201,7 @@ function Th({ children }) {
 function Td({ children, className = "" }) {
   return (
     <td
-      className={`whitespace-nowrap px-4 py-4 align-top text-sm text-slate-700 ${className}`}
+      className={`whitespace-nowrap px-4 py-4 align-top text-sm text-earth-200 ${className}`}
     >
       {children}
     </td>
@@ -1376,16 +1376,16 @@ export default function RecordsTable({ records, filters = {} }) {
 
   return (
     <>
-      <div className="overflow-x-auto bg-white">
-        <table className="min-w-full divide-y divide-slate-100 text-sm">
-          <thead className="bg-slate-50">
+      <div className="overflow-x-auto bg-transparent">
+        <table className="min-w-full divide-y divide-earth-800/50 text-sm">
+          <thead className="bg-earth-900/80 backdrop-blur-md">
             <tr>
               <Th>ประเภท</Th>
               <Th>
                 <button
                   type="button"
                   onClick={() => handleSort("plate")}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-sky-700"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-earth-400 hover:text-earth-300 transition-colors"
                 >
                   ทะเบียนรถ
                   {renderSortIcon("plate")}
@@ -1395,7 +1395,7 @@ export default function RecordsTable({ records, filters = {} }) {
                 <button
                   type="button"
                   onClick={() => handleSort("entryTime")}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-sky-700"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-earth-400 hover:text-earth-300 transition-colors"
                 >
                   ขาเข้า (CHECK-IN)
                   {renderSortIcon("entryTime")}
@@ -1405,7 +1405,7 @@ export default function RecordsTable({ records, filters = {} }) {
                 <button
                   type="button"
                   onClick={() => handleSort("exitTime")}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-sky-700"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-earth-400 hover:text-earth-300 transition-colors"
                 >
                   ขาออก (CHECK-OUT)
                   {renderSortIcon("exitTime")}
@@ -1415,7 +1415,7 @@ export default function RecordsTable({ records, filters = {} }) {
                 <button
                   type="button"
                   onClick={() => handleSort("status")}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-sky-700"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-earth-400 hover:text-earth-300 transition-colors"
                 >
                   สถานะ
                   {renderSortIcon("status")}
@@ -1423,7 +1423,7 @@ export default function RecordsTable({ records, filters = {} }) {
               </Th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-50">
+          <tbody className="divide-y divide-earth-800/50">
             {pageRows.map((rec, idx) => {
               const key =
                 rec._raw?.id ||
@@ -1445,7 +1445,7 @@ export default function RecordsTable({ records, filters = {} }) {
               return (
                 <tr
                   key={key}
-                  className="cursor-pointer bg-white hover:bg-sky-50"
+                  className="cursor-pointer bg-transparent hover:bg-earth-800/40 transition-colors"
                   onClick={() => setSelected(rec)}
                 >
                   {/* ประเภท */}
@@ -1467,19 +1467,19 @@ export default function RecordsTable({ records, filters = {} }) {
                   {/* ทะเบียนรถ [UPDATED UI] */}
                   <Td>
                     <div className="flex flex-col gap-1">
-                      <div className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-base font-semibold tracking-wide text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.06)]">
+                      <div className="inline-flex items-center rounded-xl border border-earth-700 bg-earth-900 px-4 py-2 text-base font-semibold tracking-wide text-earth-100 shadow-inner">
                         {session.plate || "-"}
                       </div>
                       
                       {/* ถ้าเลขทะเบียนเข้า/ออกไม่ตรงกัน ให้โชว์ Warning */}
                       {session.statusKey === 'completed' && session.plateEntry && session.plateExit && session.plateEntry !== session.plateExit && (
-                        <div className="inline-flex items-center gap-1 text-[11px] text-rose-500">
+                        <div className="inline-flex items-center gap-1 text-[11px] text-terra-500">
                           <span className="font-bold">⚠ ออก:</span>
                           <span>{session.plateExit}</span>
                         </div>
                       )}
 
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-earth-400">
                         {session.province || "ไม่ทราบจังหวัด"}
                       </div>
                     </div>
@@ -1487,8 +1487,8 @@ export default function RecordsTable({ records, filters = {} }) {
 
                   {/* ขาเข้า */}
                   <Td className="w-[320px]">
-                    <div className="flex items-center gap-3 rounded-2xl bg-slate-50 px-3 py-3">
-                      <div className="flex h-16 w-24 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-xs font-semibold text-slate-500 shadow-sm">
+                    <div className="flex items-center gap-3 rounded-2xl bg-earth-900/50 border border-earth-700/50 px-3 py-3">
+                      <div className="flex h-16 w-24 items-center justify-center overflow-hidden rounded-xl bg-earth-800 text-xs font-semibold text-earth-500 shadow-sm border border-earth-700">
                         {session.entryImage ? (
                           <img
                             src={session.entryImage}
@@ -1501,17 +1501,17 @@ export default function RecordsTable({ records, filters = {} }) {
                       </div>
                       <div className="flex flex-col">
                         <div className="flex items-center gap-1 text-xs">
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-[11px] text-emerald-600">
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-earth-800 text-[11px] text-[#10b981]">
                             →
                           </span>
-                          <span className="font-semibold text-emerald-600">
+                          <span className="font-semibold text-[#10b981]">
                             เข้า
                           </span>
                         </div>
-                        <div className="mt-1 text-sm font-semibold text-slate-900">
+                        <div className="mt-1 text-sm font-semibold text-earth-200">
                           {entryParts.time || "-"}
                         </div>
-                        <div className="text-[11px] text-slate-400">
+                        <div className="text-[11px] text-earth-400">
                           {entryParts.date || ""}
                         </div>
                       </div>
@@ -1521,9 +1521,9 @@ export default function RecordsTable({ records, filters = {} }) {
                   {/* ขาออก */}
                   <Td className="w-[320px]">
                     {hasExit ? (
-                      <div className="flex flex-col gap-1 rounded-2xl bg-slate-50 px-3 py-3">
+                      <div className="flex flex-col gap-1 rounded-2xl bg-earth-900/50 border border-earth-700/50 px-3 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-16 w-24 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-xs font-semibold text-slate-500 shadow-sm">
+                          <div className="flex h-16 w-24 items-center justify-center overflow-hidden rounded-xl bg-earth-800 text-xs font-semibold text-earth-500 shadow-sm border border-earth-700">
                             {session.exitImage ? (
                               <img
                                 src={session.exitImage}
@@ -1536,29 +1536,29 @@ export default function RecordsTable({ records, filters = {} }) {
                           </div>
                           <div className="flex flex-col">
                             <div className="flex items-center gap-1 text-xs">
-                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-100 text-[11px] text-rose-600">
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-earth-800 text-[11px] text-terra-500">
                                 ←
                               </span>
-                              <span className="font-semibold text-rose-600">
+                              <span className="font-semibold text-terra-500">
                                 ออก
                               </span>
                             </div>
-                            <div className="mt-1 text-sm font-semibold text-slate-900">
+                            <div className="mt-1 text-sm font-semibold text-earth-200">
                               {exitParts.time || "-"}
                             </div>
-                            <div className="text-[11px] text-slate-400">
+                            <div className="text-[11px] text-earth-400">
                               {exitParts.date || ""}
                             </div>
                           </div>
                         </div>
                         {durationLabel && (
-                          <div className="mt-1 inline-flex max-w-max rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-500">
+                          <div className="mt-1 inline-flex max-w-max rounded-full bg-earth-800 px-3 py-1 text-[11px] font-medium text-earth-300 border border-earth-700">
                             {durationLabel}
                           </div>
                         )}
                       </div>
                     ) : (
-                      <div className="flex h-16 items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 text-xs font-medium text-slate-400">
+                      <div className="flex h-16 items-center justify-center rounded-2xl border-2 border-dashed border-earth-700 bg-earth-900/30 px-4 text-xs font-medium text-earth-500">
                         ยังไม่มีข้อมูลออก
                       </div>
                     )}
@@ -1579,14 +1579,14 @@ export default function RecordsTable({ records, filters = {} }) {
         </table>
       </div>
 
-      <div className="flex items-center justify-between gap-3 px-4 py-3 text-xs text-slate-600">
+      <div className="flex items-center justify-between gap-3 px-4 py-4 text-xs text-earth-400 border-t border-earth-800">
         <div>
           แสดง{" "}
-          <span className="font-semibold">
+          <span className="font-semibold text-earth-200">
             {startIndex + 1} -{" "}
             {Math.min(startIndex + PAGE_SIZE, sortedRows.length)}
           </span>{" "}
-          จาก <span className="font-semibold">{sortedRows.length}</span>{" "}
+          จาก <span className="font-semibold text-earth-200">{sortedRows.length}</span>{" "}
           รายการ
         </div>
 
@@ -1595,7 +1595,7 @@ export default function RecordsTable({ records, filters = {} }) {
             type="button"
             onClick={() => setCurrentPage(1)}
             disabled={safePage === 1}
-            className="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg border border-earth-700 bg-earth-800 px-2 py-1.5 text-xs text-earth-300 hover:bg-earth-700 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
           >
             «
           </button>
@@ -1603,7 +1603,7 @@ export default function RecordsTable({ records, filters = {} }) {
             type="button"
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={safePage === 1}
-            className="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg border border-earth-700 bg-earth-800 px-2 py-1.5 text-xs text-earth-300 hover:bg-earth-700 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
           >
             ‹
           </button>
@@ -1612,10 +1612,10 @@ export default function RecordsTable({ records, filters = {} }) {
               key={p}
               type="button"
               onClick={() => setCurrentPage(p)}
-              className={`min-w-[2rem] rounded border px-2 py-1 text-center text-xs ${
+              className={`min-w-[2rem] rounded-lg border px-2 py-1.5 text-center text-xs transition-colors ${
                 p === safePage
-                  ? "border-sky-500 bg-sky-50 text-sky-700"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  ? "border-earth-600 bg-earth-600/20 text-earth-300"
+                  : "border-earth-700 bg-earth-800 text-earth-300 hover:bg-earth-700"
               }`}
             >
               {p}
@@ -1625,7 +1625,7 @@ export default function RecordsTable({ records, filters = {} }) {
             type="button"
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={safePage === totalPages}
-            className="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg border border-earth-700 bg-earth-800 px-2 py-1.5 text-xs text-earth-300 hover:bg-earth-700 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
           >
             ›
           </button>
@@ -1633,7 +1633,7 @@ export default function RecordsTable({ records, filters = {} }) {
             type="button"
             onClick={() => setCurrentPage(totalPages)}
             disabled={safePage === totalPages}
-            className="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg border border-earth-700 bg-earth-800 px-2 py-1.5 text-xs text-earth-300 hover:bg-earth-700 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
           >
             »
           </button>

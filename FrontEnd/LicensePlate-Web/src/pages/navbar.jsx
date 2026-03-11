@@ -30,9 +30,9 @@ export default function Navbar() {
   const desktopNavLinkClass = ({ isActive }) =>
     [
       "relative h-full flex items-center px-4 font-medium transition-colors duration-200",
-      "text-white/80 hover:text-white",
+      "text-earth-300 hover:text-white",
       isActive
-        ? "text-white after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-full after:bg-sky-400 after:shadow-[0_0_10px_#38bdf8]"
+        ? "text-earth-400 after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-full after:bg-earth-400 after:shadow-[0_0_12px_rgba(163,177,138,0.8)]"
         : "",
     ].join(" ");
 
@@ -40,12 +40,12 @@ export default function Navbar() {
     [
       "flex-1 text-center py-2 text-sm font-medium transition-colors",
       isActive
-        ? "bg-sky-600 text-white shadow-inner shadow-black/20"
-        : "text-white hover:bg-white/10",
+        ? "bg-earth-600 text-white shadow-inner shadow-black/20"
+        : "text-earth-200 hover:text-white hover:bg-white/10",
     ].join(" ");
 
   return (
-    <header className="w-full bg-[#0c2a52] text-white shadow-xl sticky top-0 z-50">
+    <header className="w-full bg-earth-950/90 backdrop-blur-xl border-b border-earth-800/60 shadow-lg sticky top-0 z-50">
       {/* Desktop Navbar */}
       <div className="mx-auto max-w-7xl px-3 sm:px-4 lg:px-6">
         <div className="flex h-16 items-stretch justify-between">
@@ -53,7 +53,7 @@ export default function Navbar() {
           <div className="flex items-stretch">
             {/* Brand */}
             <div className="flex items-center">
-              <span className="text-xl sm:text-2xl font-extrabold tracking-wider text-sky-400">
+              <span className="text-xl sm:text-2xl font-extrabold tracking-wider text-earth-200 drop-shadow-sm">
                 LPR Admin
               </span>
             </div>
@@ -72,9 +72,9 @@ export default function Navbar() {
           <div className="flex items-center gap-4">
             {/* แสดงชื่อ User */}
             {user && (
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full border border-sky-500/50">
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-earth-600/50 text-earth-100">
                 <span className="text-sm font-medium">👤 {user.username}</span>
-                <span className="text-xs opacity-75">
+                <span className="text-xs opacity-75 text-earth-300">
                   ({user.role === "admin" ? "ผู้ดูแล" : "พนักงาน"})
                 </span>
               </div>
@@ -83,7 +83,7 @@ export default function Navbar() {
             {/* ปุ่ม Logout */}
             <button
               onClick={handleLogout}
-              className="rounded-full bg-red-600 hover:bg-red-700 px-4 py-2 text-sm font-semibold shadow-md shadow-black/30 transition-colors"
+              className="rounded-full bg-terra-500 hover:bg-terra-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-black/30 transition-colors"
               title="ออกจากระบบ"
             >
               Log Out

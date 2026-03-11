@@ -15,16 +15,16 @@ function Tip({ active, payload, label }) {
   const pOut = payload.find((p) => p.dataKey === "out")?.value ?? 0;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow">
-      <div className="text-xs font-semibold text-slate-700">{label}</div>
-      <div className="mt-1 text-xs">
+    <div className="rounded-xl border border-slate-700 bg-slate-900/95 px-3 py-2 shadow-lg backdrop-blur-sm">
+      <div className="text-xs font-semibold text-slate-200">{label}</div>
+      <div className="mt-1 text-xs text-slate-400">
         <div className="flex items-center gap-2">
-          <span className="inline-block h-2 w-2 rounded-full bg-[#22c55e]" />
-          รถเข้า (IN): <b className="ml-1">{pIn}</b>
+          <span className="inline-block h-2 w-2 rounded-full bg-[#10b981]" />
+          รถเข้า (IN): <b className="ml-1 text-slate-100">{pIn}</b>
         </div>
         <div className="flex items-center gap-2">
-          <span className="inline-block h-2 w-2 rounded-full bg-[#ef4444]" />
-          รถออก (OUT): <b className="ml-1">{pOut}</b>
+          <span className="inline-block h-2 w-2 rounded-full bg-[#f43f5e]" />
+          รถออก (OUT): <b className="ml-1 text-slate-100">{pOut}</b>
         </div>
       </div>
     </div>
@@ -60,36 +60,36 @@ export default function WeeklyBarChart({ data = [] }) {
             barCategoryGap="25%"
             margin={{ top: 8, right: 12, left: 4, bottom: 8 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 12, fill: "#475569" }}
-              axisLine={{ stroke: "#e2e8f0" }}
+              tick={{ fontSize: 12, fill: "#94a3b8" }}
+              axisLine={{ stroke: "#334155" }}
             />
             <YAxis
               allowDecimals={false}
-              tick={{ fontSize: 12, fill: "#475569" }}
-              axisLine={{ stroke: "#e2e8f0" }}
+              tick={{ fontSize: 12, fill: "#94a3b8" }}
+              axisLine={{ stroke: "#334155" }}
             />
-            <Tooltip content={<Tip />} />
+            <Tooltip content={<Tip />} cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }} />
             <Legend
-              wrapperStyle={{ fontSize: 12 }}
+              wrapperStyle={{ fontSize: 12, color: "#94a3b8" }}
               formatter={(value, entry) =>
-                entry.dataKey === "in" ? "รถเข้า (IN)" : "รถออก (OUT)"
+                <span className="text-slate-300">{entry.dataKey === "in" ? "รถเข้า (IN)" : "รถออก (OUT)"}</span>
               }
             />
             {/* เขียว = เข้า */}
             <Bar
               dataKey="in"
               name="รถเข้า (IN)"
-              fill="#22c55e"
+              fill="#10b981"
               radius={[8, 8, 0, 0]}
             />
             {/* แดง = ออก */}
             <Bar
               dataKey="out"
               name="รถออก (OUT)"
-              fill="#ef4444"
+              fill="#f43f5e"
               radius={[8, 8, 0, 0]}
             />
           </BarChart>

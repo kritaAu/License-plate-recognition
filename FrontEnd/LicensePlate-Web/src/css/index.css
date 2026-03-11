@@ -1,1 +1,19 @@
 @import "tailwindcss";
+
+@theme {
+  --color-earth-100: #F3F4F0;
+  --color-earth-200: #DAD7CD; /* Dust Grey */
+  --color-earth-300: #C2CCB8;
+  --color-earth-400: #A3B18A; /* Dry Sage */
+  --color-earth-500: #7A9B75;
+  --color-earth-600: #588157; /* Fern */
+  --color-earth-700: #496949;
+  --color-earth-800: #3A5A40; /* Hunter Green */
+  --color-earth-900: #344E41; /* Pine Teal */
+  --color-earth-950: #1B2922; /* Deep Pine / Dark Bg */
+
+  /* Complementary earthy tones for status */
+  --color-terra-400: #D98C6B; /* Muted orange/rust for parked */
+  --color-terra-500: #C06B4D; 
+  --color-terra-600: #9C5139; /* For alerts/out */
+}

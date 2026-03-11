@@ -98,7 +98,7 @@ export default function DailyLineChart({ data = [], height = 260, fontScale = 1.
         aria-label="สถิติรายวันรถเข้า-ออก"
       >
         {/* พื้นหลัง plot */}
-        <rect x={M.left} y={M.top} width={PW} height={PH} fill="white" rx="10" />
+        <rect x={M.left} y={M.top} width={PW} height={PH} fill="transparent" rx="10" />
 
         {/* กริด & y-labels */}
         {yTicks.map((t, idx) => {
@@ -110,7 +110,7 @@ export default function DailyLineChart({ data = [], height = 260, fontScale = 1.
                 y1={yy}
                 x2={M.left + PW}
                 y2={yy}
-                stroke="#e5e7eb"
+                stroke="#334155"
                 strokeDasharray="4 4"
               />
               <text
@@ -118,7 +118,7 @@ export default function DailyLineChart({ data = [], height = 260, fontScale = 1.
                 y={yy + 4}
                 textAnchor="end"
                 fontSize={FS_AXIS}
-                fill="#475569"
+                fill="#94a3b8"
               >
                 {t}
               </text>
@@ -130,7 +130,7 @@ export default function DailyLineChart({ data = [], height = 260, fontScale = 1.
         <path
           d={pathOf("in")}
           fill="none"
-          stroke="#16a34a"
+          stroke="#10b981"
           strokeWidth={STROKE_W}
           vectorEffect="non-scaling-stroke"
         />
@@ -139,7 +139,7 @@ export default function DailyLineChart({ data = [], height = 260, fontScale = 1.
         <path
           d={pathOf("out")}
           fill="none"
-          stroke="#ef4444"
+          stroke="#f43f5e"
           strokeWidth={STROKE_W}
           vectorEffect="non-scaling-stroke"
         />
@@ -147,8 +147,8 @@ export default function DailyLineChart({ data = [], height = 260, fontScale = 1.
         {/* จุดบนเส้น */}
         {data.map((d, i) => (
           <g key={`dots-${i}`}>
-            <circle cx={x(i)} cy={y(Number(d.in || 0))} r={DOT_R} fill="#16a34a" />
-            <circle cx={x(i)} cy={y(Number(d.out || 0))} r={DOT_R} fill="#ef4444" />
+            <circle cx={x(i)} cy={y(Number(d.in || 0))} r={DOT_R} fill="#10b981" />
+            <circle cx={x(i)} cy={y(Number(d.out || 0))} r={DOT_R} fill="#f43f5e" />
           </g>
         ))}
 
@@ -161,7 +161,7 @@ export default function DailyLineChart({ data = [], height = 260, fontScale = 1.
               y={H - 6}
               fontSize={FS_TICK}
               textAnchor="middle"
-              fill="#475569"
+              fill="#94a3b8"
             >
               {d.label}
             </text>
@@ -187,13 +187,13 @@ export default function DailyLineChart({ data = [], height = 260, fontScale = 1.
               y1={M.top}
               x2={hover.x}
               y2={M.top + PH}
-              stroke="#94a3b8"
+              stroke="#64748b"
               strokeDasharray="4 4"
             />
 
             {/* จุดเน้น */}
-            <circle cx={hover.x} cy={hover.yIn} r={DOT_R + 1.5} fill="#16a34a" stroke="white" />
-            <circle cx={hover.x} cy={hover.yOut} r={DOT_R + 1.5} fill="#ef4444" stroke="white" />
+            <circle cx={hover.x} cy={hover.yIn} r={DOT_R + 1.5} fill="#10b981" stroke="#0f172a" strokeWidth={2} />
+            <circle cx={hover.x} cy={hover.yOut} r={DOT_R + 1.5} fill="#f43f5e" stroke="#0f172a" strokeWidth={2} />
 
             {/* กล่อง tooltip ใหญ่ขึ้น */}
             {(() => {
@@ -205,20 +205,20 @@ export default function DailyLineChart({ data = [], height = 260, fontScale = 1.
               const boxY = Math.max(M.top + 6, topY - (boxH + 6));
 
               return (
-                <g transform={`translate(${boxX}, ${boxY})`}>
-                  <rect width={boxW} height={boxH} rx="10" fill="white" stroke="#e2e8f0" />
-                  <text x={pad} y={pad + FS_TT_TITLE} fontSize={FS_TT_TITLE} fill="#334155">
+                 <g transform={`translate(${boxX}, ${boxY})`}>
+                  <rect width={boxW} height={boxH} rx="10" fill="#1e293b" stroke="#334155" />
+                  <text x={pad} y={pad + 12} fontSize={FS_TT_TITLE} fill="#cbd5e1" fontWeight="bold">
                     {hover.label}
                   </text>
                   <g>
-                    <circle cx={pad + 2} cy={boxH / 2} r="5" fill="#16a34a" />
-                    <text x={pad + 14} y={boxH / 2 + 4} fontSize={FS_TT_VAL} fill="#0f172a">
+                    <circle cx={pad + 4} cy={boxH / 2 + 2} r="4" fill="#10b981" />
+                    <text x={pad + 14} y={boxH / 2 + 6} fontSize={FS_TT_VAL} fill="#f8fafc">
                       รถเข้า (IN): {hover.in}
                     </text>
                   </g>
                   <g>
-                    <circle cx={pad + 2} cy={boxH - 14} r="5" fill="#ef4444" />
-                    <text x={pad + 14} y={boxH - 10} fontSize={FS_TT_VAL} fill="#0f172a">
+                    <circle cx={pad + 4} cy={boxH - 12} r="4" fill="#f43f5e" />
+                    <text x={pad + 14} y={boxH - 8} fontSize={FS_TT_VAL} fill="#f8fafc">
                       รถออก (OUT): {hover.out}
                     </text>
                   </g>
@@ -231,12 +231,12 @@ export default function DailyLineChart({ data = [], height = 260, fontScale = 1.
 
       {/* Legend ใหญ่ขึ้น */}
       <div className="mt-3 flex items-center gap-7">
-        <span className="inline-flex items-center gap-3" style={{ fontSize: FS_LEGEND }}>
-          <span className="inline-block h-3 w-6 rounded-sm" style={{ background: "#16a34a" }} />
+        <span className="inline-flex items-center gap-3 text-slate-300" style={{ fontSize: FS_LEGEND }}>
+          <span className="inline-block h-3 w-6 rounded-sm shadow-[0_0_8px_rgba(16,185,129,0.5)]" style={{ background: "#10b981" }} />
           รถเข้า (IN)
         </span>
-        <span className="inline-flex items-center gap-3" style={{ fontSize: FS_LEGEND }}>
-          <span className="inline-block h-3 w-6 rounded-sm" style={{ background: "#ef4444" }} />
+        <span className="inline-flex items-center gap-3 text-slate-300" style={{ fontSize: FS_LEGEND }}>
+          <span className="inline-block h-3 w-6 rounded-sm shadow-[0_0_8px_rgba(244,63,94,0.5)]" style={{ background: "#f43f5e" }} />
           รถออก (OUT)
         </span>
       </div>
