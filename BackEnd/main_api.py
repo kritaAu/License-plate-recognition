@@ -70,3 +70,9 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.debug(f"[WS] Received from client: {data}")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+from fastapi.responses import RedirectResponse
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/docs")

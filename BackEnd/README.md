@@ -1,61 +1,81 @@
-# Backend API: License Plate Recognition (LPR)
+# Backend - License Plate Recognition ⚙️
 
-## Overview
+ระบบให้บริการ API สำหรับจัดการข้อมูล, การทำงานของ AI สำหรับจับป้ายทะเบียนตั้งแต่อ่านภาพจนถึงบันทึกลง Database, และดูแล Business Logic ทั้งหมด
 
-This directory contains the Python-based API server responsible for the core functionality of the License Plate Recognition (LPR) system.
-
-**Key responsibilities of this module include:**
-* **ML Inference:** Running the computer vision models (YOLO/PyTorch) for license plate detection and OCR.
-* **API Exposure:** Providing RESTful endpoints via FastAPI.
-* **Data Handling:** Interacting with the Supabase database for data storage and retrieval.
+## 🌟 ฟีเจอร์หลัก (Features)
+- **AI Processing Unit** : 
+  - `batch_process.py`: สคริปต์รับรูปภาพจากกล้อง รันโมเดล YOLO เพื่อหาตัวรถมอเตอร์ไซค์และป้ายทะเบียน
+  - `OCR_ai.py`: ส่งภาพที่ Crop ป้ายทะเบียนแล้วไปให้ OpenAI (GPT-4o) อ่านข้อความ
+- **Modular API Architecture** : แบ่งกลุ่มของ API ชัดเจน (`/api/auth`, `/api/members`, `/api/events`, `api/parking/session`, `/dashboard`)
+- **Smart Matching Logic** : อัลกอริทึมในการจับคู่รถที่ออก (`OUT`) ให้ตรงกับรถที่เข้ามา (`IN`) แม้ป้ายทะเบียนที่ AI อ่านมาอาจจะผิดพลาดเล็กน้อย (Fuzzy Logic) (`matching_logic.py`, `background_matcher.py`)
+- **Realtime WebSocket** : Broadcast ข้อมูลเวลารถเข้า-ออก ให้ Frontend รับรู้ทันทีทันใด
+- **Database Schema (Supabase)**: `Users`, `Member`, `Vehicle`, `Event`, `ParkingSession`
 
 ---
 
-## 🛠️ Installation & Setup
+## 📁 โครงสร้างโปรเจกต์ (Folder Structure)
 
-### 1. Prerequisites
+```
+BackEnd/
+├── .env                 # (ไม่มีใน Git) ควบคุม Environment Vars
+├── main_api.py          # Entry point ของ FastAPI app
+├── helpers.py           # ฟังก์ชันอรรถประโยชน์ส่วนกลาง (Helper)
+├── utils.py             # ฟังก์ชันจัดการรูปและเชื่อม Storage
+├── OCR_ai.py            # การเรียกใช้ OpenAI OCR
+├── batch_process.py     # AI Batch Processing
+├── matching_logic.py    # โลจิกจับคู่รถ (Exact, Fuzzy)
+├── background_matcher.py# Background Task ดักจับรถที่ติดค้าง
+├── core/                # โฟลเดอร์ควบคุมระบบแกนกลาง
+│   ├── config.py
+│   ├── database.py      # Supabase Client
+│   ├── security.py      # JWT & Auth
+│   └── websocket.py     # WebSocket Manager
+├── models/
+│   └── schemas.py       # Pydantic รูปแบบ Data Request/Response
+└── routers/             # แบ่ง Route ไฟล์ต่าง ๆ
+    ├── auth.py
+    ├── dashboard.py
+    ├── events.py
+    ├── members.py
+    ├── parking.py
+    └── upload_export.py
+```
 
-* Python (3.8+)
-* **Optional (สำหรับ GPU Acceleration):** NVIDIA CUDA Toolkit.
-    * คุณสามารถดาวน์โหลด CUDA ได้จาก [https://developer.nvidia.com/cuda-downloads](https://developer.nvidia.com/cuda-downloads) (สำหรับ GPU เฉพาะ NVIDIA)
+---
 
-### 2. Environment & Dependencies
+## ⚙️ Environment Variables (`.env`)
 
-ติดตั้งไลบรารีทั้งหมดที่จำเป็นสำหรับ ML/Vision, API Framework, และการจัดการฐานข้อมูล
+คุณต้องสร้างไฟล์ `.env` ที่ root ของ `BackEnd/` โดยมี Key เหล่านี้:
+```env
+# ตั้งค่า Supabase สำหรับ Database
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_anon_key
 
-```bash
-# 1. ติดตั้ง Core ML/Vision Libraries
-pip install ultralytics opencv-python filterpy yolox
+# ตั้งค่าการเข้ารหัส JWT (ตั้งเป็น String ยาวๆ หรือ Hash ยากๆ)
+SECRET_KEY=generate_your_own_secret_key_here
 
-# 2. ติดตั้ง PyTorch (เฉพาะผู้ใช้ GPU)
-# หมายเหตุ: ตรวจสอบเวอร์ชัน CUDA ของคุณและเปลี่ยน cu129 เป็นเวอร์ชันที่ถูกต้อง
-pip3 install torch torchvision --index-url [https://download.pytorch.org/whl/cu129](https://download.pytorch.org/whl/cu129)
+# ตั้งค่า AI OCR (OpenAI)
+OPENAI_API_KEY=sk-your_openai_api_key
 
-# 3. ติดตั้ง API Framework (FastAPI) และ Database/Auth Libraries
-pip install "fastapi[standard]"
-pip install supabase
-pip install bcrypt==4.0.1
-pip install "passlib[bcrypt]"
-pip install rapidfuzz
+# ตั้งค่า Admin User เบื้องต้น (จะใช้งานร่วมกับ DB)
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your_password
+```
 
-# 4. ติดตั้ง Utilities (สำหรับจัดการ Environment และ OpenAI)
-pip install dotenv
-pip install openai
+---
 
-# 5. สร้างไฟล์ .env
-สร้างไฟล์ .env ในโฟลเดอร์นี้ (./BackEnd) เพื่อเก็บข้อมูลลับ (Credentials) ของ Supabase และ API อื่นๆ
+## 🛠️ การติดตั้งและรันระบบ
 
-# 6. ใช้ uvicorn เพื่อรัน FastAPI Application
-Development Mode 
-python -m uvicorn main_api:app --reload --port 8000
+1. ติดตั้ง Python Packages:
+   ```bash
+   pip install -r requirements.txt
+   pip install "websockets<16,>=14"
+   ```
+2. โหลดโมเดลสำหรับ YOLO:
+   > 📌 *ระบบต้องการโมเดล `.pt` สำหรับ Ultralytics YOLO วางไว้ใน directory /models (อิงตามที่โค้ดกำหนด)*
+3. เริ่มต้น Server:
+   ```bash
+   uvicorn main_api:app --reload
+   ```
 
-Production Mode 
-uvicorn main_api:app --host 0.0.0.0 --port 8000 --log-level warning
-
-Alternative Run
-python -m uvicorn batch_process:app --reload --host 0.0.0.0 --port 8001
-
-------
-Documentation & Reference
-FastAPI Official: https://fastapi.tiangolo.com
-Supabase Python Docs: https://supabase.com/docs/reference/python/initializing?queryGroups=platform&platform=pip
+ระบบจะทำงานที่ `http://127.0.0.1:8000/docs` สำหรับดู API ทั้งหมด

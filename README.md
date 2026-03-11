@@ -1,66 +1,68 @@
-# 🚗 License Plate Recognition System (ALPR)
+# License Plate Recognition System 🚗🔍
 
-## 🌟 Overview
+[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB)](https://reactjs.org)
+[![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=flat&logo=supabase&logoColor=white)](https://supabase.com)
+[![Ultralytics YOLO](https://img.shields.io/badge/YOLO-Ultralytics-blue)](https://github.com/ultralytics/ultralytics)
 
-โครงการนี้คือการพัฒนา **ระบบจดจำป้ายทะเบียนรถยนต์อัตโนมัติ (ALPR)** แบบ Full-Stack ที่สมบูรณ์ ซึ่งแสดงให้เห็นถึงความสามารถในการประยุกต์ใช้ **สถาปัตยกรรมซอฟต์แวร์สมัยใหม่**, การใช้งาน **Machine Learning ที่มีประสิทธิภาพสูง**, และ **การวิเคราะห์ข้อมูล** ซึ่งเป็นทักษะสำคัญสำหรับนักศึกษา Computer Science และ Data Analyst
-
----
-
-## 🚀 Key Features
-
-* **High-Performance ALPR:** ใช้โมเดล Computer Vision ขั้นสูง (ตระกูล **YOLO**) เพื่อการตรวจจับและจดจำที่รวดเร็วและแม่นยำ.
-* **Modern API:** พัฒนาด้วย **FastAPI** เพื่อความเร็วในการตอบสนองและการเชื่อมต่อที่ง่าย.
-* **Data Visualization:** นำ **Recharts** มาใช้ในการแสดงผลข้อมูลการจดจำในรูปแบบแผนภูมิและกราฟ.
-* **Scalable Database:** ใช้ **Supabase** (PostgreSQL) สำหรับการจัดการข้อมูลและการยืนยันตัวตนของผู้ใช้.
+ระบบบริหารจัดการลานจอดรถครบวงจรที่ทำงานร่วมกับ AI (YOLO + GPT-4o OCR) เพื่อตรวจจับและอ่านป้ายทะเบียนรถมอเตอร์ไซค์/รถยนต์โดยอัตโนมัติ
 
 ---
 
-## 🛠️ Tech Stack
+## 🏗️ System Architecture
 
-ระบบแบ่งออกเป็นสองส่วนหลักที่ทำงานร่วมกัน:
+โปรเจกต์นี้แบ่งออกเป็น 2 ส่วนหลัก (คลิกที่ชื่อเพื่อดูรายละเอียดเพิ่มเติม):
 
-### 1. ⚙️ Back-End Services
+1. **[BackEnd](./BackEnd/README.md)** (Python / FastAPI / YOLO / Supabase)
+   - จัดการ AI Model สำหรับ Object Detection (YOLO)
+   - ตัดภาพ (Crop) และส่งให้ GPT-4o ทำ OCR อ่านป้ายทะเบียน
+   - API แบบ Modular (Auth, Members, Events, Parking, Dashboard)
+   - การจับคู่รถเข้า-ออก (Parking Session Matching Logic)
+   - ระบบแจ้งเตือน Real-time ด้วย WebSocket
 
-| Component | Technology | Role |
-| :--- | :--- | :--- |
-| **Core API** | Python, **FastAPI** | ให้บริการ API หลัก, จัดการการเชื่อมต่อฐานข้อมูล |
-| **Computer Vision** | **Ultralytics (YOLO)**, PyTorch, OpenCV | ตรวจจับป้ายทะเบียนและทำ OCR |
-| **Database/Auth** | **Supabase** | PostgreSQL Database และระบบ Authentication |
-
-### 2. 🖥️ Front-End Interface
-
-| Component | Technology | Role |
-| :--- | :--- | :--- |
-| **User Interface** | **React**, **Vite** | สร้างส่วนต่อประสานผู้ใช้ที่ทันสมัยและรวดเร็ว |
-| **Styling** | **Tailwind CSS**, Bootstrap | จัดการ Design และความ Responsive ของหน้าจอ |
-| **Visualization** | **Recharts** | สร้าง Chart สำหรับแสดงผลข้อมูลเชิงวิเคราะห์ |
+2. **[FrontEnd](./FrontEnd/README.md)** (React / Vite)
+   - หน้า Dashboard สำหรับ Admin เพื่อดูสถิติ
+   - หน้า Live Stream สดจากกล้อง ทางเข้า/ทางออก
+   - ระบบจัดการ Members และทะเบียนรถที่ลงทะเบียนไว้
+   - ประวัติการเข้าออก (Events & Parking Sessions)
 
 ---
 
-## 💻 Setup and Installation Guide
+## 🚀 Quick Start (ภาพรวม)
 
-การตั้งค่าระบบจำเป็นต้องดำเนินการติดตั้งทั้งส่วน Backend และ Frontend แยกกัน โปรดทำตามคำแนะนำในไฟล์ `README.md` ที่เกี่ยวข้องสำหรับแต่ละส่วน:
+### สิ่งที่ต้องมีเบื้องต้น
+- **Python 3.10+**
+- **Node.js 18+**
+- บัญชีและโปรเจกต์บน **Supabase** (PostgreSQL Database + Storage)
+- บัญชี **OpenAI** (สำหรับ API Key ในการทำ OCR)
 
-### A. Backend Setup
+### 1. การจำลอง/รัน Backend
+```bash
+cd BackEnd
 
-ส่วน Backend รับผิดชอบการประมวลผล ALPR หลักและการให้บริการ API
+# ติดตั้ง Dependencies
+pip install -r requirements.txt
+pip install "websockets<16,>=14" # จำเป็นสำหรับเชื่อมต่อ Supabase Realtime
 
-* **รายละเอียดการติดตั้ง:** โปรดดูคำแนะนำทั้งหมดในไฟล์:
-    $$\text{./BackEnd/README.md}$$
-* **เทคโนโลยีหลัก:** Python, FastAPI, YOLO, PyTorch, Supabase
+# ตั้งค่า Environment Variables (คัดลอกไฟล์ .env.example และใส่ Key)
+# รัน Server
+uvicorn main_api:app --reload --host 0.0.0.0 --port 8000
+```
+API Documentation (Swagger UI) จะอยู่ที่ `http://localhost:8000/docs`
 
-### B. Frontend Setup
+### 2. การจำลอง/รัน Frontend
+```bash
+cd FrontEnd/LicensePlate-Web
 
-ส่วน Frontend คือหน้า Dashboard สำหรับผู้ใช้ในการจัดการภาพและดูผลการวิเคราะห์ข้อมูล
+# ติดตั้ง Dependencies
+npm install
 
-* **รายละเอียดการติดตั้ง:** โปรดดูคำแนะนำทั้งหมดในไฟล์:
-    $$\text{./FrontEnd/README.md}$$
-* **เทคโนโลยีหลัก:** React, Vite, Tailwind CSS, Recharts
+# รัน Server สำหรับพัฒนา
+npm run dev
+```
+เข้าถึงหน้าเว็บได้ที่ `http://localhost:5173`
 
 ---
 
-## Contribution
-
-ยินดีรับข้อเสนอแนะและการปรับปรุง!
-
----
+## 🛡️ Security
+โปรเจกต์นี้มีการกำหนด `.gitignore` ที่ครอบคลุม **ห้ามทำการ Commit ไฟล์ `.env` ขึ้น Git Repository เด็ดขาด** เนื่องจากมีข้อมูลงความลับเช่น Supabase Key และ OpenAI API Key.
