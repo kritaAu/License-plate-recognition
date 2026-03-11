@@ -1,1 +1,25 @@
+# Python
 *.pyc
+*.pyo
+__pycache__/
+
+# Environment
+.env
+.env.*
+
+# Models (large binary files)
+*.pt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Node
+node_modules/
+
+# Video/data output
+video/

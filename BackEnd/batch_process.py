@@ -6,10 +6,10 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 import numpy as np
 from typing import List, Optional, Tuple
 from PIL import Image
-from utils import *
+from utils import safe_crop, upload_image_to_storage
 from datetime import datetime
 import uvicorn
-from OCR_ai import *
+from OCR_ai import read_plate
 
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")

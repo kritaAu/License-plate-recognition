@@ -2,7 +2,7 @@ import json
 from openai import OpenAI
 import os
 import re
-from utils import *
+from utils import encode_image
 import base64
 
 client = OpenAI()

@@ -1,8 +1,15 @@
-\sort
-\video
-\detect_motor
+# Environment
 .env
-.csv
-\__pycache__
+
+# Python
+__pycache__/
 *.pyc
 *.pyo
+
+# Data directories
+sort/
+video/
+detect_motor/
+
+# CSV output
+*.csv

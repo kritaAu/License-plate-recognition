@@ -1,4 +1,4 @@
-from main_api import supabase
+from core.database import supabase
 from datetime import datetime
 import logging
 

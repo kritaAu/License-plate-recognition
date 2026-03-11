@@ -1,18 +1,27 @@
+"""
+Utility functions — image cropping, encoding, and storage upload.
+"""
+
 import base64
-import cv2
-import time as systime
-from datetime import datetime, timezone, timedelta
-from supabase import create_client
-from dotenv import load_dotenv
 import os
 import uuid
+from datetime import datetime
+
+import cv2
+from dotenv import load_dotenv
+from supabase import create_client
 
 load_dotenv()
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Supabase client for storage operations
+# (used by batch_process.py which runs as a separate service)
+_SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+_SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+_supabase_storage = create_client(_SUPABASE_URL, _SUPABASE_KEY)
+
 
 def safe_crop(img, x1, y1, x2, y2, pad=0):
+    """Safely crop image with optional padding."""
     h, w = img.shape[:2]
     x1 = max(0, x1 - pad)
     y1 = max(0, y1 - pad)
@@ -22,32 +31,31 @@ def safe_crop(img, x1, y1, x2, y2, pad=0):
         return None
     return img[y1:y2, x1:x2]
 
+
 def encode_image(image):
+    """Encode image to base64 string."""
     _, buffer = cv2.imencode(".jpg", image)
     return base64.b64encode(buffer).decode("utf-8")
+
 
 def upload_image_to_storage(
     image_bytes: bytes, ext="jpg", folder="plates"
 ) -> str | None:
+    """Upload image bytes to Supabase storage and return public URL."""
     try:
-        # ตั้งชื่อไฟล์ไม่ให้ชน โดยใส่ microsecond + UUID
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
         filename = f"{folder}/{timestamp}_{uuid.uuid4().hex[:6]}.{ext}"
 
-        # เลือก bucket
-        bucket = supabase.storage.from_("image_car")
+        bucket = _supabase_storage.storage.from_("image_car")
 
-        # อัปโหลดไฟล์ไปยัง bucket
         res = bucket.upload(filename, image_bytes, {"content-type": f"image/{ext}"})
 
-        # ตรวจสอบผลลัพธ์จาก upload
         if res is None or (
             hasattr(res, "status_code") and res.status_code not in (200, 201)
         ):
             print(f"Upload failed: {res}")
             return None
 
-        # ดึง URL ที่เข้าถึงได้สาธารณะ
         url = bucket.get_public_url(filename)
         print(f"[UPLOAD SUCCESS] {url}")
         return url
