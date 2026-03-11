@@ -5,64 +5,64 @@
 [![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=flat&logo=supabase&logoColor=white)](https://supabase.com)
 [![Ultralytics YOLO](https://img.shields.io/badge/YOLO-Ultralytics-blue)](https://github.com/ultralytics/ultralytics)
 
-ระบบบริหารจัดการลานจอดรถครบวงจรที่ทำงานร่วมกับ AI (YOLO + GPT-4o OCR) เพื่อตรวจจับและอ่านป้ายทะเบียนรถมอเตอร์ไซค์/รถยนต์โดยอัตโนมัติ
+A comprehensive smart parking management system that integrates AI (YOLO + GPT-4o OCR) to automatically detect and read motorcycle and car license plates.
 
 ---
 
 ## 🏗️ System Architecture
 
-โปรเจกต์นี้แบ่งออกเป็น 2 ส่วนหลัก (คลิกที่ชื่อเพื่อดูรายละเอียดเพิ่มเติม):
+This project is divided into 2 main components (click the names for more details):
 
 1. **[BackEnd](./BackEnd/README.md)** (Python / FastAPI / YOLO / Supabase)
-   - จัดการ AI Model สำหรับ Object Detection (YOLO)
-   - ตัดภาพ (Crop) และส่งให้ GPT-4o ทำ OCR อ่านป้ายทะเบียน
-   - API แบบ Modular (Auth, Members, Events, Parking, Dashboard)
-   - การจับคู่รถเข้า-ออก (Parking Session Matching Logic)
-   - ระบบแจ้งเตือน Real-time ด้วย WebSocket
+   - AI Model execution for Object Detection (YOLO).
+   - Image cropping and integration with GPT-4o for OCR to read license plates.
+   - Modular API architecture (Auth, Members, Events, Parking, Dashboard).
+   - Smart Parking Session Matching Logic (handling entry/exit pairing).
+   - Real-time event broadcasting via WebSocket.
 
 2. **[FrontEnd](./FrontEnd/README.md)** (React / Vite)
-   - หน้า Dashboard สำหรับ Admin เพื่อดูสถิติ
-   - หน้า Live Stream สดจากกล้อง ทางเข้า/ทางออก
-   - ระบบจัดการ Members และทะเบียนรถที่ลงทะเบียนไว้
-   - ประวัติการเข้าออก (Events & Parking Sessions)
+   - Admin Dashboard to view daily statistics.
+   - Live stream and real-time monitoring of entry/exit cameras.
+   - Member and registered vehicle management system.
+   - Historical logs and parking session history.
 
 ---
 
-## 🚀 Quick Start (ภาพรวม)
+## 🚀 Quick Start (Overview)
 
-### สิ่งที่ต้องมีเบื้องต้น
+### Prerequisites
 - **Python 3.10+**
 - **Node.js 18+**
-- บัญชีและโปรเจกต์บน **Supabase** (PostgreSQL Database + Storage)
-- บัญชี **OpenAI** (สำหรับ API Key ในการทำ OCR)
+- A **Supabase** account and project (PostgreSQL Database + Storage)
+- An **OpenAI** account (for the OCR API Key)
 
-### 1. การจำลอง/รัน Backend
+### 1. Running the Backend
 ```bash
 cd BackEnd
 
-# ติดตั้ง Dependencies
+# Install dependencies
 pip install -r requirements.txt
-pip install "websockets<16,>=14" # จำเป็นสำหรับเชื่อมต่อ Supabase Realtime
+pip install "websockets<16,>=14" # Required for Supabase Realtime client
 
-# ตั้งค่า Environment Variables (คัดลอกไฟล์ .env.example และใส่ Key)
-# รัน Server
+# Configure Environment Variables (create .env from .env.example)
+# Run the FastAPI server
 uvicorn main_api:app --reload --host 0.0.0.0 --port 8000
 ```
-API Documentation (Swagger UI) จะอยู่ที่ `http://localhost:8000/docs`
+API Documentation (Swagger UI) is available at `http://localhost:8000/docs`.
 
-### 2. การจำลอง/รัน Frontend
+### 2. Running the Frontend
 ```bash
 cd FrontEnd/LicensePlate-Web
 
-# ติดตั้ง Dependencies
+# Install dependencies
 npm install
 
-# รัน Server สำหรับพัฒนา
+# Run the development server
 npm run dev
 ```
-เข้าถึงหน้าเว็บได้ที่ `http://localhost:5173`
+The web application is accessible at `http://localhost:5173`.
 
 ---
 
 ## 🛡️ Security
-โปรเจกต์นี้มีการกำหนด `.gitignore` ที่ครอบคลุม **ห้ามทำการ Commit ไฟล์ `.env` ขึ้น Git Repository เด็ดขาด** เนื่องจากมีข้อมูลงความลับเช่น Supabase Key และ OpenAI API Key.
+This project uses `.gitignore` to protect sensitive information. **Never commit your `.env` file to a public Git repository**, as it contains secure credentials like the Supabase Key and OpenAI API Key.

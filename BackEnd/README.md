@@ -1,38 +1,38 @@
 # Backend - License Plate Recognition ⚙️
 
-ระบบให้บริการ API สำหรับจัดการข้อมูล, การทำงานของ AI สำหรับจับป้ายทะเบียนตั้งแต่อ่านภาพจนถึงบันทึกลง Database, และดูแล Business Logic ทั้งหมด
+The core APi service that manages data operations, AI processing for license plate detection (from image capture to database persistence), and the entire business logic flow.
 
-## 🌟 ฟีเจอร์หลัก (Features)
-- **AI Processing Unit** : 
-  - `batch_process.py`: สคริปต์รับรูปภาพจากกล้อง รันโมเดล YOLO เพื่อหาตัวรถมอเตอร์ไซค์และป้ายทะเบียน
-  - `OCR_ai.py`: ส่งภาพที่ Crop ป้ายทะเบียนแล้วไปให้ OpenAI (GPT-4o) อ่านข้อความ
-- **Modular API Architecture** : แบ่งกลุ่มของ API ชัดเจน (`/api/auth`, `/api/members`, `/api/events`, `api/parking/session`, `/dashboard`)
-- **Smart Matching Logic** : อัลกอริทึมในการจับคู่รถที่ออก (`OUT`) ให้ตรงกับรถที่เข้ามา (`IN`) แม้ป้ายทะเบียนที่ AI อ่านมาอาจจะผิดพลาดเล็กน้อย (Fuzzy Logic) (`matching_logic.py`, `background_matcher.py`)
-- **Realtime WebSocket** : Broadcast ข้อมูลเวลารถเข้า-ออก ให้ Frontend รับรู้ทันทีทันใด
-- **Database Schema (Supabase)**: `Users`, `Member`, `Vehicle`, `Event`, `ParkingSession`
+## 🌟 Key Features
+- **AI Processing Unit**: 
+  - `batch_process.py`: Script to receive camera images, run the YOLO model to detect motorcycles and license plates.
+  - `OCR_ai.py`: Sends cropped plate images to OpenAI (GPT-4o) for Optical Character Recognition (OCR).
+- **Modular API Architecture**: Cleanly separated endpoints (`/api/auth`, `/api/members`, `/api/events`, `/api/parking`, `/dashboard`).
+- **Smart Matching Logic**: Advanced algorithms (Exact & Fuzzy matching) to pair vehicle exits (`OUT`) with their respective entries (`IN`), compensating for minor OCR inaccuracies (`matching_logic.py`, `background_matcher.py`).
+- **Realtime WebSocket**: Broadcasts live vehicle entry and exit events to connected frontend clients immediately.
+- **Database Schema (Supabase)**: Utilizes tables for `Users`, `Member`, `Vehicle`, `Event`, and `ParkingSession`.
 
 ---
 
-## 📁 โครงสร้างโปรเจกต์ (Folder Structure)
+## 📁 Folder Structure
 
 ```
 BackEnd/
-├── .env                 # (ไม่มีใน Git) ควบคุม Environment Vars
-├── main_api.py          # Entry point ของ FastAPI app
-├── helpers.py           # ฟังก์ชันอรรถประโยชน์ส่วนกลาง (Helper)
-├── utils.py             # ฟังก์ชันจัดการรูปและเชื่อม Storage
-├── OCR_ai.py            # การเรียกใช้ OpenAI OCR
-├── batch_process.py     # AI Batch Processing
-├── matching_logic.py    # โลจิกจับคู่รถ (Exact, Fuzzy)
-├── background_matcher.py# Background Task ดักจับรถที่ติดค้าง
-├── core/                # โฟลเดอร์ควบคุมระบบแกนกลาง
+├── .env                 # (Ignored in Git) Environment variables
+├── main_api.py          # FastAPI application entry point
+├── helpers.py           # Shared utility functions
+├── utils.py             # Image processing and Storage upload helpers
+├── OCR_ai.py            # OpenAI OCR integration
+├── batch_process.py     # AI Batch Processing service
+├── matching_logic.py    # Plate matching logic (Exact, Fuzzy)
+├── background_matcher.py# Background task to match orphaned sessions
+├── core/                # Core system configuration
 │   ├── config.py
-│   ├── database.py      # Supabase Client
-│   ├── security.py      # JWT & Auth
-│   └── websocket.py     # WebSocket Manager
+│   ├── database.py      # Shared Supabase Client
+│   ├── security.py      # JWT & Authentication logic
+│   └── websocket.py     # Global WebSocket Manager
 ├── models/
-│   └── schemas.py       # Pydantic รูปแบบ Data Request/Response
-└── routers/             # แบ่ง Route ไฟล์ต่าง ๆ
+│   └── schemas.py       # Pydantic Request/Response models
+└── routers/             # API Routers organized by feature
     ├── auth.py
     ├── dashboard.py
     ├── events.py
@@ -43,39 +43,39 @@ BackEnd/
 
 ---
 
-## ⚙️ Environment Variables (`.env`)
+## ⚙️ Environment Configuration (`.env`)
 
-คุณต้องสร้างไฟล์ `.env` ที่ root ของ `BackEnd/` โดยมี Key เหล่านี้:
+You must create a `.env` file in the root of the `BackEnd/` directory with the following keys:
 ```env
-# ตั้งค่า Supabase สำหรับ Database
+# Supabase Database Configuration
 SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_anon_key
 
-# ตั้งค่าการเข้ารหัส JWT (ตั้งเป็น String ยาวๆ หรือ Hash ยากๆ)
+# JWT Encryption Key (Use a strong, random string)
 SECRET_KEY=generate_your_own_secret_key_here
 
-# ตั้งค่า AI OCR (OpenAI)
+# OpenAI API Key (for OCR functionality)
 OPENAI_API_KEY=sk-your_openai_api_key
 
-# ตั้งค่า Admin User เบื้องต้น (จะใช้งานร่วมกับ DB)
+# Initial Admin Credentials (used with the DB)
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=your_password
 ```
 
 ---
 
-## 🛠️ การติดตั้งและรันระบบ
+## 🛠️ Installation & Execution
 
-1. ติดตั้ง Python Packages:
+1. **Install Python Dependencies**:
    ```bash
    pip install -r requirements.txt
    pip install "websockets<16,>=14"
    ```
-2. โหลดโมเดลสำหรับ YOLO:
-   > 📌 *ระบบต้องการโมเดล `.pt` สำหรับ Ultralytics YOLO วางไว้ใน directory /models (อิงตามที่โค้ดกำหนด)*
-3. เริ่มต้น Server:
+2. **Setup YOLO Models**:
+   > 📌 *The system requires `.pt` models for Ultralytics YOLO to be placed in the `/models` directory (as referenced in the code).*
+3. **Start the API Server**:
    ```bash
    uvicorn main_api:app --reload
    ```
 
-ระบบจะทำงานที่ `http://127.0.0.1:8000/docs` สำหรับดู API ทั้งหมด
+The system will start on `http://127.0.0.1:8000`, and you can view the active API endpoints at `http://127.0.0.1:8000/docs`.
