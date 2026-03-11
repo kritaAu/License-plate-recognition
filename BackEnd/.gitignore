@@ -1,15 +1,29 @@
 # Environment
 .env
+.env.*
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+.pytest_cache/
 
-# Data directories
+# Logs
+*.log
+server.log
+batch_server.log
+
+# Model weights (large binary files — commit only what's necessary)
+model/*.pt
+
+# Data directories (runtime)
 sort/
 video/
 detect_motor/
 
-# CSV output
+# CSV / export output
 *.csv
+
+# macOS
+.DS_Store

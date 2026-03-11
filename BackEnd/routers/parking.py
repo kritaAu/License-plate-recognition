@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from core.database import supabase
 from core.websocket import manager
 from helpers import clean_blob
-from matching_logic import find_best_match
+from services.matching_logic import find_best_match
 from models.schemas import EventIn
 
 logger = logging.getLogger("app")

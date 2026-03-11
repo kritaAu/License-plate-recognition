@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import ALLOWED_ORIGINS
 from core.database import supabase
 from core.websocket import manager
-from background_matcher import process_unmatched_sessions
+from services.matcher_service import process_unmatched_sessions
 
 from routers import auth, members, events, parking, dashboard, upload_export
 
@@ -71,7 +71,9 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
+
 from fastapi.responses import RedirectResponse
+
 
 @app.get("/", include_in_schema=False)
 def root():

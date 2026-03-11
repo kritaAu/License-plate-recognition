@@ -113,7 +113,7 @@ def _process_match_result(
 
 async def _match_single_session(supabase: "Client", exit_session: dict) -> bool:
     """พยายาม match exit session เดียว"""
-    from matching_logic import find_best_match
+    from services.matching_logic import find_best_match
 
     # ตรวจสอบข้อมูล
     if not _validate_exit_session(exit_session):

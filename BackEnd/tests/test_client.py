@@ -44,9 +44,7 @@ try:
         )
 
     # --- 3. ยิง API (POST Request) ---
-    response = requests.post(
-        SERVER_URL, data=payload, files=files_to_send
-    )
+    response = requests.post(SERVER_URL, data=payload, files=files_to_send)
 
     # --- 4. แสดงผลลัพธ์ ---
     print(f"\n--- 🚀 Server Response (Status: {response.status_code}) ---")

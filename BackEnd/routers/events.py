@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from core.database import supabase
 from core.websocket import manager
 from helpers import canon_plate, canon_text, clean_blob
-from matching_logic import find_best_match
+from services.matching_logic import find_best_match
 from models.schemas import EventIn
 
 logger = logging.getLogger("app")
@@ -76,9 +76,7 @@ def get_events(
 
             member_name = None
             if member.get("firstname") or member.get("lastname"):
-                member_name = (
-                    f"{member.get('firstname', '')} {member.get('lastname', '')}".strip()
-                )
+                member_name = f"{member.get('firstname', '')} {member.get('lastname', '')}".strip()
 
             results.append(
                 {

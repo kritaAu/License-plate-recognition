@@ -1,16 +1,23 @@
 import json
-from openai import OpenAI
 import os
 import re
-from utils import encode_image
+import sys
 import base64
 
+from openai import OpenAI
+
+# Ensure project root is on sys.path so utils is importable.
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+from utils import encode_image  # noqa: E402
+
 client = OpenAI()
-print("[OCR_ai.py] OpenAI Client (OCR) โหลดสำเร็จ")
+print("[ocr_service.py] OpenAI Client (OCR) loaded successfully")
 
 
 def read_plate(img_b64: str):
-
     try:
         response = client.responses.create(
             model="gpt-4o",
@@ -51,7 +58,7 @@ def read_plate(img_b64: str):
                     "content": [
                         {
                             "type": "input_text",
-                            "text": f'อ่านป้ายทะเบียนแล้ว output เป็น format JSON ',
+                            "text": f"อ่านป้ายทะเบียนแล้ว output เป็น format JSON ",
                         },
                         {
                             "type": "input_image",
@@ -79,7 +86,4 @@ def read_plate(img_b64: str):
             }
     except Exception as e:
         print(f"[ERROR OCR] {e}")
-        return {
-            "plate": "ไม่มีป้ายทะเบียน",
-            "province": None
-        }
+        return {"plate": "ไม่มีป้ายทะเบียน", "province": None}
