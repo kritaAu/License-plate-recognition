@@ -6,12 +6,7 @@ import Home from "./Home";
 import Search from "./Search";
 import Member from "./Member";
 import LoginPage from "./Login";
-
-// Auth Service
-const AuthService = {
-  getToken: () => localStorage.getItem("auth_token"),
-  isAuthenticated: () => !!AuthService.getToken(),
-};
+import AuthService from "../utils/auth";
 
 // Protected Route Component (inline)
 function ProtectedRoute({ children }) {

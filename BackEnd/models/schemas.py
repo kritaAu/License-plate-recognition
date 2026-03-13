@@ -38,6 +38,11 @@ class EventIn(BaseModel):
         return v
 
 
+class EventUpdate(BaseModel):
+    plate: str | None = None
+    province: str | None = None
+
+
 class MemberCreate(BaseModel):
     firstname: str
     lastname: str

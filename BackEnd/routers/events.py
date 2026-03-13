@@ -12,7 +12,7 @@ from core.database import supabase
 from core.websocket import manager
 from helpers import canon_plate, canon_text, clean_blob
 from services.matching_logic import find_best_match
-from models.schemas import EventIn
+from models.schemas import EventIn, EventUpdate
 
 logger = logging.getLogger("app")
 
@@ -244,24 +244,20 @@ async def create_event(event: EventIn):
 
 
 @router.patch("/events/{event_id}")
-def update_event(
-    event_id: int,
-    plate: str | None = None,
-    province: str | None = None,
-):
+def update_event(event_id: int, body: EventUpdate):
     """Update event plate or province."""
     try:
-        if plate is None and province is None:
+        if body.plate is None and body.province is None:
             raise HTTPException(
                 status_code=400,
                 detail="ต้องระบุอย่างน้อย 1 ฟิลด์ที่ต้องการแก้ไข (plate หรือ province)",
             )
 
         update_data = {}
-        if plate is not None:
-            update_data["plate"] = plate.strip()
-        if province is not None:
-            update_data["province"] = province.strip()
+        if body.plate is not None:
+            update_data["plate"] = body.plate.strip()
+        if body.province is not None:
+            update_data["province"] = body.province.strip()
 
         check_resp = (
             supabase.table("Event")

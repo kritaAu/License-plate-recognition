@@ -14,21 +14,13 @@ import {
   toLocalDateKey,
 } from "../utils/date";
 import { fetchEvents, EVENTS_WS_URL } from "../services/api";
+import { isInsideRole } from "../utils/roles";
 
 // จำกัดจำนวนรายการในหน้าเพื่อลดงานเรนเดอร์
 const LIST_LIMIT = 300;
 const BKK_TZ = "Asia/Bangkok";
 
 /* ================= Helpers ================= */
-
-// ใช้ดูว่า role เป็นคนในหรือคนนอก
-function isInsideRole(role) {
-  const r = String(role || "").trim();
-  const rl = r.toLowerCase();
-  if (["นักศึกษา", "อาจารย์", "เจ้าหน้าที่"].includes(r)) return true;
-  if (["staff", "employee", "internal", "insider"].includes(rl)) return true;
-  return false;
-}
 
 // ทิศทาง -> ภาษาไทย (fallback เมื่อ backend ไม่ส่ง status มา)
 function toThaiDirection(v) {

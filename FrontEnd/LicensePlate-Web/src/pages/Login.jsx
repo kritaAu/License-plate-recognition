@@ -2,29 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { login, fetchDashboardDaily } from "../services/api";
-
-
-const API = (
-  import.meta.env?.VITE_API_BASE_URL || "https://license-plate-recognition-wlxn.onrender.com"
-).replace(/\/$/, "");
-
-// ===== Auth utilities =====
-const AuthService = {
-  setToken: (token) => localStorage.setItem("auth_token", token),
-  getToken: () => localStorage.getItem("auth_token"),
-  removeToken: () => localStorage.removeItem("auth_token"),
-  setUser: (user) => localStorage.setItem("user", JSON.stringify(user)),
-  getUser: () => {
-    const user = localStorage.getItem("user");
-    return user ? JSON.parse(user) : null;
-  },
-  removeUser: () => localStorage.removeItem("user"),
-  isAuthenticated: () => !!AuthService.getToken(),
-  logout: () => {
-    AuthService.removeToken();
-    AuthService.removeUser();
-  },
-};
+import AuthService from "../utils/auth";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 function dateToYMD(d) {
@@ -89,15 +67,9 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
+      const data = await login({ username, password });
 
-      const data = await response.json();
-
-      if (!response.ok) {
+      if (!data.access_token) {
         throw new Error(data.detail || "เข้าสู่ระบบไม่สำเร็จ");
       }
 

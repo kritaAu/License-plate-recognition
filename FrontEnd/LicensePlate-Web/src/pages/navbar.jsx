@@ -1,16 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-
-const AuthService = {
-  // Mock implementations (ใช้ LocalStorage เดิม)
-  logout: () => {
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("user");
-  },
-  getUser: () => {
-    const user = localStorage.getItem("user");
-    return user ? JSON.parse(user) : null;
-  },
-};
+import AuthService from "../utils/auth";
 
 const TABS = [
   { to: "/", label: "Dashboard" }, 

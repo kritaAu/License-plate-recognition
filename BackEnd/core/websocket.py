@@ -29,11 +29,16 @@ class ConnectionManager:
 
     async def broadcast(self, message: str):
         logger.info(f"Broadcasting to {len(self.active_connections)} clients")
+        dead_connections = []
         for connection in self.active_connections:
             try:
                 await connection.send_text(message)
             except Exception as e:
                 logger.error(f"Broadcast error: {e}")
+                dead_connections.append(connection)
+
+        for dead in dead_connections:
+            self.disconnect(dead)
 
 
 manager = ConnectionManager()

@@ -7,15 +7,7 @@ import RecordsTable from "../components/RecordsTable";
 import WeeklyBarChart from "../components/WeeklyBarChart";
 import { formatThaiDateTime } from "../utils/date";
 import { EVENTS_WS_URL, fetchEvents, checkPlateCached } from "../services/api";
-
-// ===== helpers =====
-function isInsideRole(role) {
-  const r = String(role || "").trim();
-  const rl = r.toLowerCase();
-  if (["นักศึกษา", "อาจารย์", "เจ้าหน้าที่"].includes(r)) return true;
-  if (["staff", "employee", "internal", "insider"].includes(rl)) return true;
-  return false;
-}
+import { isInsideRole } from "../utils/roles";
 
 const isUnknownPlate = (plate) => {
   const s = String(plate ?? "").trim();

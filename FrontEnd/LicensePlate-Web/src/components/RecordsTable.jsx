@@ -2,27 +2,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { API_BASE_URL } from "../services/api";
+import ImageModal from "./ImageModal";
+import PlateEditor from "./PlateEditor";
+
 /* ================= CONFIG ================= */
-const API = (
-  import.meta.env?.VITE_API_BASE_URL || "https://license-plate-recognition-wlxn.onrender.com"
-).replace(/\/$/, "");
-
 const PAGE_SIZE = 10;
-
-// รายชื่อจังหวัดไทย (เอาไว้ autocomplete)
-const THAI_PROVINCES = [
-  "กรุงเทพมหานคร", "กระบี่", "กาญจนบุรี", "กาฬสินธุ์", "กำแพงเพชร", "ขอนแก่น",
-  "จันทบุรี", "ฉะเชิงเทรา", "ชลบุรี", "ชัยนาท", "ชัยภูมิ", "ชุมพร", "เชียงราย",
-  "เชียงใหม่", "ตรัง", "ตราด", "ตาก", "นครนายก", "นครปฐม", "นครพนม", "นครราชสีมา",
-  "นครศรีธรรมราช", "นครสวรรค์", "นนทบุรี", "นราธิวาส", "น่าน", "บึงกาฬ", "บุรีรัมย์",
-  "ปทุมธานี", "ประจวบคีรีขันธ์", "ปราจีนบุรี", "ปัตตานี", "พระนครศรีอยุธยา", "พะเยา",
-  "พังงา", "พัทลุง", "พิจิตร", "พิษณุโลก", "เพชรบุรี", "เพชรบูรณ์", "แพร่", "ภูเก็ต",
-  "มหาสารคาม", "มุกดาหาร", "ยะลา", "ยโสธร", "ระนอง", "ระยอง", "ราชบุรี", "ร้อยเอ็ด",
-  "ลพบุรี", "ลำปาง", "ลำพูน", "เลย", "ศรีสะเกษ", "สกลนคร", "สงขลา", "สตูล",
-  "สมุทรปราการ", "สมุทรสงคราม", "สมุทรสาคร", "สระบุรี", "สระแก้ว", "สิงห์บุรี",
-  "สุโขทัย", "สุพรรณบุรี", "สุราษฎร์ธานี", "สุรินทร์", "หนองคาย", "หนองบัวลำภู",
-  "อ่างทอง", "อำนาจเจริญ", "อุดรธานี", "อุตรดิตถ์", "อุทัยธานี", "อุบลราชธานี",
-];
 
 /* ================= HELPERS ================= */
 
@@ -46,11 +31,11 @@ function buildImageUrl(path) {
   const s = String(path || "").trim();
   if (!s) return null;
   if (/^https?:\/\//i.test(s)) return s;
-  if (s.startsWith(API)) return s;
+  if (s.startsWith(API_BASE_URL)) return s;
   if (!s.startsWith("/")) {
-    return `${API}/${s}`;
+    return `${API_BASE_URL}/${s}`;
   }
-  return `${API}${s}`;
+  return `${API_BASE_URL}${s}`;
 }
 
 function getImageUrl(rec = {}) {
@@ -708,32 +693,20 @@ function compareSessionsForSort(a, b, sortConfig) {
   return 0;
 }
 
+/* ================= SUB-COMPONENTS ================= */
+
 function ModalPortal({ children }) {
   if (typeof document === "undefined") return null;
   return createPortal(children, document.body);
 }
 
 function DetailModal({ record, onClose, onUpdated }) {
-  // ... (DetailModal logic remains mostly the same, omitted for brevity but ensuring imports work)
-  // เพื่อความชัวร์และไม่ให้ไฟล์ยาวเกินไป ผมขอละส่วน DetailModal ไว้
-  // เพราะส่วนที่กระทบ Logic การแสดงผลหลักๆ อยู่ที่ Table
-  // แต่ถ้าคุณ Copy ไปแปะทับ ให้ Copy DetailModal จากไฟล์เดิมมาแปะต่อที่นี่ได้เลยครับ
-  // หรือถ้าต้องการ full file แจ้งได้ครับ
-  // (สมมติว่าใช้ DetailModal ตัวเดิม)
-  const [plateInput, setPlateInput] = useState("");
-  const [provinceInput, setProvinceInput] = useState("");
-  const [showProvinceList, setShowProvinceList] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
   const [fullImageTarget, setFullImageTarget] = useState(null);
 
   const session = normalizeSession(record);
   const dirUI = getDirectionUI(record);
   const personUI = getPersonTypeUI(record);
-  
-  // ... (use existing DetailModal code logic here) ...
-  // [Placeholder for DetailModal Code - Use original or provided snippet if needed]
+
   const memberName =
     record.member_name ||
     record._raw?.member_name ||
@@ -757,97 +730,6 @@ function DetailModal({ record, onClose, onUpdated }) {
 
   const eventId = getEventId(record);
   const sessionId = getSessionId(record);
-
-  useEffect(() => {
-    setPlateInput(rawPlate || "");
-    setProvinceInput(rawProvince || "");
-    setErrorMsg("");
-    setSuccessMsg("");
-  }, [rawPlate, rawProvince, eventId, sessionId]);
-  
-  const trimmedPlate = plateInput.trim();
-  const trimmedProvince = provinceInput.trim();
-  const hasChanged =
-    trimmedPlate !== (rawPlate || "").trim() ||
-    trimmedProvince !== (rawProvince || "").trim();
-
-  const provinceSuggestions = THAI_PROVINCES.filter((p) =>
-    p.includes(trimmedProvince || "")
-  ).slice(0, 6);
-
-    async function handleSave() {
-    try {
-      setErrorMsg("");
-      setSuccessMsg("");
-
-      if (!hasChanged) {
-        setErrorMsg("ยังไม่มีการเปลี่ยนแปลง");
-        return;
-      }
-
-      if (!sessionId && !eventId) {
-        setErrorMsg("ไม่พบข้อมูลสำหรับบันทึก");
-        return;
-      }
-
-      setIsSaving(true);
-
-      let url;
-      let isSessionFix = false;
-
-      if (sessionId) {
-        const params = new URLSearchParams();
-        if (trimmedPlate) params.set("correct_plate", trimmedPlate);
-        if (trimmedProvince) params.set("correct_province", trimmedProvince);
-
-        url = `${API}/api/parking-sessions/${sessionId}/fix-plate?${params.toString()}`;
-        isSessionFix = true;
-      } else if (eventId) {
-        const params = new URLSearchParams();
-        if (trimmedPlate) params.set("plate", trimmedPlate);
-        if (trimmedProvince) params.set("province", trimmedProvince);
-
-        url = `${API}/events/${eventId}?${params.toString()}`;
-      }
-
-      const res = await fetch(url, { method: "PATCH" });
-
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(txt || `HTTP ${res.status}`);
-      }
-
-      const json = await res.json().catch(() => null);
-      const data = json?.data || json || {};
-
-      const updated = isSessionFix
-        ? {
-            plate:
-              data.plate_number_entry ?? trimmedPlate ?? rawPlate,
-            province:
-              data.province ?? trimmedProvince ?? rawProvince,
-            entry_time: data.entry_time,
-            exit_time: data.exit_time,
-            status: data.status,
-          }
-        : {
-            plate: data.plate ?? trimmedPlate ?? rawPlate,
-            province: data.province ?? trimmedProvince ?? rawProvince,
-            datetime: data.datetime ?? record._raw?.datetime,
-          };
-
-      setSuccessMsg("บันทึกเรียบร้อยแล้ว");
-      onUpdated?.(
-        { eventId: eventId || null, sessionId: sessionId || null },
-        updated
-      );
-    } catch (err) {
-      console.error(err);
-      setErrorMsg("บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
-    } finally {
-      setIsSaving(false);
-    }
-  }
 
   const fullImageUrl =
     fullImageTarget === "entry"
@@ -907,7 +789,7 @@ function DetailModal({ record, onClose, onUpdated }) {
               <span className="sr-only">ปิด</span>×
             </button>
           </header>
-          
+
            {/* body main */}
           <div className="flex flex-col gap-6 px-6 py-4">
             {/* Entry / Exit panel */}
@@ -1056,136 +938,28 @@ function DetailModal({ record, onClose, onUpdated }) {
                 </div>
               </div>
 
-              {/* Edit form */}
-              <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
-                <div className="mb-2 text-sm font-semibold text-slate-700">
-                  แก้ไขข้อมูล
-                </div>
-
-                <div className="space-y-3 text-xs">
-                  {/* ป้ายทะเบียน */}
-                  <label className="flex items-center gap-2">
-                    <span className="w-20 shrink-0 text-slate-500">
-                      ป้ายทะเบียน
-                    </span>
-                    <input
-                      type="text"
-                      value={plateInput}
-                      onChange={(e) => setPlateInput(e.target.value)}
-                      className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-800 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
-                      placeholder="เช่น 3กข 1234"
-                    />
-                  </label>
-
-                  {/* จังหวัด + suggestion */}
-                  <div className="flex items-start gap-2">
-                    <span className="w-20 shrink-0 pt-2 text-slate-500">
-                      จังหวัด
-                    </span>
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        value={provinceInput}
-                        onChange={(e) => {
-                          setProvinceInput(e.target.value);
-                          setShowProvinceList(true);
-                        }}
-                        onFocus={() => setShowProvinceList(true)}
-                        onBlur={() =>
-                          setTimeout(
-                            () => setShowProvinceList(false),
-                            150
-                          )
-                        }
-                        className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-800 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
-                        placeholder="เลือกจังหวัด"
-                      />
-                      {showProvinceList &&
-                        trimmedProvince &&
-                        provinceSuggestions.length > 0 && (
-                          <div className="absolute z-10 mt-1 max-h-52 w-full overflow-auto rounded-lg border border-slate-200 bg-white text-xs shadow-lg">
-                            {provinceSuggestions.map((p) => (
-                              <button
-                                key={p}
-                                type="button"
-                                className="block w-full px-3 py-1.5 text-left hover:bg-sky-50"
-                                onClick={() => {
-                                  setProvinceInput(p);
-                                  setShowProvinceList(false);
-                                }}
-                              >
-                                {p}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                    </div>
-                  </div>
-
-                  {/* สถานะคนใน/คนนอก + ชื่อ (ถ้ามี) */}
-                  <div className="flex items-center gap-2">
-                    <span className="w-20 shrink-0 text-slate-500">
-                      สถานะ
-                    </span>
-                    <div className="flex flex-col gap-0.5">
-                      <span
-                        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${personUI.chipClass}`}
-                      >
-                        {personUI.label}
-                      </span>
-                      {personUI.type === "inside" && memberName && (
-                        <span className="text-[11px] text-slate-500">
-                          {memberName}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {errorMsg && (
-                    <p className="text-xs text-red-600">{errorMsg}</p>
-                  )}
-                  {successMsg && (
-                    <p className="text-xs text-emerald-600">
-                      {successMsg}
-                    </p>
-                  )}
-                </div>
-
-                <div className="mt-3 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    ปิด
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="inline-flex items-center rounded-lg bg-sky-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isSaving ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}
-                  </button>
-                </div>
-              </div>
+              {/* Edit form -- now uses extracted PlateEditor */}
+              <PlateEditor
+                eventId={eventId}
+                sessionId={sessionId}
+                currentPlate={rawPlate}
+                currentProvince={rawProvince}
+                onSaved={onUpdated}
+                apiBaseUrl={API_BASE_URL}
+                personUI={personUI}
+                memberName={memberName}
+              />
             </div>
           </div>
         </div>
       </div>
-      
-       {fullImageUrl && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
-          onClick={() => setFullImageTarget(null)}
-        >
-          <img
-            src={fullImageUrl}
-            alt="Full"
-            className="max-h-[90vh] max-w-[90vw] rounded-xl object-contain"
-          />
-        </div>
-      )}
+
+      {/* Full-screen image preview -- now uses extracted ImageModal */}
+      <ImageModal
+        open={!!fullImageUrl}
+        src={fullImageUrl}
+        onClose={() => setFullImageTarget(null)}
+      />
     </>
   );
 }
@@ -1207,6 +981,8 @@ function Td({ children, className = "" }) {
     </td>
   );
 }
+
+/* ================= MAIN COMPONENT ================= */
 
 export default function RecordsTable({ records, filters = {} }) {
   const [rows, setRows] = useState([]);
@@ -1470,7 +1246,7 @@ export default function RecordsTable({ records, filters = {} }) {
                       <div className="inline-flex items-center rounded-xl border border-earth-700 bg-earth-900 px-4 py-2 text-base font-semibold tracking-wide text-earth-100 shadow-inner">
                         {session.plate || "-"}
                       </div>
-                      
+
                       {/* ถ้าเลขทะเบียนเข้า/ออกไม่ตรงกัน ให้โชว์ Warning */}
                       {session.statusKey === 'completed' && session.plateEntry && session.plateExit && session.plateEntry !== session.plateExit && (
                         <div className="inline-flex items-center gap-1 text-[11px] text-terra-500">

@@ -3,21 +3,15 @@ Utility functions — image cropping, encoding, and storage upload.
 """
 
 import base64
-import os
+import logging
 import uuid
 from datetime import datetime
 
 import cv2
-from dotenv import load_dotenv
-from supabase import create_client
 
-load_dotenv()
+from core.database import supabase as _supabase_storage
 
-# Supabase client for storage operations
-# (used by batch_process.py which runs as a separate service)
-_SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-_SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
-_supabase_storage = create_client(_SUPABASE_URL, _SUPABASE_KEY)
+logger = logging.getLogger("app")
 
 
 def safe_crop(img, x1, y1, x2, y2, pad=0):
@@ -53,13 +47,13 @@ def upload_image_to_storage(
         if res is None or (
             hasattr(res, "status_code") and res.status_code not in (200, 201)
         ):
-            print(f"Upload failed: {res}")
+            logger.error(f"Upload failed: {res}")
             return None
 
         url = bucket.get_public_url(filename)
-        print(f"[UPLOAD SUCCESS] {url}")
+        logger.info(f"Upload success: {url}")
         return url
 
     except Exception as e:
-        print("Upload error:", e)
+        logger.error(f"Upload error: {e}")
         return None

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import sys
@@ -13,8 +14,10 @@ if _ROOT not in sys.path:
 
 from utils import encode_image  # noqa: E402
 
+logger = logging.getLogger("ocr_service")
+
 client = OpenAI()
-print("[ocr_service.py] OpenAI Client (OCR) loaded successfully")
+logger.info("OpenAI Client (OCR) loaded successfully")
 
 
 def read_plate(img_b64: str):
@@ -79,11 +82,11 @@ def read_plate(img_b64: str):
             )
             return json.loads(txt)
         except Exception as e:
-            print(f"[ERROR OCR] {e}")
+            logger.error("OCR response parsing error: %s", e)
             return {
                 "plate": "ไม่มีป้ายทะเบียน",
                 "province": None,
             }
     except Exception as e:
-        print(f"[ERROR OCR] {e}")
+        logger.error("OCR request error: %s", e)
         return {"plate": "ไม่มีป้ายทะเบียน", "province": None}

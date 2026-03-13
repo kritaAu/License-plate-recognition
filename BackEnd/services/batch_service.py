@@ -1,16 +1,14 @@
 import os
 import sys
+import logging
 import requests
 import cv2
-import io
 import base64
 from dotenv import load_dotenv
 from ultralytics import YOLO
 from supabase import create_client
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-import numpy as np
 from typing import List, Optional, Tuple
-from PIL import Image
 from datetime import datetime
 import uvicorn
 
@@ -19,34 +17,66 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from utils import safe_crop, upload_image_to_storage  # noqa: E402
+from utils import upload_image_to_storage  # noqa: E402
 from services.ocr_service import read_plate  # noqa: E402
+from services.detection_service import (  # noqa: E402
+    init_models,
+    process_img,
+)
 
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+)
+logger = logging.getLogger("batch_service")
+
+# ---------------------------------------------------------------------------
+# Environment
+# ---------------------------------------------------------------------------
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
+# ---------------------------------------------------------------------------
+# YOLO models
+# ---------------------------------------------------------------------------
 try:
     model_lpr = YOLO("model/lpr_model.pt")
     model_mc = YOLO("model/motorcycle_model.pt")
-    print("โหลด YOLO สำเร็จ")
+    init_models(model_lpr, model_mc)
+    logger.info("YOLO models loaded successfully")
 except Exception as e:
-    print(f"!!! ไม่พบโมเดล 'model/lpr_model.pt': {e}")
+    logger.error("Failed to load YOLO model 'model/lpr_model.pt': %s", e)
     exit()
 
+# ---------------------------------------------------------------------------
+# Supabase (own client – this service runs as a separate process)
+# ---------------------------------------------------------------------------
 try:
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    print("Supabase Client (AI Server) โหลดสำเร็จ")
+    logger.info("Supabase Client (AI Server) loaded successfully")
 except Exception as e:
-    print(f"!!! ไม่สามารถเชื่อมต่อ Supabase: {e}")
+    logger.error("Cannot connect to Supabase: %s", e)
     supabase = None
 
-API_URL_EVENT = "https://license-plate-recognition-wlxn.onrender.com/events"
-API_URL_CHECK = "https://license-plate-recognition-wlxn.onrender.com/check_plate"
-PAD = 10
-MIN_CONFIDENCE = 0.3
-SCORE_WEIGHTS = {"area": 0.3, "sharpness": 0.3, "confidence": 0.4}
+# ---------------------------------------------------------------------------
+# API URLs (configurable via environment variables)
+# ---------------------------------------------------------------------------
+API_URL_EVENT = os.getenv(
+    "API_URL_EVENT",
+    "https://license-plate-recognition-wlxn.onrender.com/events",
+)
+API_URL_CHECK = os.getenv(
+    "API_URL_CHECK",
+    "https://license-plate-recognition-wlxn.onrender.com/check_plate",
+)
 
+# ---------------------------------------------------------------------------
+# FastAPI app
+# ---------------------------------------------------------------------------
 app = FastAPI()
 
 
@@ -56,12 +86,12 @@ def send_event(payload: dict):
         r.raise_for_status()
         return r.json()
     except requests.HTTPError as e:
-        print(f"[ERROR] API Server (/events) ปฏิเสธ: {e.response.text}")
+        logger.error("API Server (/events) rejected: %s", e.response.text)
         raise HTTPException(
             status_code=502, detail=f"API Server Error: {e.response.text}"
         )
     except Exception as e:
-        print(f"[ERROR] เชื่อมต่อ API Server (/events) ไม่ได้: {e}")
+        logger.error("Cannot connect to API Server (/events): %s", e)
         raise HTTPException(
             status_code=503, detail=f"Cannot connect to API Server: {e}"
         )
@@ -77,130 +107,11 @@ def check_plate_in_system(plate: str, province: str):
             return data.get("vehicle_id", None)
         return None
     except Exception as e:
-        print(f"[ERROR] เชื่อมต่อ API Server (/check_plate) ไม่ได้: {e}")
+        logger.error("Cannot connect to API Server (/check_plate): %s", e)
         return None
 
 
-# เปลี่ยนเป็นขาวดำแล้ววัดค่าความคม คืนเป็น float
-def blur_score(img_np):
-    gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
-    return cv2.Laplacian(gray, cv2.CV_64F).var()
-
-
-def normalize_area(area: float, max_area: float = 50000) -> float:
-    return min(area / max_area, 1.0)
-
-
-def normalize_sharpness(sharpness: float, max_sharpness: float = 1000) -> float:
-    return min(sharpness / max_sharpness, 1.0)
-
-
-# คำนวณ score ของแต่ละป้าย
-def calculate_plate_score(area: float, sharpness: float, confidence: float) -> float:
-    area_norm = normalize_area(area)
-    sharp_norm = normalize_sharpness(sharpness)
-
-    score = (
-        area_norm * SCORE_WEIGHTS["area"]
-        + sharp_norm * SCORE_WEIGHTS["sharpness"]
-        + confidence * SCORE_WEIGHTS["confidence"]
-    )
-
-    return score
-
-
-# ตรวจหามอไซ คืนมอไซ
-def detect_motorcycle(pil_image: Image.Image, frame_np: np.ndarray) -> List[np.ndarray]:
-    mc = []
-
-    if model_mc:
-        try:
-            mc_results = model_mc(pil_image, classes=[3], verbose=False)
-            if mc_results[0].boxes and len(mc_results[0].boxes) > 0:
-                for box in mc_results[0].boxes.xyxy.cpu().numpy():
-                    x1, y1, x2, y2 = map(int, box)
-                    cropped = safe_crop(frame_np, x1, y1, x2, y2, pad=PAD)
-                    if cropped is not None:
-                        mc.append(cropped)
-        except Exception as e:
-            print(f"Error in motorcycle detection: {e}")
-
-    if not mc:
-        mc.append(frame_np)
-
-    return mc
-
-
-# หาป้ายที่ดีจากการคำนวณคะแนน
-def detect_best_plate(mc: np.ndarray) -> Optional[dict]:
-    try:
-        results = model_lpr(
-            Image.fromarray(mc), classes=[0], verbose=False, conf=MIN_CONFIDENCE
-        )
-
-        if not results[0].boxes or len(results[0].boxes) == 0:
-            return None
-
-        confs = results[0].boxes.conf.cpu().numpy()
-        boxes = results[0].boxes.xyxy.cpu().numpy()
-        areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-
-        best_idx = areas.argmax()
-        conf, box, area = confs[best_idx], boxes[best_idx], areas[best_idx]
-
-        if conf < MIN_CONFIDENCE:
-            return None
-
-        sharpness = blur_score(mc)
-        score = calculate_plate_score(area, sharpness, conf)
-
-        plate_crop = safe_crop(mc, *map(int, box), pad=PAD)
-        if plate_crop is None:
-            return None
-
-        return {
-            "crop": plate_crop,
-            "score": score,
-            "confidence": float(conf),
-            "area": float(area),
-            "sharpness": float(sharpness),
-        }
-    except Exception as e:
-        print(f"Error in plate detection: {e}")
-        return None
-
-
-# เรียกใช้สองที่หามอไซกับป้ายแล้วเปรียบเทียบคะแนน
-def process_img(image_bytes: bytes, filename: str) -> Optional[dict]:
-    try:
-        pil_image = Image.open(io.BytesIO(image_bytes))
-        frame_np = np.array(pil_image)
-
-        mcs = detect_motorcycle(pil_image, frame_np)
-
-        best_plate = None
-        for mc in mcs:
-            plate_info = detect_best_plate(mc)
-
-            if plate_info and (
-                best_plate is None or plate_info["score"] > best_plate["score"]
-            ):
-                best_plate = plate_info
-
-            if best_plate:
-                return {
-                    **best_plate,
-                    "full_image_bytes": image_bytes,
-                    "filename": filename,
-                }
-            return None
-    except Exception as e:
-        print(f"Error processing image {filename}: {e}")
-        return None
-
-
-# ส่งภาพที่ครอปไป OCR
-def perform_ocr(plate_crop: np.ndarray) -> Tuple[Optional[str], Optional[str]]:
+def perform_ocr(plate_crop) -> Tuple[Optional[str], Optional[str]]:
     try:
         _, buffer = cv2.imencode(".jpg", plate_crop)
         img_b64 = base64.b64encode(buffer).decode("utf-8")
@@ -212,7 +123,7 @@ def perform_ocr(plate_crop: np.ndarray) -> Tuple[Optional[str], Optional[str]]:
         return plate_text, province_text
 
     except Exception as e:
-        print(f"OCR error: {e}")
+        logger.error("OCR error: %s", e)
         return None, None
 
 
@@ -220,7 +131,7 @@ def upload_image(image_bytes: bytes) -> Optional[str]:
     try:
         return upload_image_to_storage(image_bytes, ext="jpg", folder="plates")
     except Exception as e:
-        print(f"Image upload error: {e}")
+        logger.error("Image upload error: %s", e)
         return None
 
 
@@ -239,10 +150,10 @@ async def handle_flutter_batch(
     if not images:
         raise HTTPException(status_code=400, detail="No images provided")
 
-    print(f"\n{'='*60}")
-    print(f"Batch Received: {batch_id}")
-    print(f"Camera: {cam_id} | Direction: {direction} | Images: {len(images)}")
-    print(f"{'='*60}\n")
+    logger.info(
+        "Batch Received: %s | Camera: %s | Direction: %s | Images: %d",
+        batch_id, cam_id, direction, len(images),
+    )
 
     best_result = None
     first_image_bytes = None
@@ -260,24 +171,24 @@ async def handle_flutter_batch(
                 best_result is None or result["score"] > best_result["score"]
             ):
                 best_result = result
-                print(f" New best plate found in {file.filename}")
-                print(
-                    f"  Score: {result['score']:.3f} | Conf: {result['confidence']:.2f} | Area: {result['area']:.0f}"
+                logger.info(
+                    " New best plate found in %s | Score: %.3f | Conf: %.2f | Area: %.0f",
+                    file.filename,
+                    result["score"],
+                    result["confidence"],
+                    result["area"],
                 )
         except Exception as e:
-            print(f" Failed to process {file.filename}: {e}")
+            logger.warning("Failed to process %s: %s", file.filename, e)
             continue
 
     if best_result:
-        print(f"\n Best plate selected from {best_result['filename']}")
+        logger.info("Best plate selected from %s", best_result["filename"])
 
-        # ส่งไป ocr
         plate_text, province_text = perform_ocr(best_result["crop"])
 
-        # อัพรูป
         image_url = upload_image(best_result["full_image_bytes"])
 
-        # เช็ครถในระบบ
         vehicle_id = check_plate_in_system(plate_text, province_text)
 
         event_payload = {
@@ -290,12 +201,11 @@ async def handle_flutter_batch(
             "vehicle_id": vehicle_id,
         }
 
-        print(f"Plate: {plate_text} | Province: {province_text}")
+        logger.info("Plate: %s | Province: %s", plate_text, province_text)
 
     else:
-        print("\n No license plate detected in batch")
+        logger.info("No license plate detected in batch")
 
-        # Upload first image as fallback
         image_url = upload_image(first_image_bytes) if first_image_bytes else None
 
         event_payload = {
@@ -308,11 +218,9 @@ async def handle_flutter_batch(
             "vehicle_id": None,
         }
 
-    print(f"{'='*60}\n")
-
     return send_event(event_payload)
 
 
 if __name__ == "__main__":
-    print("http://0.0.0.0:8001")
+    logger.info("Starting batch service at http://0.0.0.0:8001")
     uvicorn.run(app, host="0.0.0.0", port=8001)

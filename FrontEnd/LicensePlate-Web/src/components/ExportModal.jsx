@@ -1,19 +1,10 @@
 // src/components/ExportModal.jsx
 import { useEffect, useMemo, useState } from "react";
 import { formatThaiDateTime } from "../utils/date";
-import { fetchEvents, fetchMembers } from "../services/api";
-const API = (
-  import.meta.env?.VITE_API_BASE_URL || "https://license-plate-recognition-wlxn.onrender.com"
-).replace(/\/$/, "");
+import { fetchEvents, fetchMembers, API_BASE_URL } from "../services/api";
+import { isInsideRole } from "../utils/roles";
 
-/* ===== Helpers เหมือนฝั่ง Search + join member ===== */
-function isInsideRole(role) {
-  const r = String(role || "").trim();
-  const rl = r.toLowerCase();
-  if (["นักศึกษา", "อาจารย์", "เจ้าหน้าที่"].includes(r)) return true;
-  if (["staff", "employee", "internal", "insider"].includes(rl)) return true;
-  return false;
-}
+/* ===== Helpers ===== */
 
 function toThaiDirection(v) {
   const s = String(v || "").toUpperCase();

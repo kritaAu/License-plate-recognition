@@ -1,3 +1,5 @@
+import { isInsideRole } from "../utils/roles";
+
 // ===== BASE URL / WS URL =====
 export const API_BASE_URL = (
   import.meta.env?.VITE_API_BASE_URL || "https://license-plate-recognition-wlxn.onrender.com"
@@ -8,14 +10,6 @@ export const EVENTS_WS_URL =
   "/ws/events";
 
 // ===== shared helpers =====
-// ดูว่า role นี้ถือเป็นบุคคลภายในไหม
-function isInsideRole(role) {
-  const r = String(role || "").trim();
-  const rl = r.toLowerCase();
-  if (["นักศึกษา", "อาจารย์", "เจ้าหน้าที่"].includes(r)) return true;
-  if (["staff", "employee", "internal", "insider"].includes(rl)) return true;
-  return false;
-}
 // จัดการ response + error ของ FastAPI ให้เป็นข้อความอ่านง่าย
 async function handle(res) {
   if (res.ok) {
@@ -215,7 +209,7 @@ export async function updateMember(memberId, payload) {
   });
 
   const res = await fetch(`${API_BASE_URL}/members/${memberId}`, {
-    method: "PUT",
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
