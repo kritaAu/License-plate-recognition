@@ -2,7 +2,7 @@
 License Plate Recognition API — Application Entry Point.
 
 Run with:
-    uvicorn main_api:app --reload
+    uvicorn main:app --reload
 """
 
 import asyncio

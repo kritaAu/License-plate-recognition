@@ -46,7 +46,7 @@ pip install "websockets<16,>=14" # Required for Supabase Realtime client
 
 # Configure Environment Variables (create .env from .env.example)
 # Run the FastAPI server
-uvicorn main_api:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 API Documentation (Swagger UI) is available at `http://localhost:8000/docs`.
 

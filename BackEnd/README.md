@@ -18,7 +18,7 @@ The core APi service that manages data operations, AI processing for license pla
 ```
 BackEnd/
 ├── .env                 # (Ignored in Git) Environment variables
-├── main_api.py          # FastAPI application entry point
+├── main.py              # FastAPI application entry point
 ├── helpers.py           # Shared utility functions
 ├── utils.py             # Image processing and Storage upload helpers
 ├── OCR_ai.py            # OpenAI OCR integration
@@ -75,7 +75,7 @@ ADMIN_PASSWORD=your_password
    > 📌 *The system requires `.pt` models for Ultralytics YOLO to be placed in the `/models` directory (as referenced in the code).*
 3. **Start the API Server**:
    ```bash
-   uvicorn main_api:app --reload
+   uvicorn main:app --reload
    ```
 
 The system will start on `http://127.0.0.1:8000`, and you can view the active API endpoints at `http://127.0.0.1:8000/docs`.
